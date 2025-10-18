@@ -1,0 +1,10 @@
+extends ../layout
+
+block content
+  h2 Prices for Service
+  ul
+    each p in prices
+      li
+        = p.price
+        form(method='post', action=`/admin/services/${serviceId}/prices/${p._id}?_method=DELETE`)
+          button(type='submit') Delete

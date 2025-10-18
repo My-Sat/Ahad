@@ -1,0 +1,98 @@
+
+/* grey app background */
+body.app-bg {
+  background: #f3f4f6;
+  min-height: 100vh;
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* header / tabs area */
+header {
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+}
+
+/* container for main content */
+#main-content {
+  max-width: 1100px;
+}
+
+/* tab link styles */
+.nav-tabs .nav-link {
+  color: #374151;
+  border: none;
+  padding: 10px 16px;
+  margin-right: 6px;
+  border-radius: 8px 8px 0 0;
+}
+.nav-tabs .nav-link.active {
+  background: linear-gradient(180deg, #eef2ff, #e0e7ff);
+  color: #0f172a;
+  box-shadow: 0 2px 6px rgba(15,23,42,0.06);
+}
+
+/* subtle card-like content container */
+.content-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 6px 18px rgba(15,23,42,0.03);
+}
+
+/* smaller screens: tabs wrap */
+@media (max-width: 768px) {
+  .nav-tabs { overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+  .nav-tabs .nav-item { display: inline-block; }
+}
+
+
+/* --- UI tweaks: service link color and no-underline --- */
+a.service-link {
+  color: #000000; /* teal-ish, nicer than default blue */
+  text-decoration: none;
+  font-weight: 400;
+}
+a.service-link:hover,
+a.service-link:focus {
+  color: #001A00; /* slightly darker on hover */
+  text-decoration: none;
+}
+
+/* small helper: keep button width stable while spinner appears */
+.btn.btn-primary .spinner-border {
+  vertical-align: text-bottom;
+}
+
+/* optional: visually indicate loading state (disabled look) */
+.btn.loading,
+.btn:disabled {
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* dropdown toggle small styling */
+.dropdown.d-inline-block { position: relative; }
+.btn-sm.btn-light.dropdown-toggle {
+  padding: 0.15rem 0.4rem;
+  min-width: 2.0rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Ensure dropdown menu appears directly below toggle, no large gap */
+.dropdown .dropdown-menu {
+  top: calc(100% + 4px);
+  margin: 0;
+}
+
+/* remove hover-open behavior: ensure dropdown only opens via click (bootstrap's JS) */
+/* previously added :hover / :focus-within rules should be removed to avoid flicker */
+
+/* small improvement to dropdown item icon spacing */
+.dropdown-item svg { width: 1.25rem; margin-right: 0.5rem; vertical-align: -0.12rem; }
+
+/* align action column compactly */
+.table td.text-end { vertical-align: middle; white-space: nowrap; }

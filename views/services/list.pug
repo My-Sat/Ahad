@@ -1,0 +1,230 @@
+extends ../layout
+
+block content
+  // Page header
+  .d-flex.justify-content-between.align-items-center.mb-4
+    .d-flex.flex-column
+      h3.mb-0 Services
+      small.text-muted Manage services, units and pricing rules from one place
+
+  .row.g-4
+    // Left column — Services list + inline add service form
+    .col-12.col-lg-7
+      .card.h-100
+        .card-body
+          .d-flex.justify-content-between.align-items-center.mb-3
+            h5.card-title.mb-0 Services
+            small.text-muted Choose a service to view details or add a new one below.
+
+          // Add Service inline form (uses Bootstrap validation)
+          form#add-service-form.needs-validation(method='post', action='/admin/services', class='row g-2 align-items-center mb-3', novalidate)
+            .col
+              input.form-control(type='text', name='name', id='addServiceName', placeholder='New service name (e.g., Printing)', required, autofocus)
+              .invalid-feedback Please provide a service name.
+            .col-auto
+              button.btn.btn-primary(type='submit', id='addServiceBtn')
+                span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', style='display:none;', id='addServiceSpinner')
+                | Add Service
+
+          // inline success message (hidden by JS when using AJAX)
+          .mt-2
+            .alert.alert-success.role-alert#addServiceSuccess(style='display:none;')
+              strong Added —
+              span#addServiceSuccessText
+
+          // Services table
+          if services && services.length
+            table.table.table-hover.table-borderless.mb-0
+              thead
+                tr
+                  th Name
+                  th.text-end Actions
+              tbody#services-tbody
+                each svc in services
+                  tr(data-id=svc._id)
+                    td
+                      a.service-link(href=`/admin/services/${svc._id}`)= svc.name
+                    td.text-end
+                      // Bootstrap dropdown (using bootstrap icon)
+                      .dropdown.d-inline-block
+                        button.btn.btn-sm.btn-light.dropdown-toggle(type='button', id=`serviceMenuBtn-${svc._id}`, data-bs-toggle='dropdown', aria-expanded='false', aria-haspopup='true', title='Actions')
+                          i(class='bi bi-three-dots-vertical', aria-hidden='true')
+                          span.visually-hidden Actions
+                        ul.dropdown-menu.dropdown-menu-end(aria-labelledby=`serviceMenuBtn-${svc._id}`)
+                          li
+                            button.dropdown-item.edit-service-btn(type='button', data-service-id=svc._id, data-service-name=svc.name)
+                              i(class='bi bi-pencil me-2', aria-hidden='true')
+                              | Edit
+                          li
+                            button.dropdown-item.open-delete-modal(type='button', data-action=`/admin/services/${svc._id}?_method=DELETE`, data-item-type='Service', data-item-name=svc.name)
+                              i(class='bi bi-trash me-2', aria-hidden='true')
+                              | Delete
+          else
+            .alert.alert-info.mb-0 No services yet. Use the form above to add the first service.
+
+    // Right column — Units and Sub-units manager (accordion)
+    .col-12.col-lg-5
+      .card.h-100
+        .card-body
+          h5.card-title.mb-3 Units & Sub-units
+          // Add Unit form (Bootstrap validation)
+          form#add-unit-form.needs-validation(method='post', action='/admin/units', class='row g-2 align-items-center mb-3', novalidate)
+            .col
+              input.form-control(type='text', name='name', id='addUnitName', placeholder='New unit name (e.g., Paper Size)', required)
+              .invalid-feedback Please provide a unit name.
+            .col-auto
+              button.btn.btn-primary(type='submit', id='addUnitBtn')
+                span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', style='display:none;', id='addUnitSpinner')
+                | Add Unit
+
+          hr
+
+          if units && units.length
+            // Bootstrap accordion for compact unit list
+            #unitsAccordion.accordion
+              each u, idx in units
+                - const panelId = `unitPanel-${idx}`
+                .accordion-item
+                  h2.accordion-header(id=`heading-${panelId}`)
+                    button.accordion-button.collapsed(type='button', data-bs-toggle='collapse', data-bs-target=`#collapse-${panelId}`, aria-expanded='false', aria-controls=`collapse-${panelId}`)
+                      .d-flex.justify-content-between.w-100
+                        span.unit-name= u.name
+                        small.text-muted.ms-2 #{ subunits ? subunits.filter(s => String(s.unit) === String(u._id)).length : 0 } sub-units
+
+                  .accordion-collapse.collapse(id=`collapse-${panelId}`, aria-labelledby=`heading-${panelId}`)
+                    .accordion-body
+                      // List of sub-units for this unit
+                      - const ush = subunits ? subunits.filter(s => String(s.unit) === String(u._id)) : []
+                      if ush.length
+                        ul.list-group.mb-3
+                          each su in ush
+                            li.list-group-item.d-flex.justify-content-between.align-items-center
+                              span.subunit-name= su.name
+                              // compact bootstrap dropdown per subunit (uses bootstrap icon)
+                              .dropdown.d-inline-block
+                                button.btn.btn-sm.btn-light.dropdown-toggle(type='button', id=`subMenuBtn-${su._id}`, data-bs-toggle='dropdown', aria-expanded='false', aria-haspopup='true', title='Actions')
+                                  i(class='bi bi-three-dots-vertical', aria-hidden='true')
+                                  span.visually-hidden Actions
+                                ul.dropdown-menu.dropdown-menu-end(aria-labelledby=`subMenuBtn-${su._id}`)
+                                  li
+                                    button.dropdown-item.edit-subunit-btn(type='button', data-unit-id=u._id, data-subunit-id=su._id, data-subunit-name=su.name)
+                                      i(class='bi bi-pencil me-2', aria-hidden='true')
+                                      | Edit
+                                  li
+                                    button.dropdown-item.open-delete-modal(type='button', data-action=`/admin/units/${u._id}/subunits/${su._id}?_method=DELETE`, data-item-type='Sub-unit', data-item-name=su.name)
+                                      i(class='bi bi-trash me-2', aria-hidden='true')
+                                      | Remove
+                      else
+                        p.text-muted.mb-3 No sub-units yet.
+
+                      // Add subunit inline form for this unit (with spinner + validation)
+                      form.needs-validation(method='post', action=`/admin/units/${u._id}/subunits`, class='row g-2 align-items-center', novalidate)
+                        .col
+                          input.form-control(type='text', name='name', placeholder='New sub-unit name (e.g., A4)', required)
+                          .invalid-feedback Please provide a sub-unit name.
+                        .col-auto
+                          button.btn.btn-sm.btn-outline-primary(type='submit')
+                            span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', style='display:none;')
+                            | Add
+
+                      // small action row: right-aligned actions for unit (no Created ID shown)
+                      .d-flex.justify-content-end.align-items-center.mt-3
+                        .dropdown
+                          button.btn.btn-sm.btn-light.dropdown-toggle(type='button', id=`unitMenuBtn-${u._id}`, data-bs-toggle='dropdown', aria-expanded='false', aria-haspopup='true', title='Unit actions')
+                            i(class='bi bi-three-dots-vertical', aria-hidden='true')
+                            span.visually-hidden Actions
+                          ul.dropdown-menu.dropdown-menu-end(aria-labelledby=`unitMenuBtn-${u._id}`)
+                            li
+                              button.dropdown-item.edit-unit-btn(type='button', data-unit-id=u._id, data-unit-name=u.name)
+                                i(class='bi bi-pencil me-2', aria-hidden='true')
+                                | Edit Unit
+                            li
+                              button.dropdown-item.open-delete-modal(type='button', data-action=`/admin/units/${u._id}?_method=DELETE`, data-item-type='Unit', data-item-name=u.name)
+                                i(class='bi bi-trash me-2', aria-hidden='true')
+                                | Delete Unit
+          else
+            .alert.alert-light No units created yet. Use the form above to add the first unit.
+
+  // Delete Confirmation Modal (shared)
+  .modal.fade(id='deleteConfirmModal', tabindex='-1', aria-labelledby='deleteConfirmModalLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id='deleteConfirmModalLabel') Confirm delete
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          p#deleteConfirmMessage Are you sure you want to delete this item?
+          p.text-muted.small.mt-2 Deleting cannot be undone.
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-danger(type='button', id='confirmDeleteBtn') Yes, delete
+
+  // Hidden delete form used by modal
+  form#hiddenDeleteForm(method='post', action='', style='display:none;')
+    input(type='hidden', name='_method', value='DELETE')
+
+  // Edit Modals (Service, Unit, Sub-unit) — required for edit_items.js
+  // Edit Service Modal
+  .modal.fade(id='editServiceModal', tabindex='-1', aria-labelledby='editServiceModalLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id='editServiceModalLabel') Edit Service
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          form#editServiceForm
+            input(type='hidden', id='editServiceId', name='id')
+            .mb-3
+              label.form-label(for='editServiceName') Service Name
+              input.form-control(type='text', id='editServiceName', name='name', required)
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary(type='button', id='saveEditServiceBtn') Save changes
+
+  // Edit Unit Modal
+  .modal.fade(id='editUnitModal', tabindex='-1', aria-labelledby='editUnitModalLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id='editUnitModalLabel') Edit Unit
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          form#editUnitForm
+            input(type='hidden', id='editUnitId', name='id')
+            .mb-3
+              label.form-label(for='editUnitName') Unit Name
+              input.form-control(type='text', id='editUnitName', name='name', required)
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary(type='button', id='saveEditUnitBtn') Save changes
+
+  // Edit Sub-unit Modal
+  .modal.fade(id='editSubunitModal', tabindex='-1', aria-labelledby='editSubunitModalLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id='editSubunitModalLabel') Edit Sub-unit
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          form#editSubunitForm
+            input(type='hidden', id='editSubunitUnitId', name='unitId')
+            input(type='hidden', id='editSubunitId', name='id')
+            .mb-3
+              label.form-label(for='editSubunitName') Sub-unit Name
+              input.form-control(type='text', id='editSubunitName', name='name', required)
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary(type='button', id='saveEditSubunitBtn') Save changes
+
+  // Toast (used for small success messages)
+  .position-fixed(bottom='1rem', end='1rem', style='z-index:1080')
+    .toast.fade(id='assignToast', role='status', aria-live='polite', aria-atomic='true')
+      .toast-header
+        strong.me-auto Success
+        small.text-muted.ms-2.nowrap Ready
+        button.btn-close.ms-2(type='button', data-bs-dismiss='toast', aria-label='Close')
+      .toast-body#assignToastBody Saved.
+
+  // small footer note
+  .mt-3.text-muted
+    small Changes here use standard server routes; forms will reload the page after submission if JS is disabled.
