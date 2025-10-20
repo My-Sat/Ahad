@@ -1,0 +1,28 @@
+extends ../layout
+
+block content
+  .container
+    .row.justify-content-center
+      .col-12.col-md-6
+        .card.shadow-sm
+          .card-body
+            h4.mb-3 Pay Order
+            p.text-muted Enter the Order ID to fetch the amount due and mark it as paid.
+
+            form#fetchOrderForm(class='row g-2 mb-3', novalidate)
+              .col
+                input.form-control(type='text', id='fetchOrderId', placeholder='Order ID', required)
+              .col-auto
+                button.btn.btn-primary(type='submit', id='fetchOrderBtn') Fetch
+
+            // result
+            .card.mt-3
+              .card-body
+                #orderInfo
+                  p.text-muted No order loaded.
+
+                .d-flex.justify-content-end.mt-3
+                  button.btn.btn-success#payNowBtn(type='button', disabled) Pay Now
+
+block append scripts
+  script(src='/public/javascripts/orders_pay.js')

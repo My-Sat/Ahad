@@ -1,0 +1,57 @@
+extends ../layout
+
+block content
+  .container
+    .row.justify-content-center
+      .col-12.col-md-10
+        .card.shadow-sm
+          .card-body
+            // Title only (compact)
+            h4.mb-3 Job Order
+
+            // selection row
+            .row.g-2.mb-3
+              .col-md-7
+                label.form-label(for='serviceSelect') Service
+                select.form-select(id='serviceSelect')
+                  option(value='') -- Select a service --
+                  each s in services
+                    option(value=s._id)= s.name
+              .col-md-5.d-flex.align-items-end
+                small.text-muted.ms-auto Select a service to load price rules
+
+            // price rules list (populated via AJAX)
+            .card.mt-3
+              .card-body
+                h6.mb-2 Price rules for selected service
+                p.text-muted.small Select a rule and enter number of pages (if applicable) then click Apply to add to cart.
+                #pricesList
+                  p.text-muted Select a service to load price rules.
+
+            // Cart / Order summary
+            .card.mt-3
+              .card-body
+                h6.mb-2 Cart
+                table.table.table-sm.table-borderless#cartTable
+                  thead
+                    tr
+                      th Selection
+                      th.text-center Pages
+                      th.text-end Unit
+                      th.text-end Subtotal
+                      th.text-center Actions
+                  tbody#cartTbody
+                    tr
+                      td.text-muted(colspan='5') Cart is empty.
+                .d-flex.justify-content-end.mt-2
+                  span.me-3.fs-5 Total:
+                  strong.fs-5#cartTotal GH₵ 0.00
+
+                .d-flex.justify-content-end.mt-3
+                  button.btn.btn-primary#orderNowBtn(type='button', disabled) Order Now
+
+    // small debug area
+    .mt-3.text-muted.small
+      | After placing the order you will receive an Order ID to use at payment.
+block append scripts
+  script(src='/public/javascripts/orders_client.js')
