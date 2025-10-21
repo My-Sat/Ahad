@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const assignBtn = document.getElementById('assignBtn');
   const assignSpinner = document.getElementById('assignSpinner');
   const priceInput = document.getElementById('priceInput');
+  const price2Input = document.getElementById('price2Input');
   const pricesSectionSelector = '#pricesSection';
 
   const serviceId = (function () {
@@ -89,18 +90,22 @@ document.addEventListener('DOMContentLoaded', function () {
       const selections = gatherSelections();
       if (!selections.length) {
         // show invalid visual
-        priceInput.classList.add('is-invalid');
+        if (priceInput) priceInput.classList.add('is-invalid');
         return;
       }
-      const val = priceInput.value;
+      const val = priceInput ? priceInput.value : '';
       if (!val || isNaN(val) || Number(val) < 0) {
-        priceInput.classList.add('is-invalid');
+        if (priceInput) priceInput.classList.add('is-invalid');
         return;
       }
+
+      // optional price2
+      const price2Val = price2Input && price2Input.value ? price2Input.value : '';
 
       const payload = new URLSearchParams();
       payload.append('selections', JSON.stringify(selections));
       payload.append('price', String(Number(val)));
+      if (price2Val !== '') payload.append('price2', String(Number(price2Val)));
 
       try {
         setAssignLoading(true);
@@ -116,7 +121,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (res.ok) {
           await refreshPricesSection();
           document.querySelectorAll('.unit-sub-checkbox:checked').forEach(cb => cb.checked = false);
-          priceInput.value = '';
+          if (priceInput) priceInput.value = '';
+          if (price2Input) price2Input.value = '';
           showToast('Price rule assigned', 2500);
         } else {
           const ct = res.headers.get('content-type') || '';
@@ -145,6 +151,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const editModal = (editModalEl && window.bootstrap && window.bootstrap.Modal) ? new bootstrap.Modal(editModalEl) : null;
   const editPriceIdInput = document.getElementById('editPriceId');
   const editPriceField = document.getElementById('editPriceInput');
+  const editPrice2Field = document.getElementById('editPrice2Input');
   const editSelectionLabel = document.getElementById('editSelectionLabel');
   const saveEditBtn = document.getElementById('saveEditPriceBtn');
 
@@ -155,11 +162,17 @@ document.addEventListener('DOMContentLoaded', function () {
       e.preventDefault();
       const priceId = editBtn.dataset.priceId;
       const priceVal = editBtn.dataset.price;
+      const price2Val = editBtn.dataset.price2;
       const label = editBtn.dataset.selectionLabel || '';
+
       if (editPriceIdInput) editPriceIdInput.value = priceId || '';
       if (editPriceField) {
         editPriceField.value = (priceVal !== undefined && priceVal !== null) ? priceVal : '';
         editPriceField.classList.remove('is-invalid');
+      }
+      if (editPrice2Field) {
+        // dataset price2 may be '' or undefined - set empty string in that case
+        editPrice2Field.value = (price2Val !== undefined && price2Val !== null) ? price2Val : '';
       }
       if (editSelectionLabel) editSelectionLabel.textContent = label;
       if (editModal) editModal.show();
@@ -246,6 +259,7 @@ document.addEventListener('DOMContentLoaded', function () {
     saveEditBtn.addEventListener('click', async function () {
       const priceId = editPriceIdInput ? editPriceIdInput.value : null;
       const newVal = editPriceField ? editPriceField.value : null;
+      const newP2 = editPrice2Field ? editPrice2Field.value : null;
       if (!priceId) return;
       if (!newVal || isNaN(newVal) || Number(newVal) < 0) {
         if (editPriceField) editPriceField.classList.add('is-invalid');
@@ -257,6 +271,12 @@ document.addEventListener('DOMContentLoaded', function () {
         const url = `/admin/services/${serviceId}/prices/${priceId}`;
         const body = new URLSearchParams();
         body.append('price', String(Number(newVal)));
+        if (newP2 !== undefined && newP2 !== null && String(newP2).trim() !== '') {
+          body.append('price2', String(Number(newP2)));
+        } else {
+          // allow clearing price2 by sending empty string - server will interpret as null
+          body.append('price2', '');
+        }
 
         const res = await fetch(url, {
           method: 'PUT',

@@ -40,14 +40,17 @@ block content
     .row.g-2.align-items-center
       .col-auto
         label.form-label(for='priceInput') Price (GH₵)
-      .col
+      .col-md-4
         .input-group
           input.form-control(type='number', step='0.01', name='price', id='priceInput', required, placeholder='0.00')
-          button.btn.btn-success(type='submit', id='assignBtn')
-            // spinner will be toggled by JS; keep visually inline with button text
-            span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', id='assignSpinner', style='display:none;')
-            | Assign Price
-        .invalid-feedback.mt-1 Please provide a valid price (≥ 0) and at least one selection.
+      .col-md-4
+        .input-group
+          input.form-control(type='number', step='0.01', name='price2', id='price2Input', placeholder='F/B price (optional)')
+          span.input-group-text.small F/B
+      .col-auto
+        button.btn.btn-success(type='submit', id='assignBtn')
+          span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', id='assignSpinner', style='display:none;')
+          | Assign Price
       .col-auto
         small.text-muted Select one sub-unit per relevant unit, then click Assign.
 
@@ -62,6 +65,7 @@ block content
           tr
             th Selection(s)
             th.text-end Price
+            th.text-end F/B
             th.text-center Actions
         tbody
           each p in prices
@@ -80,6 +84,11 @@ block content
                 else
                   | (no label)
               td.text-end= (typeof p.price === 'number') ? p.price.toFixed(2) : p.price
+              td.text-end
+                if p.price2 !== undefined && p.price2 !== null
+                  = (typeof p.price2 === 'number') ? p.price2.toFixed(2) : p.price2
+                else
+                  span.text-muted small N/A
               td.text-center
                 //- action dropdown icon (compact)
                 .dropdown.d-inline-block
@@ -88,7 +97,13 @@ block content
                     span.visually-hidden Actions
                   ul.dropdown-menu.dropdown-menu-end(aria-labelledby=`priceMenuBtn-${p._id}`)
                     li
-                      button.dropdown-item.edit-price-btn(type='button', data-price-id=p._id, data-price=(typeof p.price === 'number' ? p.price.toFixed(2) : p.price), data-selection-label=(p.selectionLabel || ''))
+                      button.dropdown-item.edit-price-btn(
+                        type='button',
+                        data-price-id=p._id,
+                        data-price=(typeof p.price === 'number' ? p.price.toFixed(2) : p.price),
+                        data-price2=(typeof p.price2 === 'number' ? p.price2.toFixed(2) : (p.price2 ? p.price2 : '')),
+                        data-selection-label=(p.selectionLabel || '')
+                      )
                         i.bi.bi-pencil.me-2
                         | Edit
                     li
@@ -98,7 +113,7 @@ block content
     else
       p.text-muted No price rules defined for this service yet.
 
-  //- Edit price modal
+  //- Edit price modal (add price2)
   .modal.fade(id='editPriceModal', tabindex='-1', aria-labelledby='editPriceModalLabel', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
       .modal-content
@@ -112,6 +127,9 @@ block content
               label.form-label(for='editPriceInput') Price (GH₵)
               input.form-control(type='number', step='0.01', id='editPriceInput', name='price', required)
               .invalid-feedback Please provide a valid price.
+            .mb-3
+              label.form-label(for='editPrice2Input') F/B Price (optional)
+              input.form-control(type='number', step='0.01', id='editPrice2Input', name='price2')
             .mb-2
               small.text-muted#editSelectionLabel
         .modal-footer

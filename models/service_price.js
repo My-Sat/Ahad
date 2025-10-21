@@ -10,6 +10,11 @@ const ServicePriceSchema = new mongoose.Schema({
   selections: { type: [SelectionSchema], required: true },
   key: { type: String, required: true, index: true }, // stable key for exact-match lookups
   price: { type: Number, required: true, min: 0 },
+
+  // Optional second price — used for "Front + Back" reduced pricing.
+  // If null/undefined the client will fall back to `price`.
+  price2: { type: Number, required: false, min: 0, default: null },
+
   createdBy: { type: String },
   updatedBy: { type: String }
 }, { timestamps: true });

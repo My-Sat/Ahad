@@ -1,7 +1,7 @@
-// public/javascripts/orders_client.js
+// public/javascripts/order_client.js
 // Orders client: auto-load price rules when service changes or on initial load.
 // Renders price rules showing only sub-unit names (comma-separated).
-// Cart now shows service name per item.
+// Cart now shows service name per item and supports F/B selection (fb flag sent to server).
 
 document.addEventListener('DOMContentLoaded', function () {
   'use strict';
@@ -13,9 +13,10 @@ document.addEventListener('DOMContentLoaded', function () {
   const orderNowBtn = document.getElementById('orderNowBtn');
 
   let prices = []; // loaded price rules for selected service
-  let cart = [];   // { serviceId, serviceName, priceRuleId, selectionLabel, unitPrice, pages, subtotal }
+  let cart = [];   // { serviceId, serviceName, priceRuleId, selectionLabel, unitPrice, pages, subtotal, fb }
 
   function formatMoney(n) {
+    // compute to 2 decimal places safely
     return Number(n).toFixed(2);
   }
 
@@ -33,7 +34,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return subs.join(', ');
   }
 
-  // render the prices list (each item: selection (subunits comma-separated), pages input, Apply button)
+  // render the prices list (each item: selection (subunits comma-separated), pages input, F/B checkbox, Apply button)
   function renderPrices() {
     if (!prices || !prices.length) {
       pricesList.innerHTML = '<p class="text-muted">No price rules found for selected service.</p>';
@@ -53,9 +54,10 @@ document.addEventListener('DOMContentLoaded', function () {
       label.innerHTML = `<strong>${escapeHtml(subOnly)}</strong>`;
       left.appendChild(label);
 
-      // middle: pages input
+      // middle: pages input and FB checkbox
       const mid = document.createElement('div');
-      mid.className = 'me-2';
+      mid.className = 'me-2 d-flex align-items-center gap-2';
+
       const input = document.createElement('input');
       input.type = 'number';
       input.min = '1';
@@ -63,6 +65,22 @@ document.addEventListener('DOMContentLoaded', function () {
       input.placeholder = 'Pages (optional)';
       input.style.width = '110px';
       mid.appendChild(input);
+
+      // F/B checkbox
+      const fbWrap = document.createElement('div');
+      fbWrap.className = 'form-check form-check-inline ms-2';
+      const fbInput = document.createElement('input');
+      fbInput.type = 'checkbox';
+      fbInput.className = 'form-check-input fb-checkbox';
+      fbInput.id = `fb-${p._id}`;
+      fbInput.setAttribute('data-prid', p._id);
+      const fbLabel = document.createElement('label');
+      fbLabel.className = 'form-check-label small';
+      fbLabel.htmlFor = fbInput.id;
+      fbLabel.textContent = 'F/B';
+      fbWrap.appendChild(fbInput);
+      fbWrap.appendChild(fbLabel);
+      mid.appendChild(fbWrap);
 
       // right: apply button
       const right = document.createElement('div');
@@ -116,7 +134,8 @@ document.addEventListener('DOMContentLoaded', function () {
       prices = (j.prices || []).map(x => ({
         _id: x._id,
         selectionLabel: x.selectionLabel,
-        unitPrice: Number(x.unitPrice)
+        unitPrice: Number(x.unitPrice),
+        price2: (x.price2 !== null && x.price2 !== undefined) ? Number(x.price2) : null
       }));
       renderPrices();
     } catch (err) {
@@ -126,10 +145,11 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // add item to cart
-  function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, pages }) {
+  function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, pages, fb }) {
     pages = Number(pages) || 1;
-    const subtotal = Number((unitPrice * pages).toFixed(2));
-    cart.push({ serviceId, serviceName, priceRuleId, selectionLabel: label, unitPrice, pages, subtotal });
+    // compute subtotal to 2 decimals
+    const subtotal = Number((Number(unitPrice) * pages).toFixed(2));
+    cart.push({ serviceId, serviceName, priceRuleId, selectionLabel: label, unitPrice: Number(unitPrice), pages, subtotal, fb: !!fb });
     renderCart();
   }
 
@@ -149,10 +169,11 @@ document.addEventListener('DOMContentLoaded', function () {
       const tr = document.createElement('tr');
       tr.dataset.idx = idx;
       // show service name as muted small above selection label
+      const fbBadge = it.fb ? ' <span class="badge bg-secondary ms-1">F/B</span>' : '';
       tr.innerHTML = `
         <td>
-          <div class="small text-muted">${escapeHtml(it.serviceName || '')}</div>
-          <div>${escapeHtml(it.selectionLabel)}</div>
+          <div class="small text-muted">${escapeHtml(it.serviceName || '')}${it.fb ? '' : ''}</div>
+          <div>${escapeHtml(it.selectionLabel)}${it.fb ? ' (F/B)' : ''}</div>
         </td>
         <td class="text-center">${it.pages}</td>
         <td class="text-end">GH₵ ${formatMoney(it.unitPrice)}</td>
@@ -179,11 +200,25 @@ document.addEventListener('DOMContentLoaded', function () {
     const pagesInput = row ? row.querySelector('.pages-input') : null;
     const pages = pagesInput && pagesInput.value ? Number(pagesInput.value) : 1;
 
-    // label to show in cart should be the subunits-only label
-    const label = subUnitsOnlyFromLabel(priceObj.selectionLabel || '');
+    // check F/B checkbox in same row
+    const fbCheckbox = row ? row.querySelector('.fb-checkbox') : null;
+    const fbChecked = fbCheckbox ? fbCheckbox.checked : false;
+
+    // choose unitPrice: price2 if F/B checked and price2 available, else price
+    let chosenPrice = Number(priceObj.unitPrice);
+    if (fbChecked && priceObj.price2 !== null && priceObj.price2 !== undefined) {
+      chosenPrice = Number(priceObj.price2);
+    }
+
+    // label to show in cart should be the subunits-only label, append (F/B) if chosen
+    let label = subUnitsOnlyFromLabel(priceObj.selectionLabel || '');
+    if (fbChecked && (priceObj.price2 !== null && priceObj.price2 !== undefined)) {
+      label = `${label} (F/B)`;
+    }
+
     const serviceName = (serviceSelect.options[serviceSelect.selectedIndex] || {}).text || '';
 
-    addToCart({ serviceId, serviceName, priceRuleId: prId, label, unitPrice: priceObj.unitPrice, pages });
+    addToCart({ serviceId, serviceName, priceRuleId: prId, label, unitPrice: chosenPrice, pages, fb: fbChecked });
     if (typeof showGlobalToast === 'function') showGlobalToast('Added to cart', 1600);
   });
 
@@ -211,7 +246,8 @@ document.addEventListener('DOMContentLoaded', function () {
         items: cart.map(it => ({
           serviceId: it.serviceId,
           priceRuleId: it.priceRuleId,
-          pages: it.pages
+          pages: it.pages,
+          fb: !!it.fb
         }))
       };
       const res = await fetch('/api/orders', {

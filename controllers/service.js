@@ -199,7 +199,7 @@ exports.addComponent = async (req, res) => {
 exports.assignPrice = async (req, res) => {
   try {
     const serviceId = req.params.id;
-    let { selections, price } = req.body;
+    let { selections, price, price2 } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(serviceId)) return res.status(400).send('Invalid service id');
     if (!selections) return res.status(400).send('No selections provided');
@@ -211,6 +211,14 @@ exports.assignPrice = async (req, res) => {
 
     price = parseFloat(price);
     if (isNaN(price) || price < 0) return res.status(400).send('Invalid price');
+
+    // optional price2
+    if (price2 !== undefined && price2 !== null && String(price2).trim() !== '') {
+      price2 = parseFloat(price2);
+      if (isNaN(price2) || price2 < 0) return res.status(400).send('Invalid price2');
+    } else {
+      price2 = null;
+    }
 
     // Validate and normalize selections
     const normalized = [];
@@ -239,6 +247,7 @@ exports.assignPrice = async (req, res) => {
         selections: normalized,
         key,
         price,
+        price2,
         updatedAt: new Date()
       },
       $setOnInsert: { createdAt: new Date() }
@@ -248,11 +257,8 @@ exports.assignPrice = async (req, res) => {
     const saved = await ServicePrice.findOneAndUpdate(filter, update, opts).lean();
 
     // Build a human-friendly label for the selection (Unit: SubUnit + ...)
-    // We need readable names; fetch unit/subunit docs for the saved selections if not already populated.
-    // saved.selections contains objectIds — hydrate names:
     const hydratedParts = [];
     for (const sel of saved.selections) {
-      // sel.unit and sel.subUnit may be ObjectIds — fetch their docs
       const unitDoc = await ServiceCostUnit.findById(sel.unit).lean();
       const subDoc = await ServiceCostSubUnit.findById(sel.subUnit).lean();
       const unitName = unitDoc && unitDoc.name ? unitDoc.name : String(sel.unit);

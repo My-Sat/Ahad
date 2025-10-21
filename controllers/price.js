@@ -35,10 +35,11 @@ exports.listForService = async (req, res) => {
  * Create price rule (JSON response)
  * Expect body: { selections: [{unit, subUnit}, ...], price }
  */
+// in createPrice: parse price2 and validate
 exports.createPrice = async (req, res) => {
   try {
     const serviceId = req.params.id;
-    let { selections, price } = req.body;
+    let { selections, price, price2 } = req.body;
 
     // if selections sent as JSON string, parse it
     if (typeof selections === 'string') {
@@ -56,6 +57,14 @@ exports.createPrice = async (req, res) => {
     // basic price validation
     price = parseFloat(price);
     if (isNaN(price) || price < 0) return res.status(400).json({ error: 'Invalid price' });
+
+    // parse optional price2
+    if (price2 !== undefined && price2 !== null && String(price2).trim() !== '') {
+      price2 = parseFloat(price2);
+      if (isNaN(price2) || price2 < 0) return res.status(400).json({ error: 'Invalid price2' });
+    } else {
+      price2 = null;
+    }
 
     // validate each selection: unit/subUnit exist and belong together, and (optionally) belong to service component
     for (const s of selections) {
@@ -84,8 +93,8 @@ exports.createPrice = async (req, res) => {
       }
     }
 
-    // Create the ServicePrice doc
-    const sp = new ServicePrice({ service: serviceId, selections, price });
+    // Create the ServicePrice doc (include price2)
+    const sp = new ServicePrice({ service: serviceId, selections, price, price2 });
     await sp.save();
 
     // populate selections for client convenience
@@ -144,7 +153,7 @@ exports.removePrice = async (req, res) => {
 exports.updatePrice = async (req, res) => {
   try {
     const { id: serviceId, priceId } = req.params;
-    let { price } = req.body;
+    let { price, price2 } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(serviceId) || !mongoose.Types.ObjectId.isValid(priceId)) {
       if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
@@ -161,9 +170,22 @@ exports.updatePrice = async (req, res) => {
       return res.status(400).send('Invalid price');
     }
 
+    // optional price2
+    if (price2 !== undefined && price2 !== null && String(price2).trim() !== '') {
+      price2 = parseFloat(price2);
+      if (isNaN(price2) || price2 < 0) {
+        if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
+          return res.status(400).json({ ok: false, error: 'Invalid price2' });
+        }
+        return res.status(400).send('Invalid price2');
+      }
+    } else {
+      price2 = null;
+    }
+
     const doc = await ServicePrice.findOneAndUpdate(
       { _id: priceId, service: serviceId },
-      { $set: { price, updatedAt: new Date() } },
+      { $set: { price, price2, updatedAt: new Date() } },
       { new: true }
     ).lean();
 

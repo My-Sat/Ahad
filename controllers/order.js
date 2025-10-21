@@ -38,12 +38,10 @@ exports.apiGetPricesForService = async (req, res) => {
     const { serviceId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(serviceId)) return res.status(400).json({ error: 'Invalid service id' });
 
-    // ServicePrice documents store selections + price; populate for readable labels
     const prices = await ServicePrice.find({ service: serviceId })
       .populate('selections.unit selections.subUnit')
       .lean();
 
-    // ensure we return selectionLabel + price + id
     const out = prices.map(p => ({
       _id: p._id,
       selectionLabel: p.selectionLabel || ((p.selections || []).map(s => {
@@ -51,7 +49,8 @@ exports.apiGetPricesForService = async (req, res) => {
         const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
         return `${u}: ${su}`;
       }).join(' + ')),
-      unitPrice: p.price
+      unitPrice: p.price,
+      price2: (p.price2 !== undefined && p.price2 !== null) ? p.price2 : null
     }));
 
     return res.json({ ok: true, prices: out });
@@ -62,8 +61,8 @@ exports.apiGetPricesForService = async (req, res) => {
 };
 
 // API: create order
-// expects body: { items: [{ serviceId, priceRuleId, pages (optional) } , ...] }
-// We look up price rule(s) to get unit price and selection label, compute subtotal and total, save Order with generated orderId
+// expects body: { items: [{ serviceId, priceRuleId, pages (optional), fb (optional boolean) } , ...] }
+// Server-authoritative pricing: when items[].fb is true and the price rule has price2, use price2.
 exports.apiCreateOrder = async (req, res) => {
   try {
     let { items } = req.body;
@@ -71,11 +70,12 @@ exports.apiCreateOrder = async (req, res) => {
       return res.status(400).json({ error: 'No items provided' });
     }
 
-    // normalize pages and validate
+    // normalize pages and fb flag and validate shape
     items = items.map(it => ({
       serviceId: it.serviceId,
       priceRuleId: it.priceRuleId,
-      pages: Number(it.pages) || 1
+      pages: Number(it.pages) || 1,
+      fb: (it.fb === true || it.fb === 'true' || it.fb === 1 || it.fb === '1') ? true : false
     }));
 
     const builtItems = [];
@@ -89,8 +89,16 @@ exports.apiCreateOrder = async (req, res) => {
       const pr = await ServicePrice.findById(it.priceRuleId).populate('selections.unit selections.subUnit').lean();
       if (!pr) return res.status(404).json({ error: `Price rule ${it.priceRuleId} not found` });
 
-      const unitPrice = Number(pr.price);
+      // Determine which price to use: use price2 only when client requested FB and price2 exists
+      let unitPrice = Number(pr.price);
+      let usedFB = false;
+      if (it.fb && pr.price2 !== undefined && pr.price2 !== null) {
+        unitPrice = Number(pr.price2);
+        usedFB = true;
+      }
+
       const pages = Number(it.pages) || 1;
+      // compute subtotal with 2 decimal places
       const subtotal = Number((unitPrice * pages).toFixed(2));
 
       // build human-friendly selection label
@@ -98,7 +106,7 @@ exports.apiCreateOrder = async (req, res) => {
         const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
         const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
         return `${u}: ${su}`;
-      }).join(' + '));
+      }).join(' + ')) + (usedFB ? ' (F/B)' : '');
 
       builtItems.push({
         service: it.serviceId,
