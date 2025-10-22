@@ -1,0 +1,50 @@
+extends ../layout
+
+block content
+  .d-flex.justify-content-between.align-items-center.mb-3
+    h2.mb-0 Records
+    a.btn.btn-secondary(href='/admin/services') Back to services
+
+  hr
+
+  .row.mb-3
+    .col-12.col-md-8
+      form#recordsFilter.form-inline.row.g-2
+        .col-auto
+          label.form-label(for='fromDate') From
+          input.form-control(type='date', id='fromDate', name='from', value=filters.from)
+        .col-auto
+          label.form-label(for='toDate') To
+          input.form-control(type='date', id='toDate', name='to', value=filters.to)
+        .col-auto
+          label.form-label(for='materialSelect') Material
+          select.form-select(id='materialSelect', name='materialId')
+            option(value='') All materials
+            each m in materials
+              option(value=m._id selected=(filters.materialId && filters.materialId==String(m._id)))= m.name
+        .col-auto.d-flex.align-items-end
+          button.btn.btn-primary(type='submit' id='applyFilterBtn') Apply
+          a.btn.btn-outline-secondary.ms-2#exportCsv(href=`/admin/records/export?from=${filters.from}&to=${filters.to}${filters.materialId ? '&materialId=' + filters.materialId : ''}`) Download CSV
+
+    .col-12.col-md-4.text-end
+      // summary cards for top materials (client will render more if desired)
+      .d-flex.justify-content-end.gap-2
+        each m in materials.slice(0,3)
+          - var mid = String(m._id);
+          - var tot = aggregates && aggregates[mid] ? aggregates[mid] : 0;
+          .card.text-center.mx-1(style='min-width:150px;')
+            .card-body.p-2
+              small.text-muted= m.name
+              h5.mb-0.mt-1= tot
+
+  // Main table area
+  .card
+    .card-body
+      h5.mb-3 Usage details
+      p.text-muted.small.mb-3 Use filters above to refine results. Recent usages appear below (limited to 1000 rows).
+      // container populated by JS
+      #recordsArea
+        .text-center.text-muted Loading data…
+
+block append scripts
+  script(src='/public/javascripts/records.js')

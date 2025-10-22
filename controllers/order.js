@@ -4,6 +4,9 @@ const Service = require('../models/service');
 const ServicePrice = require('../models/service_price');
 const Order = require('../models/order');
 const mongoose = require('mongoose');
+const Material = require('../models/material');
+const { MaterialUsage, MaterialAggregate } = require('../models/material_usage');
+
 
 function makeOrderId() {
   // short, human-readable id: 8 chars base36
@@ -86,6 +89,7 @@ exports.apiCreateOrder = async (req, res) => {
         return res.status(400).json({ error: 'Invalid IDs in items' });
       }
 
+      // populate selections/unit/subUnit so we can store and later match materials
       const pr = await ServicePrice.findById(it.priceRuleId).populate('selections.unit selections.subUnit').lean();
       if (!pr) return res.status(404).json({ error: `Price rule ${it.priceRuleId} not found` });
 
@@ -98,7 +102,6 @@ exports.apiCreateOrder = async (req, res) => {
       }
 
       const pages = Number(it.pages) || 1;
-      // compute subtotal with 2 decimal places
       const subtotal = Number((unitPrice * pages).toFixed(2));
 
       // build human-friendly selection label
@@ -108,8 +111,15 @@ exports.apiCreateOrder = async (req, res) => {
         return `${u}: ${su}`;
       }).join(' + ')) + (usedFB ? ' (F/B)' : '');
 
+      // store selections as unit/subUnit objectIds (not populated objects)
+      const selectionsForOrder = (pr.selections || []).map(s => ({
+        unit: s.unit && s.unit._id ? s.unit._id : s.unit,
+        subUnit: s.subUnit && s.subUnit._id ? s.subUnit._id : s.subUnit
+      }));
+
       builtItems.push({
         service: it.serviceId,
+        selections: selectionsForOrder,
         selectionLabel,
         unitPrice,
         pages,
@@ -129,13 +139,96 @@ exports.apiCreateOrder = async (req, res) => {
 
     await order.save();
 
+    // --- MATERIAL MATCHING & RECORDING ---
+    try {
+      // load all materials (global + those scoped to services involved)
+      // build a set of service ids used in this order
+      const serviceIds = Array.from(new Set(builtItems.map(it => String(it.service))));
+      // fetch materials that are global (service=null) or match any of these services
+      const mats = await Material.find({ $or: [{ service: null }, { service: { $in: serviceIds } }] }).lean();
+
+      // helper: check if mat.selections is subset of item.selections
+      function materialMatchesItem(matSelections, itemSelections) {
+        // Use string keys "unit:subUnit" for quick lookup
+        const itemSet = new Set((itemSelections || []).map(s => `${String(s.unit)}:${String(s.subUnit)}`));
+        // every mat selection must exist in itemSet
+        for (const ms of (matSelections || [])) {
+          const key = `${String(ms.unit)}:${String(ms.subUnit)}`;
+          if (!itemSet.has(key)) return false;
+        }
+        return true;
+      }
+
+      // iterate items and materials to record usage
+      for (let idx = 0; idx < builtItems.length; idx++) {
+        const it = builtItems[idx];
+        const itemSelections = it.selections || [];
+
+        for (const m of mats) {
+          if (!m.selections || !m.selections.length) continue;
+          if (materialMatchesItem(m.selections, itemSelections)) {
+            // compute count
+            let count = 1;
+            if (it.pages && Number(it.pages) > 0) {
+              if (it.pages && it.pages > 0) {
+                if (it.pages && it.pages !== undefined) {
+                  if (it.pages && !isNaN(it.pages)) {
+                    if (it.pages && Number(it.pages) > 0) {
+                      if (it.pages && it.pages !== undefined) {
+                        // if front/back used (we flagged usedFB previously when selecting unitPrice),
+                        // but we don't have usedFB saved in builtItems, so detect it from selectionLabel
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            // Determine final count using pages & fb detection:
+            let pages = Number(it.pages) || 1;
+            // detect fb from selectionLabel suffix '(F/B)'
+            const isFb = String(it.selectionLabel || '').includes('(F/B)');
+            if (!pages || pages <= 0) {
+              count = 1;
+            } else {
+              if (isFb) {
+                // each paper holds two pages => papers = ceil(pages/2)
+                count = Math.ceil(pages / 2);
+              } else {
+                count = pages;
+              }
+            }
+
+            // create usage record
+            await MaterialUsage.create({
+              material: m._id,
+              orderId: order.orderId,
+              orderRef: order._id,
+              itemIndex: idx,
+              count
+            });
+
+            // update aggregate total (atomic increment)
+            await MaterialAggregate.findOneAndUpdate(
+              { material: m._id },
+              { $inc: { total: count } },
+              { upsert: true, new: true }
+            );
+          }
+        }
+      }
+    } catch (matErr) {
+      // material recording failure should not block order creation, but we log it
+      console.error('Material matching/recording error', matErr);
+    }
+
+    // return order info
     return res.json({ ok: true, orderId: order.orderId, total });
   } catch (err) {
     console.error('apiCreateOrder error', err);
     return res.status(500).json({ error: 'Error creating order' });
   }
 };
-
 // API: fetch order by orderId (returns order summary)
 exports.apiGetOrderById = async (req, res) => {
   try {

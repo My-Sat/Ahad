@@ -5,8 +5,8 @@ const unitController = require('../controllers/unit');
 const subUnitController = require('../controllers/subunit');
 const serviceController = require('../controllers/service');
 const priceController = require('../controllers/price');
-
-router.get('/', (req, res) => res.redirect('/admin/services'));
+const materialsController = require('../controllers/materials');router.get('/', (req, res) => res.redirect('/admin/services'));
+const recordsController = require('../controllers/records');
 
 // Units
 router.post('/units', unitController.create);
@@ -40,4 +40,16 @@ router.put('/services/:id/prices/:priceId', priceController.updatePrice);
 router.get('/services/:id/prices', priceController.listForService);
 router.delete('/services/:id/prices/:priceId', priceController.removePrice);
 
+router.get('/materials', materialsController.list);
+router.post('/materials', materialsController.create);
+router.delete('/materials/:id', materialsController.remove);
 module.exports = router;
+
+
+// Records dashboard / UI
+router.get('/records', recordsController.index);
+// JSON data for filtered usages (AJAX)
+router.get('/records/usage', recordsController.usageData);
+// CSV export of filtered usages
+router.get('/records/export', recordsController.exportCsv);
+

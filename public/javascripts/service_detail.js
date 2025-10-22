@@ -26,7 +26,62 @@ document.addEventListener('DOMContentLoaded', function () {
     if (toastEl && window.bootstrap && window.bootstrap.Toast) {
       const t = new bootstrap.Toast(toastEl, { delay });
       t.show();
+    } else {
+      // fallback to alert if nothing else
+      try { console.log('Toast:', msg); } catch(e) {}
     }
+  }
+
+  function showError(msg) {
+    // prefer toast for errors, fall back to alert
+    if (window.showGlobalToast) {
+      // use a red/danger toast if possible by creating a transient element
+      try {
+        const container = document.getElementById('globalToastContainer') || (function () {
+          const c = document.createElement('div');
+          c.id = 'globalToastContainer';
+          c.className = 'position-fixed';
+          c.style.bottom = '1rem';
+          c.style.right = '1rem';
+          c.style.zIndex = '1080';
+          document.body.appendChild(c);
+          return c;
+        })();
+
+        const el = document.createElement('div');
+        el.className = 'toast align-items-center text-bg-danger border-0';
+        el.setAttribute('role','status');
+        el.setAttribute('aria-live','polite');
+        el.setAttribute('aria-atomic','true');
+
+        const body = document.createElement('div');
+        body.className = 'd-flex';
+        const msgEl = document.createElement('div');
+        msgEl.className = 'toast-body';
+        msgEl.textContent = msg || 'Error';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-close btn-close-white me-2 m-auto';
+        btn.setAttribute('data-bs-dismiss','toast');
+        btn.setAttribute('aria-label','Close');
+
+        body.appendChild(msgEl);
+        body.appendChild(btn);
+        el.appendChild(body);
+        container.appendChild(el);
+
+        if (window.bootstrap && window.bootstrap.Toast) {
+          const t = new bootstrap.Toast(el, { delay: 4000 });
+          t.show();
+          el.addEventListener('hidden.bs.toast', function () { try { el.parentNode && el.parentNode.removeChild(el); } catch(e){} });
+          return;
+        }
+      } catch (e) {
+        console.error('showError toast failed', e);
+      }
+    }
+    // ultimate fallback
+    try { alert(msg || 'Error'); } catch (e) { console.error(msg); }
   }
 
   // Single selection per unit: when a checkbox checked, uncheck others within same unit
@@ -81,7 +136,106 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  // ----------------------------
+  // Add material: guard against double-submit (global lock + binding guard)
+  // ----------------------------
+  (function initAddMaterialHandler() {
+    const addMaterialForm = document.getElementById('add-material');
+    if (!addMaterialForm) return;
+
+    // Don't bind twice from this script
+    if (addMaterialForm.dataset.addMaterialBound === '1') return;
+    addMaterialForm.dataset.addMaterialBound = '1';
+
+    // ensure a global lock exists so other handlers can check too
+    if (typeof window.__addMaterialPending === 'undefined') window.__addMaterialPending = false;
+
+    const addMaterialBtn = document.getElementById('addMaterialBtn');
+
+    addMaterialForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      // Use the same gatherSelections() helper
+      const selections = gatherSelections();
+      if (!selections.length) {
+        showError('Please select at least one sub-unit to define the material.');
+        return;
+      }
+
+      const nameEl = document.getElementById('materialName');
+      if (!nameEl || !nameEl.value.trim()) {
+        showError('Provide a name for the material.');
+        return;
+      }
+
+      // Global double-submit guard — this prevents duplicate requests even when multiple handlers exist
+      if (window.__addMaterialPending) {
+        // already submitting from another handler, ignore
+        return;
+      }
+      window.__addMaterialPending = true;
+
+      // immediately disable button for extra safety
+      if (addMaterialBtn) {
+        addMaterialBtn.disabled = true;
+        addMaterialBtn.setAttribute('aria-disabled', 'true');
+      }
+
+      try {
+        const payload = new URLSearchParams();
+        payload.append('name', String(nameEl.value).trim());
+        payload.append('selections', JSON.stringify(selections));
+        if (serviceId) payload.append('serviceId', serviceId);
+
+        const res = await fetch('/admin/materials', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+          body: payload.toString()
+        });
+
+        if (!res.ok) {
+          // handle known statuses gracefully
+          if (res.status === 409) {
+            // duplicate
+            let json = null;
+            try { json = await res.json(); } catch (e) { /* ignore */ }
+            const msg = json && json.error ? json.error : 'Material already defined';
+            showError(msg);
+            return;
+          }
+          const ct = res.headers.get('content-type') || '';
+          if (ct.includes('application/json')) {
+            const j = await res.json().catch(() => null);
+            showError(j && j.error ? j.error : 'Failed to save material');
+            return;
+          }
+          // non-json failure fallback
+          showError(`Failed to save material (status ${res.status})`);
+          return;
+        }
+
+        // success — clear form and uncheck checkboxes
+        try { await res.json().catch(()=>null); } catch(e){}
+        if (nameEl) nameEl.value = '';
+        document.querySelectorAll('.unit-sub-checkbox:checked').forEach(cb => cb.checked = false);
+        showToast('Material saved', 2500);
+      } catch (err) {
+        console.error('save material err', err);
+        showError('Failed to save material');
+      } finally {
+        // release global lock and re-enable button
+        window.__addMaterialPending = false;
+        if (addMaterialBtn) {
+          addMaterialBtn.disabled = false;
+          addMaterialBtn.removeAttribute('aria-disabled');
+        }
+      }
+    });
+  })();
+
+  // ----------------------
   // Assign submit handler (AJAX)
+  // ----------------------
   if (assignForm) {
     assignForm.addEventListener('submit', async function (e) {
       e.preventDefault();
@@ -171,7 +325,6 @@ document.addEventListener('DOMContentLoaded', function () {
         editPriceField.classList.remove('is-invalid');
       }
       if (editPrice2Field) {
-        // dataset price2 may be '' or undefined - set empty string in that case
         editPrice2Field.value = (price2Val !== undefined && price2Val !== null) ? price2Val : '';
       }
       if (editSelectionLabel) editSelectionLabel.textContent = label;
@@ -200,13 +353,11 @@ document.addEventListener('DOMContentLoaded', function () {
       // show the shared modal
       const dlg = document.getElementById('deleteConfirmModal');
       if (dlg) {
-        // set message
         const msgEl = document.getElementById('deleteConfirmMessage');
         if (msgEl) msgEl.textContent = 'Delete this price rule?';
         const bs = bootstrap.Modal.getInstance(dlg) || new bootstrap.Modal(dlg);
         bs.show();
       } else {
-        // fallback to confirm
         if (confirm('Delete this price rule?')) {
           fetch(`/admin/services/${serviceId}/prices/${priceId}`, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(r => r.ok ? refreshPricesSection().then(() => showToast('Price rule deleted')) : window.location.reload())
@@ -274,7 +425,6 @@ document.addEventListener('DOMContentLoaded', function () {
         if (newP2 !== undefined && newP2 !== null && String(newP2).trim() !== '') {
           body.append('price2', String(Number(newP2)));
         } else {
-          // allow clearing price2 by sending empty string - server will interpret as null
           body.append('price2', '');
         }
 
