@@ -1,9 +1,11 @@
+// File: controllers/materials.js
 // controllers/materials.js
 const mongoose = require('mongoose');
 const Material = require('../models/material');
 const ServiceCostUnit = require('../models/service_cost_unit');
 const ServiceCostSubUnit = require('../models/service_cost_subunit');
 
+// List (existing) — unchanged behavior
 exports.list = async (req, res) => {
   try {
     const { serviceId } = req.query; // optional filter
@@ -17,9 +19,15 @@ exports.list = async (req, res) => {
   }
 };
 
+// Create material — now accepts optional 'stock' field (stocking)
 exports.create = async (req, res) => {
   try {
     const { name, serviceId, selections } = req.body;
+    // stock may come from form/urlencoded or JSON
+    let stock = req.body.stock;
+    if (stock === undefined || stock === null || stock === '') stock = 0;
+    stock = Number(stock) || 0;
+
     if (!name || typeof name !== 'string') return res.status(400).json({ error: 'Name required' });
     let sels = selections;
     if (typeof sels === 'string') sels = sels ? JSON.parse(sels) : [];
@@ -45,7 +53,8 @@ exports.create = async (req, res) => {
     const mat = new Material({
       name: name.trim(),
       service: (serviceId && mongoose.Types.ObjectId.isValid(serviceId)) ? serviceId : null,
-      selections: normalized
+      selections: normalized,
+      stock: stock
     });
 
     await mat.save();
@@ -68,5 +77,27 @@ exports.remove = async (req, res) => {
   } catch (err) {
     console.error('materials.remove error', err);
     return res.status(500).json({ error: 'Error deleting material' });
+  }
+};
+
+/**
+ * New: Stock admin page
+ * Renders a server-side view showing stocked qty vs used totals. Client can enhance via JS.
+ */
+exports.stock = async (req, res) => {
+  try {
+    // load all materials and their aggregates
+    const materials = await Material.find().lean();
+    const { MaterialAggregate } = require('../models/material_usage');
+    const aggDocs = await MaterialAggregate.find().lean();
+
+    // map aggregates by material id for quick lookup
+    const aggMap = {};
+    aggDocs.forEach(a => { aggMap[String(a.material)] = a.total || 0; });
+
+    return res.render('stock/index', { materials, aggregates: aggMap });
+  } catch (err) {
+    console.error('materials.stock error', err);
+    return res.status(500).send('Error loading stock page');
   }
 };

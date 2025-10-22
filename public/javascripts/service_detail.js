@@ -139,23 +139,16 @@ document.addEventListener('DOMContentLoaded', function () {
   // ----------------------------
   // Add material: guard against double-submit (global lock + binding guard)
   // ----------------------------
-  (function initAddMaterialHandler() {
+(function initAddMaterialHandler() {
     const addMaterialForm = document.getElementById('add-material');
     if (!addMaterialForm) return;
-
-    // Don't bind twice from this script
     if (addMaterialForm.dataset.addMaterialBound === '1') return;
     addMaterialForm.dataset.addMaterialBound = '1';
-
-    // ensure a global lock exists so other handlers can check too
     if (typeof window.__addMaterialPending === 'undefined') window.__addMaterialPending = false;
-
     const addMaterialBtn = document.getElementById('addMaterialBtn');
 
     addMaterialForm.addEventListener('submit', async function (e) {
       e.preventDefault();
-
-      // Use the same gatherSelections() helper
       const selections = gatherSelections();
       if (!selections.length) {
         showError('Please select at least one sub-unit to define the material.');
@@ -168,24 +161,25 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
-      // Global double-submit guard — this prevents duplicate requests even when multiple handlers exist
-      if (window.__addMaterialPending) {
-        // already submitting from another handler, ignore
-        return;
+      // read stock value
+      const stockEl = document.getElementById('materialStock');
+      let stockVal = 0;
+      if (stockEl && stockEl.value !== '') {
+        const v = Number(stockEl.value);
+        stockVal = isNaN(v) ? 0 : v;
       }
-      window.__addMaterialPending = true;
 
-      // immediately disable button for extra safety
-      if (addMaterialBtn) {
-        addMaterialBtn.disabled = true;
-        addMaterialBtn.setAttribute('aria-disabled', 'true');
-      }
+      if (window.__addMaterialPending) return;
+      window.__addMaterialPending = true;
+      if (addMaterialBtn) { addMaterialBtn.disabled = true; addMaterialBtn.setAttribute('aria-disabled', 'true'); }
 
       try {
         const payload = new URLSearchParams();
         payload.append('name', String(nameEl.value).trim());
         payload.append('selections', JSON.stringify(selections));
         if (serviceId) payload.append('serviceId', serviceId);
+        // NEW: send stock
+        payload.append('stock', String(Math.floor(stockVal)));
 
         const res = await fetch('/admin/materials', {
           method: 'POST',
@@ -194,11 +188,9 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         if (!res.ok) {
-          // handle known statuses gracefully
           if (res.status === 409) {
-            // duplicate
             let json = null;
-            try { json = await res.json(); } catch (e) { /* ignore */ }
+            try { json = await res.json(); } catch (e) {}
             const msg = json && json.error ? json.error : 'Material already defined';
             showError(msg);
             return;
@@ -209,7 +201,6 @@ document.addEventListener('DOMContentLoaded', function () {
             showError(j && j.error ? j.error : 'Failed to save material');
             return;
           }
-          // non-json failure fallback
           showError(`Failed to save material (status ${res.status})`);
           return;
         }
@@ -217,22 +208,18 @@ document.addEventListener('DOMContentLoaded', function () {
         // success — clear form and uncheck checkboxes
         try { await res.json().catch(()=>null); } catch(e){}
         if (nameEl) nameEl.value = '';
+        if (stockEl) stockEl.value = '0';
         document.querySelectorAll('.unit-sub-checkbox:checked').forEach(cb => cb.checked = false);
         showToast('Material saved', 2500);
       } catch (err) {
         console.error('save material err', err);
         showError('Failed to save material');
       } finally {
-        // release global lock and re-enable button
         window.__addMaterialPending = false;
-        if (addMaterialBtn) {
-          addMaterialBtn.disabled = false;
-          addMaterialBtn.removeAttribute('aria-disabled');
-        }
+        if (addMaterialBtn) { addMaterialBtn.disabled = false; addMaterialBtn.removeAttribute('aria-disabled'); }
       }
     });
   })();
-
   // ----------------------
   // Assign submit handler (AJAX)
   // ----------------------

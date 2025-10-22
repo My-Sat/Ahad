@@ -30,7 +30,6 @@ block content
                   - const subName = (typeof su === 'object') ? (su.name || subId) : subId
                   li.list-group-item.d-flex.align-items-center
                     label.form-check.mb-0.d-flex.align-items-center.w-100
-                      //- checkbox but we'll enforce single-check-per-unit via JS (acts like radio)
                       input.form-check-input.unit-sub-checkbox.me-2(type='checkbox', data-unit=unit._id, data-subunit=subId)
                       span.flex-grow-1= subName
 
@@ -58,19 +57,22 @@ block content
   form#add-material(method='post', action='/admin/materials', class='mb-4 needs-validation', novalidate)
     input(type='hidden', name='selections', id='materialSelectionsInput')
     .row.g-2.align-items-center
-      .col-auto
+      .col-md-5
         label.form-label(for='materialName') Material name (e.g. "A3 STD paper")
-      .col-md-4
         .input-group
           input.form-control(type='text', name='name', id='materialName', placeholder='Material label', required)
         .invalid-feedback Provide a name for the material.
-      // ensure button aligns with input by placing it in a flex column aligned to end
+      .col-md-3
+        label.form-label(for='materialStock') Stocking
+        .input-group
+          input.form-control(type='number', name='stock', id='materialStock', placeholder='0', value='0', step='1', min='0')
+          span.input-group-text small Units
       .col-auto.d-flex.align-items-end
         button.btn.btn-outline-primary(type='submit', id='addMaterialBtn')
           span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', style='display:none;', id='addMaterialSpinner')
           | Save count unit
       .col-12
-        small.text-muted Select one sub-unit per unit to define the material combination you want tracked.
+        small.text-muted Select one sub-unit per unit to define the material combination you want tracked. Provide an initial stocked quantity (Stocking).
 
   hr
 
@@ -108,7 +110,6 @@ block content
                 else
                   span.text-muted small N/A
               td.text-center
-                //- action dropdown icon (compact)
                 .dropdown.d-inline-block
                   button.btn.btn-sm.btn-light.dropdown-toggle(type='button', id=`priceMenuBtn-${p._id}`, data-bs-toggle='dropdown', aria-expanded='false', aria-haspopup='true', title='Actions')
                     i(class='bi bi-three-dots-vertical', aria-hidden='true')
@@ -154,6 +155,5 @@ block content
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary(type='button', id='saveEditPriceBtn') Save
 
-  //- No inline scripts here — service_detail.js will handle the JS behaviors.
   block append scripts
     script(src='/public/javascripts/service_detail.js')

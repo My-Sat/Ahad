@@ -1,0 +1,51 @@
+extends ../layout
+
+block content
+  .d-flex.justify-content-between.align-items-center.mb-3
+    h2.mb-0 Stock Dashboard
+    a.btn.btn-secondary(href='/admin/services') Back to services
+
+  hr
+
+  p.text-muted.small.mb-3 Displaying stocked quantities, total used (aggregates) and remaining stock. Negative remaining indicates shortage.
+
+  .card.mb-3
+    .card-body
+      .table-responsive
+        table.table.table-striped.table-hover.table-sm
+          thead
+            tr
+              th Material
+              th.text-center Stocked
+              th.text-center Used
+              th.text-center Remaining
+              th.text-center Actions
+          tbody
+            if materials && materials.length
+              each m in materials
+                - const mid = String(m._id);
+                - const used = (aggregates && aggregates[mid]) ? aggregates[mid] : 0;
+                - const stocked = (typeof m.stock === 'number') ? m.stock : 0;
+                - const remaining = stocked - used;
+                tr
+                  td
+                    strong= m.name
+                    br
+                    small.text-muted= mid
+                    if m.service
+                      br
+                      small.text-muted Service: #{m.service}
+                  td.text-center= stocked
+                  td.text-center= used
+                  td.text-center
+                    if remaining < 0
+                      span.text-danger #{remaining}
+                    else
+                      span.text-success #{remaining}
+                  td.text-center
+                    // quick actions: adjust stock (opens prompt)
+                    button.btn.btn-sm.btn-outline-primary.adjust-stock-btn(data-id=mid type='button') Adjust
+
+  // small modal-less UI: confirm reload after adjust
+  block append scripts
+    script(src='/public/javascripts/stock.js')
