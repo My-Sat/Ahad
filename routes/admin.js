@@ -51,23 +51,7 @@ router.delete('/materials/:id', materialsController.remove);
 router.get('/stock', materialsController.stock);
 
 // Simple API to adjust stock for a material (AJAX)
-router.post('/materials/:id/stock', async (req, res) => {
-  try {
-    const id = req.params.id;
-    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) return res.status(400).json({ error: 'Invalid id' });
-    const stock = Number(req.body.stock);
-    if (isNaN(stock)) return res.status(400).json({ error: 'Invalid stock value' });
-    const updated = await require('../models/material').findByIdAndUpdate(id, { $set: { stock: stock } }, { new: true }).lean();
-    if (!updated) return res.status(404).json({ error: 'Material not found' });
-    return res.json({ ok: true, material: updated });
-  } catch (err) {
-    console.error('adjust stock error', err);
-    return res.status(500).json({ error: 'Error updating stock' });
-  }
-});
-
-module.exports = router;
-
+router.post('/materials/:id/stock', materialsController.setStock);
 
 // Records dashboard / UI
 router.get('/records', recordsController.index);
@@ -75,3 +59,5 @@ router.get('/records', recordsController.index);
 router.get('/records/usage', recordsController.usageData);
 // CSV export of filtered usages
 router.get('/records/export', recordsController.exportCsv);
+
+module.exports = router;

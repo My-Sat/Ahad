@@ -1,4 +1,3 @@
-// File: models/material.js
 const mongoose = require('mongoose');
 
 const SelectionRef = new mongoose.Schema({
@@ -6,14 +5,13 @@ const SelectionRef = new mongoose.Schema({
   subUnit: { type: mongoose.Schema.Types.ObjectId, ref: 'ServiceCostSubUnit', required: true }
 }, { _id: false });
 
-// A Material represents a tracked combination of sub-units (e.g. "A3 + STD")
+// Material is GLOBAL now (not scoped to a service)
 const MaterialSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
-  service: { type: mongoose.Schema.Types.ObjectId, ref: 'Service', default: null },
+  // removed `service` field — materials are unique across all services
   selections: { type: [SelectionRef], required: true },
-  key: { type: String, required: true, index: true },
-  // NEW: stocked quantity (admin-provided). May go negative if usage exceeds stock.
-  stock: { type: Number, default: 0, min: -1000000 },
+  key: { type: String, required: true, index: true }, // stable key computed from selections
+  stock: { type: Number, default: 0 }, // stocked quantity (can go negative when consumed)
   createdBy: { type: String },
 }, { timestamps: true });
 
@@ -28,7 +26,7 @@ MaterialSchema.pre('validate', function (next) {
   next();
 });
 
-// unique per service + key (service may be null)
-MaterialSchema.index({ service: 1, key: 1 }, { unique: true });
+// UNIQUE on key globally (no service component)
+MaterialSchema.index({ key: 1 }, { unique: true });
 
 module.exports = mongoose.model('Material', MaterialSchema);

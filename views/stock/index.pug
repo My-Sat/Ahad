@@ -7,9 +7,45 @@ block content
 
   hr
 
-  p.text-muted.small.mb-3 Displaying stocked quantities, total used (aggregates) and remaining stock. Negative remaining indicates shortage.
+  p.text-muted.small.mb-3 Displaying stocked quantities, total used (aggregates) and remaining stock. Use the "Create count unit" form below to define a global tracked unit (one sub-unit per unit). Duplicate selection sets are disallowed.
 
-  .card.mb-3
+  //- CREATE MATERIAL (GLOBAL COUNT UNIT) FORM
+  .card.mb-4
+    .card-body
+      h5.mb-3 Create count unit (global)
+      form#create-count-unit(class='row g-3' novalidate)
+        .col-12.col-md-5
+          label.form-label(for='cuName') Name
+          input.form-control(type='text', id='cuName', placeholder='e.g. A3 STD paper' required)
+        .col-12.col-md-3
+          label.form-label(for='cuStock') Stocking (initial)
+          input.form-control(type='number', id='cuStock', value='0', min='0', step='1')
+        .col-12
+          small.text-muted.mb-2 Select one sub-unit per unit to form the tracked selection set.
+        // Units/subunits UI
+        .col-12
+          .accordion#stockUnitsAccordion
+            each unit in units
+              - const uid = unit._id
+              .accordion-item
+                h2.accordion-header
+                  button.accordion-button.collapsed(type='button', data-bs-toggle='collapse', data-bs-target=`#u-${uid}`, aria-expanded='false')
+                    | #{unit.name}
+                .accordion-collapse.collapse(id=`u-${uid}`)
+                  .accordion-body
+                    ul.list-group
+                      each su in subunits.filter(s=>String(s.unit) === String(uid))
+                        li.list-group-item
+                          label.form-check
+                            input.form-check-input.unit-sub-checkbox(data-unit=uid data-subunit=su._id type='checkbox')
+                            |&nbsp;
+                            span= su.name
+        .col-12.text-end
+          // NOTE: type="button" prevents native form submit; JS will handle AJAX
+          button.btn.btn-primary(type='button' id='createCountBtn') Create Count Unit
+
+  //- STOCK TABLE
+  .card
     .card-body
       .table-responsive
         table.table.table-striped.table-hover.table-sm
@@ -32,9 +68,11 @@ block content
                     strong= m.name
                     br
                     small.text-muted= mid
-                    if m.service
+                    if m.selections && m.selections.length
                       br
-                      small.text-muted Service: #{m.service}
+                      small.text-muted
+                        - const labels = m.selections.map(s => (s.unit && s.unit.name ? s.unit.name + ': ' + (s.subUnit && s.subUnit.name ? s.subUnit.name : s.subUnit) : ''));
+                        = labels.join(' + ')
                   td.text-center= stocked
                   td.text-center= used
                   td.text-center
@@ -43,9 +81,8 @@ block content
                     else
                       span.text-success #{remaining}
                   td.text-center
-                    // quick actions: adjust stock (opens prompt)
                     button.btn.btn-sm.btn-outline-primary.adjust-stock-btn(data-id=mid type='button') Adjust
+                    button.btn.btn-sm.btn-outline-danger.ms-1.delete-material-btn(data-id=mid type='button') Delete
 
-  // small modal-less UI: confirm reload after adjust
   block append scripts
     script(src='/public/javascripts/stock.js')

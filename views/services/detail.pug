@@ -1,3 +1,4 @@
+
 extends ../layout
 
 block content
@@ -7,7 +8,7 @@ block content
 
   hr
 
-  //- Units accordion
+  //- Units accordion (unchanged)
   #unitsAccordion.accordion.mb-4
     if !service.components || service.components.length === 0
       .alert.alert-info No components available. Add units and sub-units first.
@@ -33,7 +34,7 @@ block content
                       input.form-check-input.unit-sub-checkbox.me-2(type='checkbox', data-unit=unit._id, data-subunit=subId)
                       span.flex-grow-1= subName
 
-  //- Assign price form — use input-group so button aligns with field
+  //- Price assignment (unchanged)
   form#assign-price(method='post', action=`/admin/services/${service._id}/prices`, class='mb-4 needs-validation', novalidate)
     input(type='hidden', name='selections', id='selectionsInput')
     .row.g-2.align-items-center
@@ -53,30 +54,14 @@ block content
       .col-auto
         small.text-muted Select one sub-unit per relevant unit, then click Assign.
 
-  //- Material tracking form (admin can create material definitions by selecting same checkboxes)
-  form#add-material(method='post', action='/admin/materials', class='mb-4 needs-validation', novalidate)
-    input(type='hidden', name='selections', id='materialSelectionsInput')
-    .row.g-2.align-items-center
-      .col-md-5
-        label.form-label(for='materialName') Material name (e.g. "A3 STD paper")
-        .input-group
-          input.form-control(type='text', name='name', id='materialName', placeholder='Material label', required)
-        .invalid-feedback Provide a name for the material.
-      .col-md-3
-        label.form-label(for='materialStock') Stocking
-        .input-group
-          input.form-control(type='number', name='stock', id='materialStock', placeholder='0', value='0', step='1', min='0')
-          span.input-group-text small Units
-      .col-auto.d-flex.align-items-end
-        button.btn.btn-outline-primary(type='submit', id='addMaterialBtn')
-          span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', style='display:none;', id='addMaterialSpinner')
-          | Save count unit
-      .col-12
-        small.text-muted Select one sub-unit per unit to define the material combination you want tracked. Provide an initial stocked quantity (Stocking).
+  //- NOTE: material creation moved to Stock page
+  .alert.alert-info
+    | Material / count-unit creation has moved to the Stock page.
+    a.btn.btn-sm.btn-outline-secondary.ms-2(href='/admin/stock') Manage Stock & Count Units
 
   hr
 
-  //- Prices section (we will refresh this element via AJAX when changes happen)
+  //- Prices section (unchanged)
   #pricesSection
     h5.mb-2 Existing Price Rules
     if prices && prices.length
@@ -129,31 +114,6 @@ block content
                       button.dropdown-item.open-delete-price(type='button', data-price-id=p._id)
                         i.bi.bi-trash.me-2
                         | Delete
-    else
-      p.text-muted No price rules defined for this service yet.
-
-  //- Edit price modal (add price2)
-  .modal.fade(id='editPriceModal', tabindex='-1', aria-labelledby='editPriceModalLabel', aria-hidden='true')
-    .modal-dialog.modal-dialog-centered
-      .modal-content
-        .modal-header
-          h5.modal-title(id='editPriceModalLabel') Edit Price Rule
-          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
-        .modal-body
-          form#editPriceForm
-            input(type='hidden', id='editPriceId', name='priceId')
-            .mb-3
-              label.form-label(for='editPriceInput') Price (GH₵)
-              input.form-control(type='number', step='0.01', id='editPriceInput', name='price', required)
-              .invalid-feedback Please provide a valid price.
-            .mb-3
-              label.form-label(for='editPrice2Input') F/B Price (optional)
-              input.form-control(type='number', step='0.01', id='editPrice2Input', name='price2')
-            .mb-2
-              small.text-muted#editSelectionLabel
-        .modal-footer
-          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
-          button.btn.btn-primary(type='button', id='saveEditPriceBtn') Save
 
   block append scripts
     script(src='/public/javascripts/service_detail.js')

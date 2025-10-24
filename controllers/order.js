@@ -143,7 +143,7 @@ exports.apiCreateOrder = async (req, res) => {
  try {
       // load all materials (global + those scoped to services involved)
       const serviceIds = Array.from(new Set(builtItems.map(it => String(it.service))));
-      const mats = await Material.find({ $or: [{ service: null }, { service: { $in: serviceIds } }] }).lean();
+      const mats = await Material.find().lean();
 
       function materialMatchesItem(matSelections, itemSelections) {
         const itemSet = new Set((itemSelections || []).map(s => `${String(s.unit)}:${String(s.subUnit)}`));
