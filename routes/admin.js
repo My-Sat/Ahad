@@ -46,6 +46,8 @@ router.delete('/services/:id/prices/:priceId', priceController.removePrice);
 router.get('/materials', materialsController.list);
 router.post('/materials', materialsController.create);
 router.delete('/materials/:id', materialsController.remove);
+// Set stocked value
+router.post('/materials/:id/stock', materialsController.setStock);
 
 // Stock page
 router.get('/stock', materialsController.stock);

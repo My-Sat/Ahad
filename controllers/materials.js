@@ -3,36 +3,63 @@ const mongoose = require('mongoose');
 const Material = require('../models/material');
 const ServiceCostUnit = require('../models/service_cost_unit');
 const ServiceCostSubUnit = require('../models/service_cost_subunit');
+const { MaterialAggregate } = require('../models/material_usage');
 
+// Helper: safely parse selections (JSON string or array)
+function parseSelections(sels) {
+  if (Array.isArray(sels)) return sels;
+  if (typeof sels === 'string') {
+    try { return JSON.parse(sels); } catch (e) { return null; }
+  }
+  return null;
+}
+
+// List materials (JSON API)
 exports.list = async (req, res) => {
   try {
+    // materials are global (no service scoping)
     const mats = await Material.find().populate('selections.unit selections.subUnit').lean();
-    return res.json({ ok: true, materials: mats });
+
+    // load aggregates for these materials
+    const matIds = mats.map(m => m._id);
+    const aggDocs = await MaterialAggregate.find({ material: { $in: matIds } }).lean();
+    const aggMap = {};
+    aggDocs.forEach(a => { aggMap[String(a.material)] = a.total || 0; });
+
+    const out = mats.map(m => {
+      const used = aggMap[String(m._id)] || 0;
+      const stocked = (typeof m.stocked === 'number') ? Number(m.stocked) : ((typeof m.stock === 'number') ? Number(m.stock) : 0);
+      const remaining = Math.max(0, stocked - used);
+      return Object.assign({}, m, { stocked, used, remaining });
+    });
+
+    return res.json({ ok: true, materials: out });
   } catch (err) {
     console.error('materials.list error', err);
     return res.status(500).json({ ok: false, error: 'Error fetching materials' });
   }
 };
 
-// Atomic create: compute key, then upsert using key as unique filter.
-// Returns 201 when created, 409 if already exists, 500 for other errors.
+// Atomic create (idempotent). Returns 201 when inserted, 409 if exists.
 exports.create = async (req, res) => {
   try {
     const { name } = req.body;
-    let { selections, stock } = req.body;
-
-    if (typeof selections === 'string') {
-      try { selections = JSON.parse(selections); } catch (e) { selections = null; }
+    let { selections } = req.body;
+    // accept either 'stock' or 'stocked'
+    let stockRaw = (req.body.stocked !== undefined) ? req.body.stocked : req.body.stock;
+    let stockVal = 0;
+    if (stockRaw !== undefined && stockRaw !== null && String(stockRaw).trim() !== '') {
+      const parsed = Number(stockRaw);
+      stockVal = (isNaN(parsed) || parsed < 0) ? 0 : Math.floor(parsed);
     }
+
+    selections = parseSelections(selections);
     if (!Array.isArray(selections) || selections.length === 0) {
       return res.status(400).json({ error: 'Selections must be a non-empty array' });
     }
     if (!name || !String(name).trim()) return res.status(400).json({ error: 'Name required' });
 
-    stock = stock === undefined || stock === null || String(stock).trim() === '' ? 0 : Number(stock);
-    if (isNaN(stock)) stock = 0;
-
-    // validate and normalize selection pairs
+    // validate and normalize selections
     const normalized = [];
     for (const s of selections) {
       if (!s || !s.unit || !s.subUnit) return res.status(400).json({ error: 'Each selection must include unit and subUnit' });
@@ -53,60 +80,58 @@ exports.create = async (req, res) => {
     const parts = normalized.map(s => `${s.unit.toString()}:${s.subUnit.toString()}`).sort();
     const key = parts.join('|');
 
-    // prepare atomic upsert (do NOT set createdAt/updatedAt here)
+    // atomic upsert: only set fields on insert (avoid touching timestamps directly)
     const filter = { key };
     const update = {
       $setOnInsert: {
         name: String(name).trim(),
         selections: normalized,
         key,
-        stock: Math.floor(stock)
+        stocked: stockVal,
+        stock: stockVal
       }
     };
     const opts = { upsert: true, new: true, setDefaultsOnInsert: true, rawResult: true };
 
-    // Run atomic upsert
     const raw = await Material.findOneAndUpdate(filter, update, opts);
 
-    // raw may be either:
-    // - Mongo raw result { value: <doc>, lastErrorObject: { upserted: <id> ... } }
-    // - or the document itself (depending on Mongoose/driver) — handle both
+    // rawResult handling: raw.value is the doc, raw.lastErrorObject.upserted indicates insert
     let doc = null;
     let wasInserted = false;
-
     if (raw && raw.value !== undefined) {
-      // raw result shape
       doc = raw.value;
       wasInserted = !!(raw.lastErrorObject && raw.lastErrorObject.upserted);
-    } else if (raw && raw._id) {
-      // document shape
+    } else if (raw && raw._id) { // fallback if mongoose returned doc instead
       doc = raw;
-      wasInserted = false; // can't reliably know — assume existing (we'll ensure duplicate detection below)
+      wasInserted = false;
     } else {
-      // fallback: try to find by key
+      // final fallback: find existing
       doc = await Material.findOne(filter).lean();
       if (!doc) {
-        // Something unexpected — return error
         console.error('materials.create: unexpected upsert result', { raw });
         return res.status(500).json({ error: 'Unexpected error creating material' });
       }
       wasInserted = false;
     }
 
-    // If we detected an insertion, respond 201 with populated doc.
+    // If inserted, respond with 201 and populated material
     if (wasInserted) {
       const populated = await Material.findById(doc._id).populate('selections.unit selections.subUnit').lean();
-      return res.status(201).json({ ok: true, material: populated });
+      const agg = await MaterialAggregate.findOne({ material: populated._id }).lean();
+      const used = agg ? (agg.total || 0) : 0;
+      const remaining = Math.max(0, (populated.stocked || 0) - used);
+      return res.status(201).json({ ok: true, material: Object.assign({}, populated, { used, remaining }) });
     }
 
-    // If not obviously inserted, ensure we don't silently return success when duplicate.
-    // Fetch the current doc to return to client (and detect duplicate)
+    // If not inserted, return 409 with existing doc
     const existing = await Material.findOne(filter).populate('selections.unit selections.subUnit').lean();
     if (existing) {
-      return res.status(409).json({ error: 'A count unit with this exact selection already exists', existing });
+      const agg = await MaterialAggregate.findOne({ material: existing._id }).lean();
+      const used = agg ? (agg.total || 0) : 0;
+      const remaining = Math.max(0, (existing.stocked || existing.stock || 0) - used);
+      return res.status(409).json({ error: 'A count unit with this exact selection already exists', existing: Object.assign({}, existing, { used, remaining }) });
     }
 
-    // Otherwise (should not happen) return server error
     return res.status(500).json({ error: 'Failed to create material' });
   } catch (err) {
     console.error('materials.create error', err);
@@ -130,33 +155,52 @@ exports.remove = async (req, res) => {
   }
 };
 
-// stock page and setStock kept as before (no change)
+// Render stock page: attach aggregates map for used totals
 exports.stock = async (req, res) => {
   try {
     const units = await ServiceCostUnit.find().sort('name').lean();
     const subunits = await ServiceCostSubUnit.find().sort('name').lean();
     const materials = await Material.find().populate('selections.unit selections.subUnit').lean();
-    const { MaterialAggregate } = require('../models/material_usage');
+
     const aggDocs = await MaterialAggregate.find().lean();
     const aggMap = {};
     aggDocs.forEach(a => { aggMap[String(a.material)] = a.total || 0; });
-    return res.render('stock/index', { materials, aggregates: aggMap, units, subunits });
+
+    // compute stocked/used/remaining per material for template convenience
+    const matsWithTotals = materials.map(m => {
+      const used = aggMap[String(m._id)] || 0;
+      const stocked = (typeof m.stocked === 'number') ? Number(m.stocked) : ((typeof m.stock === 'number') ? Number(m.stock) : 0);
+      const remaining = Math.max(0, stocked - used);
+      return Object.assign({}, m, { stocked, used, remaining });
+    });
+
+    return res.render('stock/index', { materials: matsWithTotals, aggregates: aggMap, units, subunits });
   } catch (err) {
     console.error('materials.stock error', err);
     return res.status(500).send('Error loading stock page');
   }
 };
 
+// Set stocked value (admin adjusts initial stock reference)
 exports.setStock = async (req, res) => {
   try {
     const id = req.params.id;
     if (!id || !mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
+
     let { stock } = req.body;
     stock = stock === undefined || stock === null || String(stock).trim() === '' ? 0 : Number(stock);
     if (isNaN(stock)) return res.status(400).json({ error: 'Invalid stock value' });
-    const updated = await Material.findByIdAndUpdate(id, { $set: { stock: Math.floor(stock) } }, { new: true }).lean();
+
+    // update stocked and keep legacy stock in sync
+    const updated = await Material.findByIdAndUpdate(id, { $set: { stocked: Math.floor(stock), stock: Math.floor(stock) } }, { new: true }).lean();
     if (!updated) return res.status(404).json({ error: 'Material not found' });
-    return res.json({ ok: true, material: updated });
+
+    // attach usage totals
+    const agg = await MaterialAggregate.findOne({ material: updated._id }).lean();
+    const used = agg ? (agg.total || 0) : 0;
+    const remaining = Math.max(0, (updated.stocked || 0) - used);
+
+    return res.json({ ok: true, material: Object.assign({}, updated, { used, remaining }) });
   } catch (err) {
     console.error('materials.setStock error', err);
     return res.status(500).json({ error: 'Error updating stock' });

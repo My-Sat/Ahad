@@ -18,7 +18,7 @@ block content
           label.form-label(for='cuName') Name
           input.form-control(type='text', id='cuName', placeholder='e.g. A3 STD paper' required)
         .col-12.col-md-3
-          label.form-label(for='cuStock') Stocking (initial)
+          label.form-label(for='cuStock') Stocked (initial)
           input.form-control(type='number', id='cuStock', value='0', min='0', step='1')
         .col-12
           small.text-muted.mb-2 Select one sub-unit per unit to form the tracked selection set.
@@ -41,8 +41,10 @@ block content
                             |&nbsp;
                             span= su.name
         .col-12.text-end
-          // NOTE: type="button" prevents native form submit; JS will handle AJAX
-          button.btn.btn-primary(type='button' id='createCountBtn') Create Count Unit
+          // button is type=button so native form submit is not triggered
+          button.btn.btn-primary(type='button' id='createCountBtn')
+            span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='createCountSpinner')
+            | Create Count Unit
 
   //- STOCK TABLE
   .card
@@ -59,15 +61,12 @@ block content
           tbody
             if materials && materials.length
               each m in materials
-                - const mid = String(m._id);
-                - const used = (aggregates && aggregates[mid]) ? aggregates[mid] : 0;
-                - const stocked = (typeof m.stock === 'number') ? m.stock : 0;
-                - const remaining = stocked - used;
-                tr
+                - const used = (typeof m.used === 'number') ? m.used : 0;
+                - const stocked = (typeof m.stocked === 'number') ? m.stocked : ((typeof m.stock === 'number') ? m.stock : 0);
+                - const remaining = (typeof m.remaining === 'number') ? m.remaining : Math.max(0, stocked - used);
+                tr(data-id=m._id)
                   td
                     strong= m.name
-                    br
-                    small.text-muted= mid
                     if m.selections && m.selections.length
                       br
                       small.text-muted
@@ -81,8 +80,42 @@ block content
                     else
                       span.text-success #{remaining}
                   td.text-center
-                    button.btn.btn-sm.btn-outline-primary.adjust-stock-btn(data-id=mid type='button') Adjust
-                    button.btn.btn-sm.btn-outline-danger.ms-1.delete-material-btn(data-id=mid type='button') Delete
+                    button.btn.btn-sm.btn-outline-primary.adjust-stock-btn(data-id=m._id data-stocked=stocked type='button') Adjust
+                    button.btn.btn-sm.btn-outline-danger.ms-1.delete-material-btn(data-id=m._id type='button') Delete
+            else
+              tr
+                td.text-muted(colspan='5') No count units defined.
 
-  block append scripts
-    script(src='/public/javascripts/stock.js')
+  // Adjust stock modal
+  .modal.fade(id='adjustStockModal', tabindex='-1', aria-labelledby='adjustStockModalLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id='adjustStockModalLabel') Adjust stocked quantity
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          form#adjustStockForm
+            input(type='hidden', id='adjustMaterialId')
+            .mb-3
+              label.form-label(for='adjustStockInput') New stocked quantity
+              input.form-control(type='number', id='adjustStockInput', min='0', step='1', required)
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary(type='button', id='saveAdjustStockBtn') Save
+
+  // Delete Confirmation Modal (shared)
+  .modal.fade(id='deleteConfirmModal', tabindex='-1', aria-labelledby='deleteConfirmModalLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id='deleteConfirmModalLabel') Confirm delete
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          p#deleteConfirmMessage Are you sure you want to delete this item?
+          p.text-muted.small.mt-2 Deleting cannot be undone.
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-danger(type='button', id='confirmDeleteBtn') Yes, delete
+
+block append scripts
+  script(src='/public/javascripts/stock.js')

@@ -1,19 +1,29 @@
-// File: public/javascripts/stock.js
+// public/javascripts/stock.js
 document.addEventListener('DOMContentLoaded', function () {
   'use strict';
 
-  // Prevent native form submit (Enter) — defensive
-  const createForm = document.getElementById('create-count-unit');
-  if (createForm) {
-    createForm.addEventListener('submit', function (e) {
-      e.preventDefault();
-      return false;
-    }, { passive: false });
+  const createBtn = document.getElementById('createCountBtn');
+  const createSpinner = document.getElementById('createCountSpinner');
+  const nameEl = document.getElementById('cuName');
+  const stockEl = document.getElementById('cuStock');
+  const unitCheckboxSelector = '.unit-sub-checkbox';
+  let creatingPending = false;
+
+  function qsFrom(obj) {
+    const u = new URLSearchParams();
+    Object.keys(obj).forEach(k => u.append(k, obj[k]));
+    return u.toString();
   }
 
-  // Utility: gather one selection per unit
-  function gatherSelections(root = document) {
-    const checked = root.querySelectorAll('.unit-sub-checkbox:checked');
+  function showToast(msg, delay = 2000) {
+    if (window.showGlobalToast) return window.showGlobalToast(msg, delay);
+    // fallback: small non-blocking toast
+    try { alert(msg); } catch (e) { console.log(msg); }
+  }
+
+  // gather one selection per unit
+  function gatherSelections() {
+    const checked = document.querySelectorAll(`${unitCheckboxSelector}:checked`);
     const map = {};
     checked.forEach(cb => {
       const unit = cb.dataset.unit;
@@ -24,159 +34,181 @@ document.addEventListener('DOMContentLoaded', function () {
     return Object.keys(map).map(u => ({ unit: u, subUnit: map[u] }));
   }
 
-  // Ensure a global one-shot guard exists
-  if (typeof window.__creatingCountUnit === 'undefined') window.__creatingCountUnit = false;
-
-  // Defensive binding: replace the button node with a clone to remove any pre-existing handlers
-  let createBtn = document.getElementById('createCountBtn');
+  // Create Count Unit
   if (createBtn) {
-    // replace node to remove duplicate handlers that may have been bound earlier
-    const clone = createBtn.cloneNode(true);
-    createBtn.parentNode.replaceChild(clone, createBtn);
-    createBtn = clone;
-  }
-
-  if (createBtn) {
-    createBtn.addEventListener('click', async function (ev) {
-      // Defensive: stop propagation to avoid other handlers in the bubble chain
-      try { ev.preventDefault(); ev.stopPropagation(); } catch (e) { /* ignore */ }
-
-      if (window.__creatingCountUnit) {
-        console.warn('Create already in progress, ignoring duplicate click.');
-        return;
-      }
-
-      const nameEl = document.getElementById('cuName');
-      const stockEl = document.getElementById('cuStock');
-
-      if (!nameEl || !nameEl.value.trim()) {
+    createBtn.addEventListener('click', async function () {
+      if (creatingPending) return;
+      const name = nameEl ? String(nameEl.value || '').trim() : '';
+      let stocked = stockEl ? stockEl.value : '';
+      stocked = stocked === '' ? 0 : Number(stocked);
+      if (!name) {
         alert('Provide a name for the count unit.');
         return;
       }
-
-      const selections = gatherSelections(document);
+      const selections = gatherSelections();
       if (!selections.length) {
-        alert('Select at least one sub-unit (one per unit).');
+        alert('Select one sub-unit per unit to form the count unit selection set.');
         return;
       }
 
-      let stock = 0;
-      if (stockEl && stockEl.value !== '') {
-        const v = Number(stockEl.value);
-        stock = isNaN(v) ? 0 : Math.floor(v);
-      }
-
-      // one-shot guard + UI lock
-      window.__creatingCountUnit = true;
+      creatingPending = true;
+      if (createSpinner) createSpinner.style.display = 'inline-block';
       createBtn.disabled = true;
-      const origText = createBtn.textContent;
-      createBtn.textContent = 'Saving...';
 
       try {
-        const payload = new URLSearchParams();
-        payload.append('name', String(nameEl.value).trim());
-        payload.append('selections', JSON.stringify(selections));
-        payload.append('stock', String(stock));
-
-        console.debug('POST /admin/materials', { name: nameEl.value.trim(), selections, stock });
+        const body = new URLSearchParams();
+        body.append('name', name);
+        body.append('selections', JSON.stringify(selections));
+        body.append('stocked', String(Math.floor(Number(stocked) || 0)));
 
         const res = await fetch('/admin/materials', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
-          body: payload.toString()
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+          },
+          body: body.toString()
         });
 
-        // If created, reload to display the new row
-        if (res.status === 201) {
-          // small delay for UX (optional)
+        const j = await res.json().catch(()=>null);
+        if (res.ok) {
+          showToast('Count unit created', 1800);
+          // refresh the stock page to get server-calculated used/remaining
           window.location.reload();
-          return;
+        } else {
+          if (res.status === 409) {
+            alert((j && j.error) ? j.error : 'Duplicate count unit');
+          } else {
+            alert((j && j.error) ? j.error : 'Failed to create count unit');
+          }
         }
-
-        // If duplicate, server returns 409 with { existing }
-        if (res.status === 409) {
-          let j = null;
-          try { j = await res.json(); } catch (e) { /* ignore */ }
-          console.warn('Create returned 409 (duplicate)', j);
-          // Reload so the UI shows the existing unit
-          window.location.reload();
-          return;
-        }
-
-        // Other failures: show message (attempt to show JSON error)
-        let j = null;
-        try { j = await res.json(); } catch (e) { /* ignore */ }
-        const errMsg = (j && j.error) ? j.error : `Failed to create count unit (status ${res.status})`;
-        alert(errMsg);
       } catch (err) {
-        console.error('create count unit error', err);
-        alert('Failed to create count unit (network or server error)');
+        console.error('create count err', err);
+        alert('Failed to create count unit');
       } finally {
-        window.__creatingCountUnit = false;
+        creatingPending = false;
+        if (createSpinner) createSpinner.style.display = 'none';
         createBtn.disabled = false;
-        createBtn.textContent = origText;
       }
-    }, { passive: false });
+    });
   }
 
-  // Table actions (adjust, delete)
-  const table = document.querySelector('table');
-  if (!table) return;
+  // Adjust stock modal wiring
+  const adjustModalEl = document.getElementById('adjustStockModal');
+  const adjustStockForm = document.getElementById('adjustStockForm');
+  const adjustStockInput = document.getElementById('adjustStockInput');
+  const adjustMaterialId = document.getElementById('adjustMaterialId');
+  const saveAdjustBtn = document.getElementById('saveAdjustStockBtn');
 
-  table.addEventListener('click', async function (e) {
-    // Adjust
-    const adj = e.target.closest('.adjust-stock-btn');
-    if (adj) {
-      const id = adj.dataset.id;
-      const current = adj.closest('tr').querySelector('td:nth-child(2)').textContent.trim();
-      let newVal = prompt('Set new stocked quantity (integer). Leave blank to cancel.', current);
-      if (newVal === null) return;
-      newVal = newVal.trim();
-      if (newVal === '') return;
-      const n = parseInt(newVal, 10);
-      if (isNaN(n)) { alert('Invalid number'); return; }
+  function openAdjustModal(id, stocked) {
+    if (!adjustModalEl) return;
+    adjustMaterialId.value = id;
+    adjustStockInput.value = Number(stocked || 0);
+    const mdl = bootstrap.Modal.getOrCreateInstance(adjustModalEl);
+    mdl.show();
+  }
 
+  // delegate Adjust button clicks
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest && e.target.closest('.adjust-stock-btn');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const stocked = btn.dataset.stocked;
+    openAdjustModal(id, stocked);
+  });
+
+  // Save adjusted stock
+  if (saveAdjustBtn) {
+    saveAdjustBtn.addEventListener('click', async function () {
+      const id = adjustMaterialId.value;
+      if (!id) return;
+      let newVal = adjustStockInput.value;
+      newVal = newVal === '' ? 0 : Number(newVal);
+      if (isNaN(newVal) || newVal < 0) {
+        alert('Provide a valid non-negative integer for stocked quantity.');
+        return;
+      }
+      saveAdjustBtn.disabled = true;
       try {
+        const body = new URLSearchParams();
+        body.append('stock', String(Math.floor(newVal)));
         const res = await fetch(`/admin/materials/${encodeURIComponent(id)}/stock`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-          body: JSON.stringify({ stock: n })
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+          },
+          body: body.toString()
         });
-        if (!res.ok) {
-          const j = await res.json().catch(()=>null);
-          alert(j && j.error ? j.error : 'Failed to update stock');
-          return;
+        const j = await res.json().catch(()=>null);
+        if (res.ok) {
+          // update UI row optimistically (stocked/remaining/used)
+          // safer: reload the page region — we'll reload the whole page for consistency
+          showToast('Stock updated', 1200);
+          window.location.reload();
+        } else {
+          alert((j && j.error) ? j.error : 'Failed to update stock');
         }
-        window.location.reload();
       } catch (err) {
         console.error('adjust stock err', err);
         alert('Failed to update stock');
+      } finally {
+        saveAdjustBtn.disabled = false;
       }
-      return;
-    }
+    });
+  }
 
-    // Delete
-    const del = e.target.closest('.delete-material-btn');
-    if (del) {
-      const id = del.dataset.id;
-      if (!confirm('Delete this count unit? This will remove the tracked unit definition but NOT adjust aggregates.')) return;
-      try {
-        const res = await fetch(`/admin/materials/${encodeURIComponent(id)}`, {
-          method: 'DELETE',
-          headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        });
-        if (!res.ok) {
-          const j = await res.json().catch(()=>null);
-          alert(j && j.error ? j.error : 'Failed to delete');
-          return;
-        }
-        window.location.reload();
-      } catch (err) {
-        console.error('delete material err', err);
-        alert('Failed to delete');
+  // Delete flow: reuse shared modal
+  const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+  let pendingDeleteId = null;
+
+  document.addEventListener('click', function (e) {
+    const del = e.target.closest && e.target.closest('.delete-material-btn');
+    if (!del) return;
+    const id = del.dataset.id;
+    pendingDeleteId = id;
+    const dlg = document.getElementById('deleteConfirmModal');
+    if (dlg) {
+      const bs = bootstrap.Modal.getOrCreateInstance(dlg);
+      const msgEl = document.getElementById('deleteConfirmMessage');
+      if (msgEl) msgEl.textContent = 'Delete this count unit? This cannot be undone.';
+      bs.show();
+    } else {
+      if (confirm('Delete this count unit?')) {
+        doDelete(id);
       }
-      return;
     }
   });
+
+  async function doDelete(id) {
+    try {
+      const res = await fetch(`/admin/materials/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      if (res.ok) {
+        showToast('Deleted', 1200);
+        // remove row or reload
+        window.location.reload();
+      } else {
+        const j = await res.json().catch(()=>null);
+        alert((j && j.error) ? j.error : 'Failed to delete');
+      }
+    } catch (err) {
+      console.error('delete err', err);
+      alert('Failed to delete');
+    }
+  }
+
+  if (confirmDeleteBtn) {
+    confirmDeleteBtn.addEventListener('click', function () {
+      if (!pendingDeleteId) return;
+      doDelete(pendingDeleteId);
+      pendingDeleteId = null;
+      // hide modal
+      const dlg = document.getElementById('deleteConfirmModal');
+      bootstrap.Modal.getInstance(dlg)?.hide();
+    });
+  }
 
 });
