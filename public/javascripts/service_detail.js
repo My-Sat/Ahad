@@ -4,6 +4,133 @@
 document.addEventListener('DOMContentLoaded', function () {
   'use strict';
 
+  // ————— Robust capturing edit handler (creates modal if missing) —————
+  (function installRobustEditHandler() {
+    const createModalIfMissing = () => {
+      let modalEl = document.getElementById('editPriceModal');
+      if (modalEl) return modalEl;
+
+      const html = `
+<div class="modal fade" id="editPriceModal" tabindex="-1" aria-labelledby="editPriceModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editPriceModalLabel">Edit Price Rule</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="editPriceForm">
+          <input type="hidden" id="editPriceId" name="priceId" />
+          <div class="mb-3">
+            <label class="form-label" for="editPriceInput">Price (GH₵)</label>
+            <input class="form-control" type="number" step="0.01" id="editPriceInput" name="price" required />
+            <div class="invalid-feedback">Please provide a valid price.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="editPrice2Input">F/B Price (optional)</label>
+            <input class="form-control" type="number" step="0.01" id="editPrice2Input" name="price2" />
+          </div>
+          <div class="mb-2">
+            <small class="text-muted" id="editSelectionLabel"></small>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" type="button" id="saveEditPriceBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>`.trim();
+
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      document.body.appendChild(container.firstElementChild);
+      return document.getElementById('editPriceModal');
+    };
+
+    async function wireSaveHandlerOnce() {
+      const saveBtn = document.getElementById('saveEditPriceBtn');
+      if (!saveBtn) return;
+      if (saveBtn.dataset.bound === '1') return;
+      saveBtn.dataset.bound = '1';
+
+      saveBtn.addEventListener('click', async function () {
+        const assignForm = document.getElementById('assign-price');
+        const serviceId = assignForm ? (assignForm.getAttribute('action') || '').match(/\/admin\/services\/([^\/]+)\/prices/)?.[1] : null;
+        const priceId = document.getElementById('editPriceId')?.value;
+        const newVal = document.getElementById('editPriceInput')?.value;
+        const newP2 = document.getElementById('editPrice2Input')?.value;
+        if (!serviceId || !priceId) { alert('Missing service or price id'); return; }
+        if (!newVal || isNaN(newVal) || Number(newVal) < 0) { document.getElementById('editPriceInput').classList.add('is-invalid'); return; }
+
+        try {
+          saveBtn.disabled = true;
+          const body = new URLSearchParams();
+          body.append('price', String(Number(newVal)));
+          if (newP2 !== undefined && newP2 !== null && String(newP2).trim() !== '') body.append('price2', String(Number(newP2)));
+          else body.append('price2', '');
+
+          const res = await fetch(`/admin/services/${serviceId}/prices/${priceId}`, {
+            method: 'PUT',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: body.toString()
+          });
+
+          if (!res.ok) {
+            const j = await res.json().catch(()=>null);
+            alert((j && j.error) ? j.error : 'Update failed');
+            return;
+          }
+
+          // hide modal (if present) and refresh prices fragment
+          const modalEl = document.getElementById('editPriceModal');
+          bootstrap.Modal.getInstance(modalEl)?.hide();
+
+          // refresh '#pricesSection' via fetch and frag-replace
+          const r = await fetch(`/admin/services/${serviceId}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+          if (r.ok) {
+            const txt = await r.text();
+            const doc = new DOMParser().parseFromString(txt, 'text/html');
+            const newSection = doc.querySelector('#pricesSection');
+            const oldSection = document.querySelector('#pricesSection');
+            if (newSection && oldSection && oldSection.parentNode) oldSection.parentNode.replaceChild(newSection, oldSection);
+            else window.location.reload();
+          } else {
+            window.location.reload();
+          }
+        } catch (err) {
+          console.error('save edit error', err);
+          alert('Failed to save');
+        } finally {
+          saveBtn.disabled = false;
+        }
+      });
+    }
+
+    // capture-phase handler: create modal if missing, populate and show
+    document.addEventListener('click', function (e) {
+      const btn = e.target && e.target.closest ? e.target.closest('.edit-price-btn') : null;
+      if (!btn) return;
+      try { e.preventDefault(); e.stopPropagation(); } catch(_) {}
+      const ds = btn.dataset || {};
+      const modalEl = createModalIfMissing();
+      // populate modal inputs
+      const idEl = document.getElementById('editPriceId'); if (idEl) idEl.value = ds.priceId || '';
+      const pEl = document.getElementById('editPriceInput'); if (pEl) pEl.value = ds.price || '';
+      const p2El = document.getElementById('editPrice2Input'); if (p2El) p2El.value = ds.price2 || '';
+      const labelEl = document.getElementById('editSelectionLabel'); if (labelEl) labelEl.textContent = ds.selectionLabel || '';
+      wireSaveHandlerOnce();
+      try {
+        const md = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        md.show();
+      } catch (err) {
+        console.error('failed to show modal', err);
+      }
+    }, true);
+  })();
+
+  // ————— core helpers & elements —————
   const assignForm = document.getElementById('assign-price');
   const assignBtn = document.getElementById('assignBtn');
   const assignSpinner = document.getElementById('assignSpinner');
@@ -26,16 +153,11 @@ document.addEventListener('DOMContentLoaded', function () {
     if (toastEl && window.bootstrap && window.bootstrap.Toast) {
       const t = new bootstrap.Toast(toastEl, { delay });
       t.show();
-    } else {
-      // fallback to alert if nothing else
-      try { console.log('Toast:', msg); } catch(e) {}
-    }
+    } else try { console.log('Toast:', msg); } catch(e) {}
   }
 
   function showError(msg) {
-    // prefer toast for errors, fall back to alert
     if (window.showGlobalToast) {
-      // use a red/danger toast if possible by creating a transient element
       try {
         const container = document.getElementById('globalToastContainer') || (function () {
           const c = document.createElement('div');
@@ -80,7 +202,6 @@ document.addEventListener('DOMContentLoaded', function () {
         console.error('showError toast failed', e);
       }
     }
-    // ultimate fallback
     try { alert(msg || 'Error'); } catch (e) { console.error(msg); }
   }
 
@@ -95,7 +216,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }, true);
 
-  // Helper to gather selections (one per unit)
   function gatherSelections() {
     const checked = document.querySelectorAll('.unit-sub-checkbox:checked');
     const map = {};
@@ -108,15 +228,14 @@ document.addEventListener('DOMContentLoaded', function () {
     return Object.keys(map).map(u => ({ unit: u, subUnit: map[u] }));
   }
 
-  // spinner toggle for Assign button
   function setAssignLoading(loading) {
     if (!assignBtn) return;
     assignBtn.disabled = !!loading;
     if (assignSpinner) assignSpinner.style.display = loading ? 'inline-block' : 'none';
   }
 
-  // Replace prices section by fetching the service detail page fragment
   async function refreshPricesSection() {
+    if (!serviceId) { window.location.reload(); return; }
     try {
       const res = await fetch(`/admin/services/${serviceId}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
       if (!res.ok) throw new Error('Failed to reload prices');
@@ -125,21 +244,16 @@ document.addEventListener('DOMContentLoaded', function () {
       const doc = parser.parseFromString(text, 'text/html');
       const newSection = doc.querySelector(pricesSectionSelector);
       const oldSection = document.querySelector(pricesSectionSelector);
-      if (newSection && oldSection && oldSection.parentNode) {
-        oldSection.parentNode.replaceChild(newSection, oldSection);
-      } else {
-        window.location.reload();
-      }
+      if (newSection && oldSection && oldSection.parentNode) oldSection.parentNode.replaceChild(newSection, oldSection);
+      else window.location.reload();
     } catch (err) {
       console.error('refreshPricesSection error', err);
       window.location.reload();
     }
   }
 
-  // ----------------------------
-  // Add material: guard against double-submit (global lock + binding guard)
-  // ----------------------------
-(function initAddMaterialHandler() {
+  // Add material (double-submit guard)
+  (function initAddMaterialHandler() {
     const addMaterialForm = document.getElementById('add-material');
     if (!addMaterialForm) return;
     if (addMaterialForm.dataset.addMaterialBound === '1') return;
@@ -161,7 +275,6 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
-      // read stock value
       const stockEl = document.getElementById('materialStock');
       let stockVal = 0;
       if (stockEl && stockEl.value !== '') {
@@ -178,7 +291,6 @@ document.addEventListener('DOMContentLoaded', function () {
         payload.append('name', String(nameEl.value).trim());
         payload.append('selections', JSON.stringify(selections));
         if (serviceId) payload.append('serviceId', serviceId);
-        // NEW: send stock
         payload.append('stock', String(Math.floor(stockVal)));
 
         const res = await fetch('/admin/materials', {
@@ -205,7 +317,6 @@ document.addEventListener('DOMContentLoaded', function () {
           return;
         }
 
-        // success — clear form and uncheck checkboxes
         try { await res.json().catch(()=>null); } catch(e){}
         if (nameEl) nameEl.value = '';
         if (stockEl) stockEl.value = '0';
@@ -220,45 +331,30 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
   })();
-  // ----------------------
-  // Assign submit handler (AJAX)
-  // ----------------------
+
+  // Assign price handler
   if (assignForm) {
     assignForm.addEventListener('submit', async function (e) {
       e.preventDefault();
-
-      // validation: at least one selection and valid price
       const selections = gatherSelections();
       if (!selections.length) {
-        // show invalid visual
         if (priceInput) priceInput.classList.add('is-invalid');
         return;
       }
       const val = priceInput ? priceInput.value : '';
-      if (!val || isNaN(val) || Number(val) < 0) {
-        if (priceInput) priceInput.classList.add('is-invalid');
-        return;
-      }
-
-      // optional price2
+      if (!val || isNaN(val) || Number(val) < 0) { if (priceInput) priceInput.classList.add('is-invalid'); return; }
       const price2Val = price2Input && price2Input.value ? price2Input.value : '';
-
       const payload = new URLSearchParams();
       payload.append('selections', JSON.stringify(selections));
       payload.append('price', String(Number(val)));
       if (price2Val !== '') payload.append('price2', String(Number(price2Val)));
-
       try {
         setAssignLoading(true);
         const res = await fetch(assignForm.action, {
           method: 'POST',
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-          },
+          headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
           body: payload.toString()
         });
-
         if (res.ok) {
           await refreshPricesSection();
           document.querySelectorAll('.unit-sub-checkbox:checked').forEach(cb => cb.checked = false);
@@ -270,9 +366,7 @@ document.addEventListener('DOMContentLoaded', function () {
           if (ct.includes('application/json')) {
             const j = await res.json().catch(() => null);
             alert((j && j.error) ? j.error : 'Assign failed');
-          } else {
-            window.location.reload();
-          }
+          } else window.location.reload();
         }
       } catch (err) {
         console.error('assign error', err);
@@ -283,91 +377,142 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // ----------------------
-  // Edit and Delete (dropdown-driven)
-  // ----------------------
+  // Delete handling only (edit handled by capturing handler)
+// ----------------------
+// Robust Delete (modal-driven, creates modal if missing)
+// ----------------------
+(function installDeleteModalHandler() {
+  // Create modal HTML if missing and return element
+  function createDeleteModalIfMissing() {
+    let dlg = document.getElementById('deleteConfirmModal');
+    if (dlg) return dlg;
 
-  // Edit modal wiring
-  const editModalEl = document.getElementById('editPriceModal');
-  const editModal = (editModalEl && window.bootstrap && window.bootstrap.Modal) ? new bootstrap.Modal(editModalEl) : null;
-  const editPriceIdInput = document.getElementById('editPriceId');
-  const editPriceField = document.getElementById('editPriceInput');
-  const editPrice2Field = document.getElementById('editPrice2Input');
-  const editSelectionLabel = document.getElementById('editSelectionLabel');
-  const saveEditBtn = document.getElementById('saveEditPriceBtn');
+    const html = `
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteConfirmModalLabel">Confirm delete</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p id="deleteConfirmMessage">Delete this item?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>`.trim();
 
-  document.addEventListener('click', function (e) {
-    // open edit modal
-    const editBtn = e.target.closest('.edit-price-btn');
-    if (editBtn) {
-      e.preventDefault();
-      const priceId = editBtn.dataset.priceId;
-      const priceVal = editBtn.dataset.price;
-      const price2Val = editBtn.dataset.price2;
-      const label = editBtn.dataset.selectionLabel || '';
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container.firstElementChild);
+    return document.getElementById('deleteConfirmModal');
+  }
 
-      if (editPriceIdInput) editPriceIdInput.value = priceId || '';
-      if (editPriceField) {
-        editPriceField.value = (priceVal !== undefined && priceVal !== null) ? priceVal : '';
-        editPriceField.classList.remove('is-invalid');
-      }
-      if (editPrice2Field) {
-        editPrice2Field.value = (price2Val !== undefined && price2Val !== null) ? price2Val : '';
-      }
-      if (editSelectionLabel) editSelectionLabel.textContent = label;
-      if (editModal) editModal.show();
-      return;
-    }
+  // Bind confirm button action only once
+  async function wireConfirmDeleteOnce() {
+    const dlg = createDeleteModalIfMissing();
+    const confirmBtn = document.getElementById('confirmDeleteBtn');
+    if (!confirmBtn) return;
+    if (confirmBtn.dataset.bound === '1') return;
+    confirmBtn.dataset.bound = '1';
 
-    // prepare delete (use confirm modal instead of confirm())
-    const delBtn = e.target.closest('.open-delete-price');
-    if (delBtn) {
-      e.preventDefault();
-      const priceId = delBtn.dataset.priceId;
-      // store pending deletion on the shared deleteConfirmModal confirm button
-      const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
-      if (!confirmDeleteBtn) {
-        // fallback to simple confirm
-        if (confirm('Delete this price rule?')) {
-          fetch(`/admin/services/${serviceId}/prices/${priceId}`, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-            .then(r => r.ok ? refreshPricesSection().then(() => showToast('Price rule deleted')) : window.location.reload())
-            .catch(() => window.location.reload());
-        }
-        return;
-      }
-      // attach handler once
-      confirmDeleteBtn._pendingPriceId = priceId;
-      // show the shared modal
-      const dlg = document.getElementById('deleteConfirmModal');
-      if (dlg) {
-        const msgEl = document.getElementById('deleteConfirmMessage');
-        if (msgEl) msgEl.textContent = 'Delete this price rule?';
-        const bs = bootstrap.Modal.getInstance(dlg) || new bootstrap.Modal(dlg);
-        bs.show();
-      } else {
-        if (confirm('Delete this price rule?')) {
-          fetch(`/admin/services/${serviceId}/prices/${priceId}`, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-            .then(r => r.ok ? refreshPricesSection().then(() => showToast('Price rule deleted')) : window.location.reload())
-            .catch(() => window.location.reload());
-        }
-      }
-      return;
-    }
-  });
-
-  // confirm delete modal action (shared modal)
-  const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
-  if (confirmDeleteBtn) {
-    confirmDeleteBtn.addEventListener('click', async function () {
-      const priceId = confirmDeleteBtn._pendingPriceId;
+    confirmBtn.addEventListener('click', async function () {
+      const priceId = confirmBtn._pendingPriceId;
       if (!priceId) return;
-      // perform AJAX DELETE
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Deleting...';
+
       try {
         const res = await fetch(`/admin/services/${serviceId}/prices/${priceId}`, {
           method: 'DELETE',
           headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
-        // hide modal
+
+        const dlgEl = document.getElementById('deleteConfirmModal');
+        bootstrap.Modal.getInstance(dlgEl)?.hide();
+
+        if (res.ok) {
+          try {
+            await refreshPricesSection();
+            showToast('Price rule deleted', 1800);
+          } catch (e) {
+            console.error('refresh after delete failed', e);
+            window.location.reload();
+          }
+        } else {
+          const ct = res.headers.get('content-type') || '';
+          if (ct.includes('application/json')) {
+            const j = await res.json().catch(()=>null);
+            alert((j && j.error) ? j.error : 'Delete failed');
+          } else {
+            alert('Delete failed');
+          }
+        }
+      } catch (err) {
+        console.error('confirm delete error', err);
+        alert('Failed to delete (network error)');
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Delete';
+        confirmBtn._pendingPriceId = null;
+      }
+    });
+  }
+
+  // Capture-phase delegated click: open delete modal and set pending id
+  document.addEventListener('click', function (e) {
+    const delBtn = e.target && e.target.closest ? e.target.closest('.open-delete-price') : null;
+    if (!delBtn) return;
+    try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
+
+    const priceId = delBtn.dataset.priceId;
+    const selectionLabel = delBtn.dataset.selectionLabel || '';
+
+    const dlg = createDeleteModalIfMissing();
+    wireConfirmDeleteOnce();
+
+    const msgEl = document.getElementById('deleteConfirmMessage');
+    if (msgEl) {
+      msgEl.textContent = selectionLabel ? `Delete price rule: ${selectionLabel}?` : 'Delete this price rule?';
+    }
+    const confirmBtn = document.getElementById('confirmDeleteBtn');
+    if (confirmBtn) confirmBtn._pendingPriceId = priceId;
+
+    try {
+      const bs = bootstrap.Modal.getInstance(dlg) || new bootstrap.Modal(dlg);
+      bs.show();
+    } catch (err) {
+      console.error('Failed to show delete modal', err);
+      // fallback: simple confirm
+      if (confirm('Delete this price rule?')) {
+        fetch(`/admin/services/${serviceId}/prices/${priceId}`, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+          .then(r => r.ok ? refreshPricesSection().then(()=> showToast('Price rule deleted')) : window.location.reload())
+          .catch(()=> window.location.reload());
+      }
+    }
+  }, true);
+
+  // expose helper for debugging (optional)
+  window._svcDetail = window._svcDetail || {};
+  window._svcDetail._wireConfirmDeleteOnce = wireConfirmDeleteOnce;
+
+})(); // installDeleteModalHandler
+
+  // Confirm delete modal action
+  const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+  if (confirmDeleteBtn) {
+    confirmDeleteBtn.addEventListener('click', async function () {
+      const priceId = confirmDeleteBtn._pendingPriceId;
+      if (!priceId) return;
+      try {
+        const res = await fetch(`/admin/services/${serviceId}/prices/${priceId}`, {
+          method: 'DELETE',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
         const dlg = document.getElementById('deleteConfirmModal');
         if (dlg) bootstrap.Modal.getInstance(dlg)?.hide();
 
@@ -379,69 +524,13 @@ document.addEventListener('DOMContentLoaded', function () {
           if (ct.includes('application/json')) {
             const j = await res.json().catch(() => null);
             alert((j && j.error) ? j.error : 'Delete failed');
-          } else {
-            window.location.reload();
-          }
+          } else window.location.reload();
         }
       } catch (err) {
         console.error('delete price error', err);
         window.location.reload();
       } finally {
         confirmDeleteBtn._pendingPriceId = null;
-      }
-    });
-  }
-
-  // Save edited price (AJAX PUT)
-  if (saveEditBtn) {
-    saveEditBtn.addEventListener('click', async function () {
-      const priceId = editPriceIdInput ? editPriceIdInput.value : null;
-      const newVal = editPriceField ? editPriceField.value : null;
-      const newP2 = editPrice2Field ? editPrice2Field.value : null;
-      if (!priceId) return;
-      if (!newVal || isNaN(newVal) || Number(newVal) < 0) {
-        if (editPriceField) editPriceField.classList.add('is-invalid');
-        return;
-      }
-
-      try {
-        saveEditBtn.disabled = true;
-        const url = `/admin/services/${serviceId}/prices/${priceId}`;
-        const body = new URLSearchParams();
-        body.append('price', String(Number(newVal)));
-        if (newP2 !== undefined && newP2 !== null && String(newP2).trim() !== '') {
-          body.append('price2', String(Number(newP2)));
-        } else {
-          body.append('price2', '');
-        }
-
-        const res = await fetch(url, {
-          method: 'PUT',
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-          },
-          body: body.toString()
-        });
-
-        if (res.ok) {
-          if (editModal) editModal.hide();
-          await refreshPricesSection();
-          showToast('Price updated', 2000);
-        } else {
-          const ct = res.headers.get('content-type') || '';
-          if (ct.includes('application/json')) {
-            const j = await res.json().catch(() => null);
-            alert((j && j.error) ? j.error : 'Update failed');
-          } else {
-            window.location.reload();
-          }
-        }
-      } catch (err) {
-        console.error('update price error', err);
-        window.location.reload();
-      } finally {
-        saveEditBtn.disabled = false;
       }
     });
   }

@@ -10,7 +10,7 @@ const MaterialSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   // removed `service` field — materials are unique across all services
   selections: { type: [SelectionRef], required: true },
-  key: { type: String, required: true, index: true }, // stable key computed from selections
+key: { type: String, required: true }, // indexed/unique via schema.index below
   stock: { type: Number, default: 0 }, // stocked quantity (can go negative when consumed)
   createdBy: { type: String },
 }, { timestamps: true });
