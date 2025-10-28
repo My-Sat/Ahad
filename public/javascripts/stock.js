@@ -1,27 +1,55 @@
 // public/javascripts/stock.js
+// Robust stock page client with duplicate-response dedupe using selection keys.
+
 document.addEventListener('DOMContentLoaded', function () {
   'use strict';
 
+  // Elements
+  const createForm = document.getElementById('create-count-unit');
   const createBtn = document.getElementById('createCountBtn');
   const createSpinner = document.getElementById('createCountSpinner');
   const nameEl = document.getElementById('cuName');
   const stockEl = document.getElementById('cuStock');
   const unitCheckboxSelector = '.unit-sub-checkbox';
+  const adjustModalEl = document.getElementById('adjustStockModal');
+  const adjustStockInput = document.getElementById('adjustStockInput');
+  const adjustMaterialId = document.getElementById('adjustMaterialId');
+  const saveAdjustBtn = document.getElementById('saveAdjustStockBtn');
+  const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+
+  // Guards and dedupe sets
   let creatingPending = false;
+  let pendingDeleteId = null;
+  const pendingKeys = new Set(); // keys currently in-flight
+  const createdKeys = new Set(); // keys created by this client recently
 
-  function qsFrom(obj) {
-    const u = new URLSearchParams();
-    Object.keys(obj).forEach(k => u.append(k, obj[k]));
-    return u.toString();
-  }
-
-  function showToast(msg, delay = 2000) {
+  // Small helpers
+  const showToast = (msg, delay = 1600) => {
     if (window.showGlobalToast) return window.showGlobalToast(msg, delay);
-    // fallback: small non-blocking toast
-    try { alert(msg); } catch (e) { console.log(msg); }
+    try { console.log('Toast:', msg); } catch (e) {}
+  };
+
+  // Prevent native form submit (Enter) for this form
+  if (createForm && createForm.dataset.bound !== '1') {
+    createForm.dataset.bound = '1';
+    createForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      return false;
+    }, true);
   }
 
-  // gather one selection per unit
+  // Single-selection per unit: when a checkbox checked, uncheck others in same unit.
+  document.addEventListener('change', function (e) {
+    const cb = e.target;
+    if (!cb || !cb.classList || !cb.classList.contains('unit-sub-checkbox')) return;
+    if (cb.checked) {
+      const unitId = cb.dataset.unit;
+      const others = document.querySelectorAll(`${unitCheckboxSelector}[data-unit="${unitId}"]`);
+      others.forEach(o => { if (o !== cb) o.checked = false; });
+    }
+  }, true);
+
+  // Gather selections & compute stable key
   function gatherSelections() {
     const checked = document.querySelectorAll(`${unitCheckboxSelector}:checked`);
     const map = {};
@@ -33,33 +61,55 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     return Object.keys(map).map(u => ({ unit: u, subUnit: map[u] }));
   }
+  function computeKeyFromSelections(selections) {
+    const parts = (selections || []).map(s => `${s.unit}:${s.subUnit}`);
+    parts.sort();
+    return parts.join('|');
+  }
 
-  // Create Count Unit
-  if (createBtn) {
-    createBtn.addEventListener('click', async function () {
+  // --- Create Count Unit (single AJAX POST, defensive + dedupe) ---
+  if (createBtn && createBtn.dataset.bound !== '1') {
+    createBtn.dataset.bound = '1';
+    createBtn.addEventListener('click', async function (ev) {
+      ev && ev.preventDefault && ev.preventDefault();
+
       if (creatingPending) return;
-      const name = nameEl ? String(nameEl.value || '').trim() : '';
-      let stocked = stockEl ? stockEl.value : '';
-      stocked = stocked === '' ? 0 : Number(stocked);
-      if (!name) {
-        alert('Provide a name for the count unit.');
-        return;
-      }
-      const selections = gatherSelections();
-      if (!selections.length) {
-        alert('Select one sub-unit per unit to form the count unit selection set.');
-        return;
-      }
-
       creatingPending = true;
-      if (createSpinner) createSpinner.style.display = 'inline-block';
       createBtn.disabled = true;
+      if (createSpinner) createSpinner.style.display = 'inline-block';
 
       try {
+        const name = nameEl ? String(nameEl.value || '').trim() : '';
+        let stocked = stockEl ? stockEl.value : '';
+        stocked = stocked === '' ? 0 : Number(stocked);
+
+        if (!name) {
+          alert('Provide a name for the count unit.');
+          return;
+        }
+        const selections = gatherSelections();
+        if (!selections.length) {
+          alert('Select one sub-unit per unit to form the count unit selection set.');
+          return;
+        }
+
+        // compute stable key (same algorithm server uses)
+        const key = computeKeyFromSelections(selections);
+
+        // If this exact key is already being created by this client, ignore second click
+        if (pendingKeys.has(key)) {
+          showToast('Creation in progress…', 1000);
+          return;
+        }
+
+        // Mark pending
+        pendingKeys.add(key);
+
         const body = new URLSearchParams();
         body.append('name', name);
         body.append('selections', JSON.stringify(selections));
-        body.append('stocked', String(Math.floor(Number(stocked) || 0)));
+        // Use 'stock' field (server expects req.body.stock)
+        body.append('stock', String(Math.floor(Number(stocked) || 0)));
 
         const res = await fetch('/admin/materials', {
           method: 'POST',
@@ -71,55 +121,168 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         const j = await res.json().catch(()=>null);
-        if (res.ok) {
-          showToast('Count unit created', 1800);
-          // refresh the stock page to get server-calculated used/remaining
-          window.location.reload();
-        } else {
-          if (res.status === 409) {
-            alert((j && j.error) ? j.error : 'Duplicate count unit');
+
+        if (res.status === 201) {
+          // CREATED: success (prefer success message)
+          pendingKeys.delete(key);
+          createdKeys.add(key);
+          showToast('Count unit added successfully', 1200);
+          const mat = j && j.material ? j.material : null;
+          if (mat) {
+            insertMaterialRow(mat);
+            clearCreateForm();
           } else {
-            alert((j && j.error) ? j.error : 'Failed to create count unit');
+            // fallback: reload to ensure consistency
+            window.location.reload();
           }
+
+          // remove created key after a short grace period — enough to cover raced 409
+          setTimeout(() => createdKeys.delete(key), 5000);
+        } else if (res.status === 409) {
+          // Duplicate — decide user-visible message based on whether we created it
+          const existing = j && (j.existing || j.existing) ? (j.existing || j.existing) : null;
+
+          // If we just created it (createdKeys) or it was pending (pendingKeys), treat as success
+          if (createdKeys.has(key) || pendingKeys.has(key)) {
+            // This likely arrived after our successful 201 — show success and ensure row present
+            pendingKeys.delete(key);
+            createdKeys.add(key);
+            showToast('Count unit added successfully', 1200);
+            if (existing && existing._id) {
+              if (!document.querySelector(`tr[data-id="${existing._id}"]`)) insertMaterialRow(existing);
+            } else {
+              // fallback: reload if we can't reconcile DOM
+              // but try to avoid reload unless necessary
+              setTimeout(() => {
+                if (!document.querySelector('table tbody tr')) window.location.reload();
+              }, 800);
+            }
+            clearCreateForm();
+            setTimeout(() => createdKeys.delete(key), 5000);
+          } else {
+            // Not created by us — show non-blocking existing notice and insert existing doc if provided
+            pendingKeys.delete(key);
+            if (existing && existing._id) {
+              if (!document.querySelector(`tr[data-id="${existing._id}"]`)) {
+                insertMaterialRow(existing);
+              }
+              showToast('Count unit already exists', 1200);
+            } else {
+              // best-effort DOM match using selections label; fallback to toast
+              try {
+                const label = selections.map(s => {
+                  const cb = document.querySelector(`.unit-sub-checkbox[data-unit="${s.unit}"][data-subunit="${s.subUnit}"]`);
+                  const unitName = cb ? (cb.closest('.accordion-item')?.querySelector('.accordion-button')?.textContent || '') : '';
+                  return unitName ? unitName.trim() : '';
+                }).filter(Boolean).join(' + ');
+                const found = Array.from(document.querySelectorAll('table tbody tr')).find(tr => {
+                  return tr.textContent && label && tr.textContent.includes(label);
+                });
+                if (found) {
+                  showToast('Count unit already exists', 1200);
+                } else {
+                  showToast((j && j.error) ? j.error : 'Count unit already exists', 1600);
+                }
+              } catch (ex) {
+                showToast((j && j.error) ? j.error : 'Count unit already exists', 1600);
+              }
+            }
+          }
+        } else {
+          pendingKeys.delete(key);
+          const msg = (j && j.error) ? j.error : `Failed to create (status ${res.status})`;
+          alert(msg);
         }
       } catch (err) {
         console.error('create count err', err);
         alert('Failed to create count unit');
       } finally {
         creatingPending = false;
-        if (createSpinner) createSpinner.style.display = 'none';
         createBtn.disabled = false;
+        if (createSpinner) createSpinner.style.display = 'none';
       }
     });
   }
 
-  // Adjust stock modal wiring
-  const adjustModalEl = document.getElementById('adjustStockModal');
-  const adjustStockForm = document.getElementById('adjustStockForm');
-  const adjustStockInput = document.getElementById('adjustStockInput');
-  const adjustMaterialId = document.getElementById('adjustMaterialId');
-  const saveAdjustBtn = document.getElementById('saveAdjustStockBtn');
-
-  function openAdjustModal(id, stocked) {
-    if (!adjustModalEl) return;
-    adjustMaterialId.value = id;
-    adjustStockInput.value = Number(stocked || 0);
-    const mdl = bootstrap.Modal.getOrCreateInstance(adjustModalEl);
-    mdl.show();
+  // clear form helper
+  function clearCreateForm() {
+    try {
+      if (nameEl) nameEl.value = '';
+      if (stockEl) stockEl.value = '0';
+      document.querySelectorAll(`${unitCheckboxSelector}:checked`).forEach(cb => cb.checked = false);
+    } catch (e) { /* noop */ }
   }
 
-  // delegate Adjust button clicks
+  // --- Insert material row (used after create or when server returns material) ---
+  function insertMaterialRow(mat) {
+    try {
+      const tbody = document.querySelector('table tbody');
+      if (!tbody) return;
+      const stocked = (typeof mat.stock === 'number') ? mat.stock : 0;
+
+      // compute used and remaining from aggregates if present on mat, otherwise attempt DOM/0
+      const used = (typeof mat.used === 'number') ? mat.used : 0;
+      const remaining = (typeof mat.remaining === 'number') ? mat.remaining : (stocked - used);
+
+      const labels = (mat.selections || []).map(s => {
+        const unitName = s.unit && s.unit.name ? s.unit.name : (s.unit ? String(s.unit) : '');
+        const subName = s.subUnit && s.subUnit.name ? s.subUnit.name : (s.subUnit ? String(s.subUnit) : '');
+        return `${unitName}: ${subName}`;
+      }).join(' + ');
+
+      const tr = document.createElement('tr');
+      tr.setAttribute('data-id', mat._id);
+
+      tr.innerHTML = `
+        <td>
+          <strong>${escapeHtml(mat.name)}</strong>
+          ${ labels ? `<br/><small class="text-muted">${escapeHtml(labels)}</small>` : '' }
+        </td>
+        <td class="text-center stocked-cell">${stocked}</td>
+        <td class="text-center used-cell">${used}</td>
+        <td class="text-center remaining-cell">${remaining < 0 ? `<span class="text-danger">${remaining}</span>` : `<span class="text-success">${remaining}</span>`}</td>
+        <td class="text-center">
+          <button class="btn btn-sm btn-outline-primary adjust-stock-btn" data-id="${mat._id}" data-stocked="${stocked}" type="button">Adjust</button>
+          <button class="btn btn-sm btn-outline-danger ms-1 delete-material-btn" data-id="${mat._id}" type="button">Delete</button>
+        </td>
+      `;
+      tbody.insertBefore(tr, tbody.firstChild);
+    } catch (err) {
+      console.error('insertMaterialRow error', err);
+      window.location.reload();
+    }
+  }
+
+  // small html escape
+  function escapeHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/[&<>"'`=\/]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
+  }
+
+  // --- Adjust & Delete handlers (same as before) ---
+  function openAdjustModal(id, stocked) {
+    if (!adjustModalEl) {
+      alert('Adjust modal not available');
+      return;
+    }
+    adjustMaterialId.value = id;
+    adjustStockInput.value = Number(stocked || 0);
+    const md = bootstrap.Modal.getOrCreateInstance(adjustModalEl);
+    md.show();
+  }
+
   document.addEventListener('click', function (e) {
-    const btn = e.target.closest && e.target.closest('.adjust-stock-btn');
-    if (!btn) return;
-    const id = btn.dataset.id;
-    const stocked = btn.dataset.stocked;
+    const a = e.target.closest && e.target.closest('.adjust-stock-btn');
+    if (!a) return;
+    const id = a.dataset.id;
+    const stocked = a.dataset.stocked;
     openAdjustModal(id, stocked);
   });
 
-  // Save adjusted stock
-  if (saveAdjustBtn) {
-    saveAdjustBtn.addEventListener('click', async function () {
+  if (saveAdjustBtn && saveAdjustBtn.dataset.bound !== '1') {
+    saveAdjustBtn.dataset.bound = '1';
+    saveAdjustBtn.addEventListener('click', async function (ev) {
+      ev && ev.preventDefault && ev.preventDefault();
       const id = adjustMaterialId.value;
       if (!id) return;
       let newVal = adjustStockInput.value;
@@ -128,6 +291,7 @@ document.addEventListener('DOMContentLoaded', function () {
         alert('Provide a valid non-negative integer for stocked quantity.');
         return;
       }
+
       saveAdjustBtn.disabled = true;
       try {
         const body = new URLSearchParams();
@@ -140,14 +304,29 @@ document.addEventListener('DOMContentLoaded', function () {
           },
           body: body.toString()
         });
+
         const j = await res.json().catch(()=>null);
-        if (res.ok) {
-          // update UI row optimistically (stocked/remaining/used)
-          // safer: reload the page region — we'll reload the whole page for consistency
+        if (res.ok && j && j.material) {
+          const mat = j.material;
+          const tr = document.querySelector(`tr[data-id="${mat._id}"]`);
+          if (tr) {
+            const stockedCell = tr.querySelector('.stocked-cell');
+            if (stockedCell) stockedCell.textContent = (typeof mat.stock === 'number') ? mat.stock : stockedCell.textContent;
+            const usedCell = tr.querySelector('.used-cell');
+            if (usedCell) usedCell.textContent = (typeof mat.used === 'number') ? mat.used : usedCell.textContent;
+            const remainingCell = tr.querySelector('.remaining-cell');
+            if (remainingCell) {
+              const rem = (typeof mat.remaining === 'number') ? mat.remaining : ((Number(stockedCell.textContent) || 0) - (Number(usedCell.textContent) || 0));
+              remainingCell.innerHTML = (rem < 0) ? `<span class="text-danger">${rem}</span>` : `<span class="text-success">${rem}</span>`;
+            }
+            const adjBtn = tr.querySelector('.adjust-stock-btn');
+            if (adjBtn) adjBtn.dataset.stocked = (typeof mat.stock === 'number') ? mat.stock : adjBtn.dataset.stocked;
+          }
+          bootstrap.Modal.getInstance(adjustModalEl)?.hide();
           showToast('Stock updated', 1200);
-          window.location.reload();
         } else {
-          alert((j && j.error) ? j.error : 'Failed to update stock');
+          const msg = (j && j.error) ? j.error : 'Failed to update stock';
+          alert(msg);
         }
       } catch (err) {
         console.error('adjust stock err', err);
@@ -158,14 +337,10 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // Delete flow: reuse shared modal
-  const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
-  let pendingDeleteId = null;
-
   document.addEventListener('click', function (e) {
-    const del = e.target.closest && e.target.closest('.delete-material-btn');
-    if (!del) return;
-    const id = del.dataset.id;
+    const delBtn = e.target.closest && e.target.closest('.delete-material-btn');
+    if (!delBtn) return;
+    const id = delBtn.dataset.id;
     pendingDeleteId = id;
     const dlg = document.getElementById('deleteConfirmModal');
     if (dlg) {
@@ -186,12 +361,12 @@ document.addEventListener('DOMContentLoaded', function () {
         method: 'DELETE',
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
       });
+      const j = await res.json().catch(()=>null);
       if (res.ok) {
+        const tr = document.querySelector(`tr[data-id="${id}"]`);
+        if (tr && tr.parentNode) tr.parentNode.removeChild(tr);
         showToast('Deleted', 1200);
-        // remove row or reload
-        window.location.reload();
       } else {
-        const j = await res.json().catch(()=>null);
         alert((j && j.error) ? j.error : 'Failed to delete');
       }
     } catch (err) {
@@ -200,15 +375,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  if (confirmDeleteBtn) {
+  if (confirmDeleteBtn && confirmDeleteBtn.dataset.bound !== '1') {
+    confirmDeleteBtn.dataset.bound = '1';
     confirmDeleteBtn.addEventListener('click', function () {
       if (!pendingDeleteId) return;
       doDelete(pendingDeleteId);
       pendingDeleteId = null;
-      // hide modal
       const dlg = document.getElementById('deleteConfirmModal');
       bootstrap.Modal.getInstance(dlg)?.hide();
     });
   }
-
 });
