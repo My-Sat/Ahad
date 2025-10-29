@@ -323,7 +323,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
-      // Show modal (instead of window.alert) with order details
+      // Show modal (instead of window.alert) with order details and copy/print actions
       showOrderSuccessModal(j.orderId, j.total);
       if (typeof showGlobalToast === 'function') showGlobalToast(`Order created: ${j.orderId}`, 3200);
 
@@ -366,7 +366,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   })();
 
-  // showOrderSuccessModal — create/show a bootstrap modal with order info
+  // showOrderSuccessModal — create/show a bootstrap modal with order info, copy and print buttons
   function showOrderSuccessModal(orderId, total) {
     // if a global modal already exists, reuse it
     let modalEl = document.getElementById('orderSuccessModal');
@@ -384,6 +384,8 @@ document.addEventListener('DOMContentLoaded', function () {
         <p class="small text-muted">Use the order ID at payment.</p>
       </div>
       <div class="modal-footer">
+        <button class="btn btn-outline-secondary" type="button" id="copyOrderIdBtn" title="Copy order ID">Copy Order ID</button>
+        <button class="btn btn-outline-primary" type="button" id="printOrderBtn" title="Print order">Print</button>
         <button class="btn btn-secondary" data-bs-dismiss="modal" type="button">Close</button>
       </div>
     </div>
@@ -398,9 +400,128 @@ document.addEventListener('DOMContentLoaded', function () {
     const body = modalEl.querySelector('#orderSuccessBody');
     if (body) {
       body.innerHTML = `
-        <strong>Order ID:</strong> ${escapeHtml(orderId || '')} <br/>
-        <strong>Total:</strong> GH₵ ${formatMoney(total)}
+        <strong>Order ID:</strong> <span id="orderSuccessId">${escapeHtml(orderId || '')}</span> <br/>
+        <strong>Total:</strong> GH₵ <span id="orderSuccessTotal">${formatMoney(total)}</span>
       `;
+    }
+
+    // set up button handlers (attach once safely)
+    const copyBtn = modalEl.querySelector('#copyOrderIdBtn');
+    const printBtn = modalEl.querySelector('#printOrderBtn');
+
+    function copyOrderId() {
+      const idEl = modalEl.querySelector('#orderSuccessId');
+      const idText = idEl ? idEl.textContent.trim() : (orderId || '');
+      if (!idText) {
+        try { alert('No order ID'); } catch(_) {}
+        return;
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(idText).then(() => {
+          try { window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch(_) {}
+        }).catch(err => {
+          // fallback
+          fallbackCopyTextToClipboard(idText);
+        });
+      } else {
+        fallbackCopyTextToClipboard(idText);
+      }
+    }
+
+    function fallbackCopyTextToClipboard(text) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          const ok = document.execCommand('copy');
+          if (ok) try { window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch(_) {}
+        } catch (e) {
+          alert('Copy failed — please select and copy manually: ' + text);
+        }
+        document.body.removeChild(ta);
+      } catch (err) {
+        console.error('Copy fallback failed', err);
+        alert('Copy failed — please select and copy manually: ' + text);
+      }
+    }
+
+    function printOrder() {
+      const idEl = modalEl.querySelector('#orderSuccessId');
+      const totalEl = modalEl.querySelector('#orderSuccessTotal');
+      const idText = idEl ? idEl.textContent.trim() : (orderId || '');
+      const totalText = totalEl ? totalEl.textContent.trim() : (formatMoney(total));
+
+      // Create printable window
+      const w = window.open('', '_blank', 'toolbar=0,location=0,menubar=0');
+      if (!w) {
+        alert('Unable to open print window (blocked). Please copy order ID and print manually.');
+        return;
+      }
+      const doc = w.document;
+      const title = 'Order ' + (idText || '');
+      doc.open();
+      doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <style>
+          body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #111; }
+          .wrap { max-width: 560px; margin: 0 auto; text-align: center; }
+          .logo { max-height: 80px; margin-bottom: 12px; display: inline-block; }
+          h1 { font-size: 20px; margin-bottom: 8px; }
+          p { margin: 6px 0; }
+          .muted { color: #666; font-size: 13px; }
+          .big { font-size: 18px; font-weight: 600; margin-top: 12px; }
+          .small-note { margin-top: 18px; font-size: 12px; color: #555; }
+          .details { text-align: left; display: inline-block; margin-top: 12px; }
+        </style>
+        </head><body>
+        <div class="wrap">
+          <img class="logo" src="/public/images/AHAD LOGO.png" alt="AHAD" />
+          <h1>Order Created</h1>
+          <div class="details">
+            <p><strong>Order ID:</strong> ${escapeHtml(idText)}</p>
+            <p><strong>Total:</strong> GH₵ ${escapeHtml(totalText)}</p>
+            <p class="muted">Show this ID at payment.</p>
+          </div>
+          <p class="small-note">Printed from Ahad POS.</p>
+        </div>
+        </body></html>`);
+      doc.close();
+
+      // print when ready
+      w.focus();
+      const onLoadPrint = () => {
+        try {
+          w.print();
+        } catch (e) {
+          console.error('Print failed', e);
+          alert('Print failed — try copying the order ID.');
+        }
+        // close after a short delay to allow the print dialog to appear
+        setTimeout(() => { try { w.close(); } catch (e) {} }, 700);
+      };
+
+      // If window loads quickly call print; otherwise attach onload
+      if (w.document.readyState === 'complete') {
+        onLoadPrint();
+      } else {
+        w.onload = onLoadPrint;
+        // also set a fallback timeout
+        setTimeout(onLoadPrint, 800);
+      }
+    }
+
+    // attach handlers (protect against multiple attaches)
+    if (copyBtn && !copyBtn._bound) {
+      copyBtn._bound = true;
+      copyBtn.addEventListener('click', copyOrderId);
+    }
+    if (printBtn && !printBtn._bound) {
+      printBtn._bound = true;
+      printBtn.addEventListener('click', printOrder);
     }
 
     try {
