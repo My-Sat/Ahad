@@ -293,3 +293,59 @@ exports.apiPayOrder = async (req, res) => {
     return res.status(500).json({ error: 'Error paying order' });
   }
 };
+
+// controllers/orders.js  (add this export near the bottom of the file)
+exports.apiListOrders = async (req, res) => {
+  try {
+    // Accepts ?from=YYYY-MM-DD&to=YYYY-MM-DD
+    const { from, to } = req.query || {};
+    // Helper: parse YYYY-MM-DD into Date start/end-of-day
+    function parseDateStart(dstr) {
+      if (!dstr) return null;
+      const d = new Date(dstr + 'T00:00:00Z');
+      if (isNaN(d.getTime())) return null;
+      return d;
+    }
+    function parseDateEnd(dstr) {
+      if (!dstr) return null;
+      const d = new Date(dstr + 'T23:59:59.999Z');
+      if (isNaN(d.getTime())) return null;
+      return d;
+    }
+
+    // Default: today in server UTC (client is Africa/Accra but server should interpret ISO date)
+    const todayIso = new Date();
+    const defaultFrom = new Date(Date.UTC(todayIso.getUTCFullYear(), todayIso.getUTCMonth(), todayIso.getUTCDate(), 0, 0, 0, 0));
+    const defaultTo = new Date(Date.UTC(todayIso.getUTCFullYear(), todayIso.getUTCMonth(), todayIso.getUTCDate(), 23, 59, 59, 999));
+
+    const start = parseDateStart(from) || defaultFrom;
+    const end = parseDateEnd(to) || defaultTo;
+
+    // Protect: don't allow huge ranges — limit to 365 days by default
+    const maxRangeMs = 365 * 24 * 60 * 60 * 1000;
+    if (end - start > maxRangeMs) {
+      return res.status(400).json({ error: 'Date range too large (max 365 days)' });
+    }
+
+    // Query orders in range, newest first, limit to 1000 for safety
+    const q = { createdAt: { $gte: start, $lte: end } };
+    const orders = await Order.find(q)
+      .sort({ createdAt: -1 })
+      .limit(1000)
+      .lean();
+
+    // Map to minimal info the client needs in the list
+    const out = orders.map(o => ({
+      _id: o._id,
+      orderId: o.orderId,
+      total: o.total,
+      status: o.status,
+      createdAt: o.createdAt
+    }));
+
+    return res.json({ ok: true, orders: out });
+  } catch (err) {
+    console.error('apiListOrders error', err);
+    return res.status(500).json({ error: 'Error listing orders' });
+  }
+};

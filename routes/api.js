@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const apiController = require('../controllers/api');
 const orderController = require('../controllers/order');
+const ordersController = require('../controllers/order');
 
 
 // price lookup for a selection set
@@ -20,7 +21,6 @@ router.get('/orders/:orderId', orderController.apiGetOrderById);
 // pay order
 router.post('/orders/:orderId/pay', orderController.apiPayOrder);
 
-module.exports = router;
-
+router.get('/orders', ordersController.apiListOrders);
 
 module.exports = router;

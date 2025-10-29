@@ -5,6 +5,7 @@
 // Services that require printers show a per-row printer select when adding an item.
 // NOTE: printers are stored on the cart item for server submission, but are NOT shown in the cart UI.
 
+// Also includes: Orders Explorer modal with date filters (defaults to today), detail view (copy/print).
 document.addEventListener('DOMContentLoaded', function () {
   'use strict';
 
@@ -14,7 +15,28 @@ document.addEventListener('DOMContentLoaded', function () {
   const cartTotalEl = document.getElementById('cartTotal');
   const orderNowBtn = document.getElementById('orderNowBtn');
 
-  // state
+  // Orders explorer elements
+  const openOrdersExplorerBtn = document.getElementById('openOrdersExplorerBtn');
+  const ordersExplorerModalEl = document.getElementById('ordersExplorerModal');
+  const ordersExplorerModal = (window.bootstrap && ordersExplorerModalEl) ? new bootstrap.Modal(ordersExplorerModalEl) : null;
+  const ordersFromEl = document.getElementById('ordersFrom');
+  const ordersToEl = document.getElementById('ordersTo');
+  const fetchOrdersBtn = document.getElementById('fetchOrdersBtn');
+  const presetTodayBtn = document.getElementById('presetToday');
+  const presetYesterdayBtn = document.getElementById('presetYesterday');
+  const presetThisWeekBtn = document.getElementById('presetThisWeek');
+  const ordersTable = document.getElementById('ordersTable');
+  const ordersCountEl = document.getElementById('ordersCount');
+
+  // Order details modal
+  const orderDetailsModalEl = document.getElementById('orderDetailsModal');
+  const orderDetailsModal = (window.bootstrap && orderDetailsModalEl) ? new bootstrap.Modal(orderDetailsModalEl) : null;
+  const orderDetailsMeta = document.getElementById('orderDetailsMeta');
+  const orderDetailsJson = document.getElementById('orderDetailsJson');
+  const copyDetailOrderIdBtn = document.getElementById('copyDetailOrderIdBtn');
+  const printDetailOrderBtn = document.getElementById('printDetailOrderBtn');
+
+  // internal state
   let prices = []; // loaded price rules for selected service
   let cart = [];   // { serviceId, serviceName, priceRuleId, selectionLabel, unitPrice, pages, subtotal, fb, printerId }
   let serviceRequiresPrinter = false;
@@ -23,6 +45,22 @@ document.addEventListener('DOMContentLoaded', function () {
   function formatMoney(n) {
     const num = Number(n) || 0;
     return num.toFixed(2);
+  }
+
+  function isoDate(d) {
+    const dt = d ? new Date(d) : new Date();
+    const yr = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yr}-${mm}-${dd}`;
+  }
+
+  // default date range => today
+  function setDefaultDateRange() {
+    const today = new Date();
+    ordersFromEl.value = isoDate(today);
+    ordersToEl.value = isoDate(today);
+    if (ordersCountEl) ordersCountEl.textContent = 'Default: Today';
   }
 
   // Parse a selectionLabel of form "Unit: Sub + Unit2: Sub2" into only subunit names [Sub, Sub2]
@@ -47,7 +85,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // render the prices list (each item: selection (subunits comma-separated), pages input, F/B checkbox, Apply button)
+  // render the prices list (each item: selection (subunits comma-separated), qty input, F/B checkbox, Apply button)
   function renderPrices() {
     if (!prices || !prices.length) {
       pricesList.innerHTML = '<p class="text-muted">No price rules found for selected service.</p>';
@@ -184,8 +222,6 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // add item to cart
-  // NOTE: we still keep printerId in the cart item so it will be sent to server when placing order,
-  // but we do NOT show printer info in the cart UI per requirements.
   function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, pages, fb, printerId }) {
     pages = Number(pages) || 1;
     const subtotal = Number((Number(unitPrice) * pages).toFixed(2));
@@ -218,7 +254,6 @@ document.addEventListener('DOMContentLoaded', function () {
       total += it.subtotal;
       const tr = document.createElement('tr');
       tr.dataset.idx = idx;
-      // Do NOT show printer info in the cart UI (we still keep printerId internally)
       tr.innerHTML = `
         <td>
           <div class="small text-muted">${escapeHtml(it.serviceName || '')}</div>
@@ -278,8 +313,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const serviceName = (serviceSelect && serviceSelect.options[serviceSelect.selectedIndex]) ? (serviceSelect.options[serviceSelect.selectedIndex].text || '') : '';
 
-    // pass printerId through but do NOT display it in cart
+    // pass printerId through (kept internally) but do NOT display it in cart
     addToCart({ serviceId, serviceName, priceRuleId: prId, label, unitPrice: chosenPrice, pages, fb: fbChecked, printerId: selectedPrinterId });
+
+    // FIX: clear input fields after Apply (qty input, fb checkbox, printer select)
+    try {
+      if (pagesInput) pagesInput.value = '';
+      if (fbCheckbox) { fbCheckbox.checked = false; }
+      const printerSelect = row ? row.querySelector('.printer-select') : null;
+      if (printerSelect) { printerSelect.selectedIndex = 0; }
+    } catch (err) {
+      // ignore any clearing errors
+      console.warn('Failed to clear inputs after Apply', err);
+    }
+
     if (typeof showGlobalToast === 'function') showGlobalToast('Added to cart', 1600);
   });
 
@@ -366,9 +413,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   })();
 
-  // showOrderSuccessModal — create/show a bootstrap modal with order info, copy and print buttons
+  // Order Success Modal (Copy + Print) - reused for immediate post-order success
   function showOrderSuccessModal(orderId, total) {
-    // if a global modal already exists, reuse it
+    // similar to previous code — ensure modal exists and show with copy/print buttons
     let modalEl = document.getElementById('orderSuccessModal');
     if (!modalEl) {
       const html = `
@@ -405,48 +452,31 @@ document.addEventListener('DOMContentLoaded', function () {
       `;
     }
 
-    // set up button handlers (attach once safely)
+    // set up copy/print handlers
     const copyBtn = modalEl.querySelector('#copyOrderIdBtn');
     const printBtn = modalEl.querySelector('#printOrderBtn');
 
     function copyOrderId() {
       const idEl = modalEl.querySelector('#orderSuccessId');
       const idText = idEl ? idEl.textContent.trim() : (orderId || '');
-      if (!idText) {
-        try { alert('No order ID'); } catch(_) {}
-        return;
-      }
+      if (!idText) return alert('No order ID');
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(idText).then(() => {
           try { window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch(_) {}
-        }).catch(err => {
-          // fallback
-          fallbackCopyTextToClipboard(idText);
-        });
+        }).catch(() => fallbackCopyTextToClipboard(idText));
       } else {
         fallbackCopyTextToClipboard(idText);
       }
     }
-
     function fallbackCopyTextToClipboard(text) {
-      try {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.position = 'fixed';
-        ta.style.left = '-9999px';
-        document.body.appendChild(ta);
-        ta.select();
-        try {
-          const ok = document.execCommand('copy');
-          if (ok) try { window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch(_) {}
-        } catch (e) {
-          alert('Copy failed — please select and copy manually: ' + text);
-        }
-        document.body.removeChild(ta);
-      } catch (err) {
-        console.error('Copy fallback failed', err);
-        alert('Copy failed — please select and copy manually: ' + text);
-      }
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); try { window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch(_) {} } catch (e) { alert('Copy failed — select and copy: ' + text); }
+      document.body.removeChild(ta);
     }
 
     function printOrder() {
@@ -454,8 +484,6 @@ document.addEventListener('DOMContentLoaded', function () {
       const totalEl = modalEl.querySelector('#orderSuccessTotal');
       const idText = idEl ? idEl.textContent.trim() : (orderId || '');
       const totalText = totalEl ? totalEl.textContent.trim() : (formatMoney(total));
-
-      // Create printable window
       const w = window.open('', '_blank', 'toolbar=0,location=0,menubar=0');
       if (!w) {
         alert('Unable to open print window (blocked). Please copy order ID and print manually.');
@@ -473,8 +501,6 @@ document.addEventListener('DOMContentLoaded', function () {
           h1 { font-size: 20px; margin-bottom: 8px; }
           p { margin: 6px 0; }
           .muted { color: #666; font-size: 13px; }
-          .big { font-size: 18px; font-weight: 600; margin-top: 12px; }
-          .small-note { margin-top: 18px; font-size: 12px; color: #555; }
           .details { text-align: left; display: inline-block; margin-top: 12px; }
         </style>
         </head><body>
@@ -490,52 +516,229 @@ document.addEventListener('DOMContentLoaded', function () {
         </div>
         </body></html>`);
       doc.close();
-
-      // print when ready
       w.focus();
       const onLoadPrint = () => {
-        try {
-          w.print();
-        } catch (e) {
-          console.error('Print failed', e);
-          alert('Print failed — try copying the order ID.');
-        }
-        // close after a short delay to allow the print dialog to appear
-        setTimeout(() => { try { w.close(); } catch (e) {} }, 700);
+        try { w.print(); } catch (e) { alert('Print failed — try copying the order ID.'); }
+        setTimeout(()=>{ try { w.close(); } catch (e){} }, 700);
       };
-
-      // If window loads quickly call print; otherwise attach onload
-      if (w.document.readyState === 'complete') {
-        onLoadPrint();
-      } else {
-        w.onload = onLoadPrint;
-        // also set a fallback timeout
-        setTimeout(onLoadPrint, 800);
-      }
+      if (w.document.readyState === 'complete') onLoadPrint(); else { w.onload = onLoadPrint; setTimeout(onLoadPrint, 800); }
     }
 
-    // attach handlers (protect against multiple attaches)
-    if (copyBtn && !copyBtn._bound) {
-      copyBtn._bound = true;
-      copyBtn.addEventListener('click', copyOrderId);
-    }
-    if (printBtn && !printBtn._bound) {
-      printBtn._bound = true;
-      printBtn.addEventListener('click', printOrder);
-    }
+    if (copyBtn && !copyBtn._bound) { copyBtn._bound = true; copyBtn.addEventListener('click', copyOrderId); }
+    if (printBtn && !printBtn._bound) { printBtn._bound = true; printBtn.addEventListener('click', printOrder); }
 
+    try { const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl); inst.show(); } catch (err) { alert(`Order created: ${orderId}\nTotal: GH₵ ${formatMoney(total)}`); }
+  }
+
+  // ORDERS EXPLORER: wiring -------------------------------------------------
+  function formatDateTimeForDisplay(dtStr) {
     try {
-      const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-      inst.show();
+      const d = new Date(dtStr);
+      return d.toLocaleString();
+    } catch (e) { return dtStr || ''; }
+  }
+
+  // fetch orders list from server: expects GET /api/orders?from=YYYY-MM-DD&to=YYYY-MM-DD
+  async function fetchOrdersList(from, to) {
+    try {
+      const url = `/api/orders?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+      const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      if (!res.ok) {
+        // show friendly message — server might not implement listing endpoint
+        const ct = res.headers.get('content-type') || '';
+        let msg = `Failed to fetch orders (${res.status})`;
+        if (ct.includes('application/json')) {
+          const j = await res.json().catch(()=>null);
+          if (j && j.error) msg = j.error;
+        }
+        renderOrdersListError(msg);
+        return;
+      }
+      const j = await res.json().catch(()=>null);
+      if (!j || !Array.isArray(j.orders)) {
+        renderOrdersListError('Invalid response from server (expected array of orders).');
+        return;
+      }
+      renderOrdersList(j.orders);
     } catch (err) {
-      // fallback to alert in case bootstrap is not available
-      alert(`Order created: ${orderId}\nTotal: GH₵ ${formatMoney(total)}`);
+      console.error('fetchOrdersList err', err);
+      renderOrdersListError('Network error while fetching orders.');
     }
   }
 
-  // expose for debug if needed
-  window._ordersClient = { loadPricesForService, prices, cart, serviceRequiresPrinter, printers };
+  function renderOrdersListError(msg) {
+    const tbody = ordersTable.querySelector('tbody');
+    tbody.innerHTML = `<tr><td class="text-muted" colspan="5">${escapeHtml(msg)}</td></tr>`;
+    if (ordersCountEl) ordersCountEl.textContent = '0 results';
+  }
+
+  function renderOrdersList(orders) {
+    const tbody = ordersTable.querySelector('tbody');
+    if (!orders || !orders.length) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="5">No orders in this range.</td></tr>';
+      if (ordersCountEl) ordersCountEl.textContent = '0 results';
+      return;
+    }
+    tbody.innerHTML = '';
+    orders.forEach(o => {
+      const tr = document.createElement('tr');
+      tr.dataset.orderId = o.orderId || o._id || '';
+      const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : (o.createdAt || '');
+      tr.innerHTML = `
+        <td><a href="#" class="orders-explorer-open-order" data-order-id="${escapeHtml(o.orderId || o._id || '')}">${escapeHtml(o.orderId || o._id || '')}</a></td>
+        <td class="text-end">GH₵ ${formatMoney(o.total)}</td>
+        <td>${escapeHtml(o.status || '')}</td>
+        <td>${escapeHtml(created)}</td>
+        <td class="text-center"><button class="btn btn-sm btn-outline-secondary view-order-btn" data-order-id="${escapeHtml(o.orderId || o._id || '')}">View</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    if (ordersCountEl) ordersCountEl.textContent = `${orders.length} result${orders.length > 1 ? 's' : ''}`;
+  }
+
+  // view order details via existing GET /api/orders/:orderId
+  async function viewOrderDetails(orderId) {
+    if (!orderId) return;
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      if (!res.ok) {
+        const j = await res.json().catch(()=>null);
+        const msg = j && j.error ? j.error : `Failed to fetch order ${orderId}`;
+        if (orderDetailsMeta) orderDetailsMeta.textContent = msg;
+        if (orderDetailsJson) orderDetailsJson.textContent = '';
+        if (orderDetailsModal) orderDetailsModal.show();
+        return;
+      }
+      const j = await res.json().catch(()=>null);
+      if (!j || !j.order) {
+        if (orderDetailsMeta) orderDetailsMeta.textContent = 'Order not found';
+        if (orderDetailsJson) orderDetailsJson.textContent = '';
+        if (orderDetailsModal) orderDetailsModal.show();
+        return;
+      }
+      const o = j.order;
+      const metaText = `Order ID: ${o.orderId} — Total: GH₵ ${formatMoney(o.total)} — Status: ${o.status} — Created: ${formatDateTimeForDisplay(o.createdAt)}`;
+      if (orderDetailsMeta) orderDetailsMeta.textContent = metaText;
+      if (orderDetailsJson) {
+        // show formatted JSON for full details (items etc.)
+        try {
+          orderDetailsJson.textContent = JSON.stringify(o, null, 2);
+        } catch (e) {
+          orderDetailsJson.textContent = String(o);
+        }
+      }
+      if (orderDetailsModal) orderDetailsModal.show();
+    } catch (err) {
+      console.error('viewOrderDetails err', err);
+      if (orderDetailsMeta) orderDetailsMeta.textContent = 'Network error while fetching order';
+      if (orderDetailsJson) orderDetailsJson.textContent = '';
+      if (orderDetailsModal) orderDetailsModal.show();
+    }
+  }
+
+  // Orders explorer event wiring
+  if (openOrdersExplorerBtn) {
+    openOrdersExplorerBtn.addEventListener('click', function () {
+      setDefaultDateRange();
+      if (ordersExplorerModal) ordersExplorerModal.show();
+
+      // Auto-fetch for the default range immediately
+      const from = ordersFromEl.value || isoDate(new Date());
+      const to = ordersToEl.value || isoDate(new Date());
+      // best-effort: fetch list and ignore errors (fetchOrdersList handles errors/display)
+      fetchOrdersList(from, to);
+    });
+  }
+  if (presetTodayBtn) presetTodayBtn.addEventListener('click', function () {
+    setDefaultDateRange();
+  });
+  if (presetYesterdayBtn) presetYesterdayBtn.addEventListener('click', function () {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    ordersFromEl.value = isoDate(d);
+    ordersToEl.value = isoDate(d);
+  });
+  if (presetThisWeekBtn) presetThisWeekBtn.addEventListener('click', function () {
+    const now = new Date();
+    const day = now.getDay(); // 0..6
+    const diffToMonday = (day + 6) % 7; // days since Monday
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - diffToMonday);
+    ordersFromEl.value = isoDate(monday);
+    ordersToEl.value = isoDate(now);
+  });
+
+  if (fetchOrdersBtn) {
+    fetchOrdersBtn.addEventListener('click', function () {
+      const from = ordersFromEl.value || isoDate(new Date());
+      const to = ordersToEl.value || isoDate(new Date());
+      // simple validation
+      if (new Date(from) > new Date(to)) {
+        alert('From date cannot be after To date');
+        return;
+      }
+      // fetch list
+      fetchOrdersList(from, to);
+    });
+  }
+
+  // delegate clicks in orders table (open detail)
+  if (ordersTable) {
+    ordersTable.addEventListener('click', function (ev) {
+      const a = ev.target.closest('.orders-explorer-open-order');
+      if (a) {
+        ev.preventDefault();
+        const id = a.dataset.orderId;
+        viewOrderDetails(id);
+        return;
+      }
+      const vbtn = ev.target.closest('.view-order-btn');
+      if (vbtn) {
+        const id = vbtn.dataset.orderId;
+        viewOrderDetails(id);
+      }
+    });
+  }
+
+  // detail modal copy/print handlers
+  if (copyDetailOrderIdBtn) {
+    copyDetailOrderIdBtn.addEventListener('click', function () {
+      const text = (orderDetailsMeta && orderDetailsMeta.textContent) ? orderDetailsMeta.textContent.split('—')[0].replace('Order ID:', '').trim() : '';
+      if (!text) return alert('No order ID available');
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(()=> { try { window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch(_){}; }).catch(()=> { alert('Copy failed'); });
+      else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch(e){ alert('Copy failed'); } document.body.removeChild(ta); }
+    });
+  }
+  if (printDetailOrderBtn) {
+    printDetailOrderBtn.addEventListener('click', function () {
+      const meta = orderDetailsMeta ? orderDetailsMeta.textContent : '';
+      const json = orderDetailsJson ? orderDetailsJson.textContent : '';
+      // open print window
+      const w = window.open('', '_blank', 'toolbar=0,location=0,menubar=0');
+      if (!w) { alert('Unable to open print window (blocked).'); return; }
+      const title = 'Order details';
+      w.document.open();
+      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <style>body{font-family:Arial,Helvetica,sans-serif;padding:22px;color:#111}pre{white-space:pre-wrap;background:#f8f9fa;padding:12px;border-radius:6px}</style>
+        </head><body>
+        <div><img src="/public/images/AHAD LOGO.png" style="max-height:60px"/></div>
+        <h2>Order</h2><p>${escapeHtml(meta || '')}</p>
+        <h3>Details</h3><pre>${escapeHtml(json || '')}</pre>
+        </body></html>`);
+      w.document.close();
+      w.focus();
+      setTimeout(()=>{ try { w.print(); } catch(e){ alert('Print failed'); } setTimeout(()=>{ try{ w.close(); } catch(e){} }, 700); }, 400);
+    });
+  }
+
+  // expose for debug
+  window._ordersClient = { loadPricesForService, prices, cart, serviceRequiresPrinter, printers, fetchOrdersList, viewOrderDetails };
 
   // initial render of cart
   renderCart();
+
+  // initialize Orders Explorer defaults if elements exist
+  if (ordersFromEl && ordersToEl) setDefaultDateRange();
+
 });
