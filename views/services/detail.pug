@@ -1,9 +1,19 @@
-
 extends ../layout
 
 block content
+  // header row: title + back link + small inline requires-printer toggle form
   .d-flex.justify-content-between.align-items-center.mb-3
-    h2.mb-0= service.name
+    .d-flex.align-items-center.g-3
+      h2.mb-0= service.name
+      // small inline form to toggle "requires printer" for this service
+      form.d-flex.align-items-center.ms-3(method='post', action=`/admin/services/${service._id}?_method=PUT`)
+        // include checkbox and submit button — uses method-override to call the existing PUT /admin/services/:id
+        .form-check.me-2
+          - // checkbox will be checked when service.requiresPrinter is truthy
+          input.form-check-input(type='checkbox', id='requiresPrinter', name='requiresPrinter', checked=service && service.requiresPrinter)
+          label.form-check-label(for='requiresPrinter') Requires printer
+        button.btn.btn-sm.btn-outline-primary(type='submit') Save
+
     a.btn.btn-secondary(href='/admin/services') Back
 
   hr

@@ -1,7 +1,9 @@
-// public/javascripts/order_client.js
+// public/javascripts/orders_client.js
 // Orders client: auto-load price rules when service changes or on initial load.
 // Renders price rules showing only sub-unit names (comma-separated).
-// Cart now shows service name per item and supports F/B selection (fb flag sent to server).
+// Cart shows service name per item and supports F/B selection (fb flag sent to server).
+// Services that require printers show a per-row printer select when adding an item.
+// NOTE: printers are stored on the cart item for server submission, but are NOT shown in the cart UI.
 
 document.addEventListener('DOMContentLoaded', function () {
   'use strict';
@@ -12,12 +14,15 @@ document.addEventListener('DOMContentLoaded', function () {
   const cartTotalEl = document.getElementById('cartTotal');
   const orderNowBtn = document.getElementById('orderNowBtn');
 
+  // state
   let prices = []; // loaded price rules for selected service
-  let cart = [];   // { serviceId, serviceName, priceRuleId, selectionLabel, unitPrice, pages, subtotal, fb }
+  let cart = [];   // { serviceId, serviceName, priceRuleId, selectionLabel, unitPrice, pages, subtotal, fb, printerId }
+  let serviceRequiresPrinter = false;
+  let printers = []; // { _id, name }
 
   function formatMoney(n) {
-    // compute to 2 decimal places safely
-    return Number(n).toFixed(2);
+    const num = Number(n) || 0;
+    return num.toFixed(2);
   }
 
   // Parse a selectionLabel of form "Unit: Sub + Unit2: Sub2" into only subunit names [Sub, Sub2]
@@ -32,6 +37,14 @@ document.addEventListener('DOMContentLoaded', function () {
       return part.trim();
     }).filter(Boolean);
     return subs.join(', ');
+  }
+
+  // safe escape
+  function escapeHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/[&<>"'`=\/]/g, function (c) {
+      return '&#' + c.charCodeAt(0) + ';';
+    });
   }
 
   // render the prices list (each item: selection (subunits comma-separated), pages input, F/B checkbox, Apply button)
@@ -54,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function () {
       label.innerHTML = `<strong>${escapeHtml(subOnly)}</strong>`;
       left.appendChild(label);
 
-      // middle: pages input and FB checkbox
+      // middle: qty input and FB checkbox
       const mid = document.createElement('div');
       mid.className = 'me-2 d-flex align-items-center gap-2';
 
@@ -62,7 +75,7 @@ document.addEventListener('DOMContentLoaded', function () {
       input.type = 'number';
       input.min = '1';
       input.className = 'form-control form-control-sm pages-input';
-      input.placeholder = 'Pages (optional)';
+      input.placeholder = 'Qty (optional)';
       input.style.width = '110px';
       mid.appendChild(input);
 
@@ -81,6 +94,36 @@ document.addEventListener('DOMContentLoaded', function () {
       fbWrap.appendChild(fbInput);
       fbWrap.appendChild(fbLabel);
       mid.appendChild(fbWrap);
+
+      // printer select (if service requires)
+      if (serviceRequiresPrinter) {
+        const printerWrap = document.createElement('div');
+        printerWrap.className = 'ms-2 d-flex align-items-center';
+        const sel = document.createElement('select');
+        sel.className = 'form-select form-select-sm printer-select';
+        sel.style.width = '220px';
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = '-- Select printer --';
+        sel.appendChild(defaultOpt);
+
+        if (printers && printers.length) {
+          printers.forEach(pr => {
+            const o = document.createElement('option');
+            o.value = pr._id;
+            o.textContent = pr.name || pr._id;
+            sel.appendChild(o);
+          });
+        } else {
+          const o = document.createElement('option');
+          o.value = '';
+          o.textContent = 'No printers available';
+          sel.appendChild(o);
+          sel.disabled = true;
+        }
+        printerWrap.appendChild(sel);
+        mid.appendChild(printerWrap);
+      }
 
       // right: apply button
       const right = document.createElement('div');
@@ -103,18 +146,12 @@ document.addEventListener('DOMContentLoaded', function () {
     pricesList.appendChild(container);
   }
 
-  // safe escape
-  function escapeHtml(s) {
-    if (!s) return '';
-    return s.replace(/[&<>"'`=\/]/g, function (c) {
-      return '&#' + c.charCodeAt(0) + ';';
-    });
-  }
-
   // load price rules for selected service via API
   async function loadPricesForService(serviceId) {
     if (!serviceId) {
       prices = [];
+      serviceRequiresPrinter = false;
+      printers = [];
       renderPrices();
       return;
     }
@@ -137,6 +174,8 @@ document.addEventListener('DOMContentLoaded', function () {
         unitPrice: Number(x.unitPrice),
         price2: (x.price2 !== null && x.price2 !== undefined) ? Number(x.price2) : null
       }));
+      serviceRequiresPrinter = !!j.serviceRequiresPrinter;
+      printers = (j.printers || []).map(p => ({ _id: p._id, name: p.name }));
       renderPrices();
     } catch (err) {
       console.error('loadPricesForService err', err);
@@ -145,11 +184,22 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // add item to cart
-  function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, pages, fb }) {
+  // NOTE: we still keep printerId in the cart item so it will be sent to server when placing order,
+  // but we do NOT show printer info in the cart UI per requirements.
+  function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, pages, fb, printerId }) {
     pages = Number(pages) || 1;
-    // compute subtotal to 2 decimals
     const subtotal = Number((Number(unitPrice) * pages).toFixed(2));
-    cart.push({ serviceId, serviceName, priceRuleId, selectionLabel: label, unitPrice: Number(unitPrice), pages, subtotal, fb: !!fb });
+    cart.push({
+      serviceId,
+      serviceName,
+      priceRuleId,
+      selectionLabel: label,
+      unitPrice: Number(unitPrice),
+      pages,
+      subtotal,
+      fb: !!fb,
+      printerId: printerId || null
+    });
     renderCart();
   }
 
@@ -168,11 +218,10 @@ document.addEventListener('DOMContentLoaded', function () {
       total += it.subtotal;
       const tr = document.createElement('tr');
       tr.dataset.idx = idx;
-      // show service name as muted small above selection label
-      const fbBadge = it.fb ? ' <span class="badge bg-secondary ms-1">F/B</span>' : '';
+      // Do NOT show printer info in the cart UI (we still keep printerId internally)
       tr.innerHTML = `
         <td>
-          <div class="small text-muted">${escapeHtml(it.serviceName || '')}${it.fb ? '' : ''}</div>
+          <div class="small text-muted">${escapeHtml(it.serviceName || '')}</div>
           <div>${escapeHtml(it.selectionLabel)}${it.fb ? ' (F/B)' : ''}</div>
         </td>
         <td class="text-center">${it.pages}</td>
@@ -191,11 +240,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const btn = e.target.closest('.apply-price-btn');
     if (!btn) return;
     const prId = btn.dataset.prId;
-    const serviceId = serviceSelect.value;
+    const serviceId = serviceSelect ? serviceSelect.value : null;
     const priceObj = prices.find(p => String(p._id) === String(prId));
     if (!priceObj) return alert('Price rule not found');
 
-    // find pages input in same list item (or default to 1)
+    // find qty input in same list item (or default to 1)
     const row = btn.closest('.list-group-item');
     const pagesInput = row ? row.querySelector('.pages-input') : null;
     const pages = pagesInput && pagesInput.value ? Number(pagesInput.value) : 1;
@@ -203,6 +252,17 @@ document.addEventListener('DOMContentLoaded', function () {
     // check F/B checkbox in same row
     const fbCheckbox = row ? row.querySelector('.fb-checkbox') : null;
     const fbChecked = fbCheckbox ? fbCheckbox.checked : false;
+
+    // if service requires a printer, find the selected printer in the same row
+    let selectedPrinterId = null;
+    if (serviceRequiresPrinter) {
+      const printerSelect = row ? row.querySelector('.printer-select') : null;
+      selectedPrinterId = printerSelect ? (printerSelect.value || null) : null;
+      if (!selectedPrinterId) {
+        try { window.showGlobalToast && window.showGlobalToast('Please select a printer for this service', 2200); } catch(_) {}
+        return alert('This service requires a printer. Please choose a printer before adding to cart.');
+      }
+    }
 
     // choose unitPrice: price2 if F/B checked and price2 available, else price
     let chosenPrice = Number(priceObj.unitPrice);
@@ -216,9 +276,10 @@ document.addEventListener('DOMContentLoaded', function () {
       label = `${label} (F/B)`;
     }
 
-    const serviceName = (serviceSelect.options[serviceSelect.selectedIndex] || {}).text || '';
+    const serviceName = (serviceSelect && serviceSelect.options[serviceSelect.selectedIndex]) ? (serviceSelect.options[serviceSelect.selectedIndex].text || '') : '';
 
-    addToCart({ serviceId, serviceName, priceRuleId: prId, label, unitPrice: chosenPrice, pages, fb: fbChecked });
+    // pass printerId through but do NOT display it in cart
+    addToCart({ serviceId, serviceName, priceRuleId: prId, label, unitPrice: chosenPrice, pages, fb: fbChecked, printerId: selectedPrinterId });
     if (typeof showGlobalToast === 'function') showGlobalToast('Added to cart', 1600);
   });
 
@@ -247,7 +308,8 @@ document.addEventListener('DOMContentLoaded', function () {
           serviceId: it.serviceId,
           priceRuleId: it.priceRuleId,
           pages: it.pages,
-          fb: !!it.fb
+          fb: !!it.fb,
+          printerId: it.printerId || null
         }))
       };
       const res = await fetch('/api/orders', {
@@ -255,13 +317,16 @@ document.addEventListener('DOMContentLoaded', function () {
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         body: JSON.stringify(payload)
       });
-      const j = await res.json();
+      const j = await res.json().catch(() => null);
       if (!res.ok) {
-        alert(j.error || 'Order creation failed');
+        alert((j && j.error) ? j.error : 'Order creation failed');
         return;
       }
+
+      // Show modal (instead of window.alert) with order details
+      showOrderSuccessModal(j.orderId, j.total);
       if (typeof showGlobalToast === 'function') showGlobalToast(`Order created: ${j.orderId}`, 3200);
-      alert(`Order created successfully.\nOrder ID: ${j.orderId}\nTotal: GH₵ ${Number(j.total).toFixed(2)}\nUse this ID at payment.`);
+
       cart = [];
       renderCart();
     } catch (err) {
@@ -301,8 +366,54 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   })();
 
+  // showOrderSuccessModal — create/show a bootstrap modal with order info
+  function showOrderSuccessModal(orderId, total) {
+    // if a global modal already exists, reuse it
+    let modalEl = document.getElementById('orderSuccessModal');
+    if (!modalEl) {
+      const html = `
+<div class="modal fade" id="orderSuccessModal" tabindex="-1" aria-labelledby="orderSuccessModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="orderSuccessModalLabel">Order created</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p id="orderSuccessBody">Order created successfully.</p>
+        <p class="small text-muted">Use the order ID at payment.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      document.body.appendChild(container.firstElementChild);
+      modalEl = document.getElementById('orderSuccessModal');
+    }
+
+    const body = modalEl.querySelector('#orderSuccessBody');
+    if (body) {
+      body.innerHTML = `
+        <strong>Order ID:</strong> ${escapeHtml(orderId || '')} <br/>
+        <strong>Total:</strong> GH₵ ${formatMoney(total)}
+      `;
+    }
+
+    try {
+      const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+      inst.show();
+    } catch (err) {
+      // fallback to alert in case bootstrap is not available
+      alert(`Order created: ${orderId}\nTotal: GH₵ ${formatMoney(total)}`);
+    }
+  }
+
   // expose for debug if needed
-  window._ordersClient = { loadPricesForService, prices, cart };
+  window._ordersClient = { loadPricesForService, prices, cart, serviceRequiresPrinter, printers };
 
   // initial render of cart
   renderCart();

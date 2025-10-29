@@ -9,6 +9,8 @@ const SelectionRef = new mongoose.Schema({
 const OrderItemSchema = new mongoose.Schema({
   // reference the service so we can lookup names if needed
   service: { type: mongoose.Schema.Types.ObjectId, ref: 'Service', required: true },
+  // optional printer used for this item (if applicable)
+  printer: { type: mongoose.Schema.Types.ObjectId, ref: 'Printer', default: null },
   // store selections as unit/subUnit pairs so we can match materials later
   selections: { type: [SelectionRef], default: [] },
   // human-friendly label for the selected combination (e.g. "Paper Size: A4 + Paper Type: Standard")

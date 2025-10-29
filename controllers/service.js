@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const Service = require('../models/service');
 const ServiceCostUnit = require('../models/service_cost_unit');
 const ServiceCostSubUnit = require('../models/service_cost_subunit');
-const ServicePrice = require('../models/service_price'); 
+const ServicePrice = require('../models/service_price');
 
 exports.list = async (req, res) => {
   try {
@@ -57,6 +57,7 @@ exports.get = async (req, res) => {
       }).join(' + ');
     });
 
+    // Note: service may include `requiresPrinter` flag; the view uses it (checkbox)
     res.render('services/detail', { service, units, subunits, prices });
   } catch (err) {
     console.error(err);
@@ -70,7 +71,14 @@ exports.create = async (req, res) => {
     const { name } = req.body;
     if (!name || !String(name).trim()) return res.status(400).send('Name is required');
 
-    const service = new Service({ name: name.trim(), components: [] });
+    // Accept optional requiresPrinter flag on create (checkboxs/forms may send 'on'/'true')
+    let requiresPrinter = false;
+    if (typeof req.body.requiresPrinter !== 'undefined') {
+      const v = req.body.requiresPrinter;
+      requiresPrinter = (v === 'on' || v === 'true' || v === '1' || v === true);
+    }
+
+    const service = new Service({ name: name.trim(), components: [], requiresPrinter });
     await service.save();
 
     // If AJAX request, return JSON of created service for client-side handling
@@ -103,6 +111,12 @@ exports.update = async (req, res) => {
     const newName = req.body.name ? String(req.body.name).trim() : null;
     if (newName) service.name = newName;
 
+    // NEW: handle requiresPrinter checkbox (comes from form as 'on' or 'true')
+    if (typeof req.body.requiresPrinter !== 'undefined') {
+      const val = req.body.requiresPrinter;
+      service.requiresPrinter = (val === 'on' || val === 'true' || val === '1' || val === true);
+    }
+
     // components may be provided as JSON string or array — only if explicitly provided
     if (req.body.components) {
       let comps = req.body.components;
@@ -114,7 +128,7 @@ exports.update = async (req, res) => {
 
     // If AJAX request, return JSON so client can update DOM without reload
     if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
-      return res.json({ ok: true, service: { _id: service._id, name: service.name } });
+      return res.json({ ok: true, service: { _id: service._id, name: service.name, requiresPrinter: !!service.requiresPrinter } });
     }
 
     // fallback: redirect (existing behavior)

@@ -1,11 +1,14 @@
-// controllers/order.js
+// controllers/orders.js
 const crypto = require('crypto');
 const Service = require('../models/service');
 const ServicePrice = require('../models/service_price');
 const Order = require('../models/order');
+const Printer = require('../models/printer');
 const mongoose = require('mongoose');
 const Material = require('../models/material');
 const { MaterialUsage, MaterialAggregate } = require('../models/material_usage');
+const { ObjectId } = require('mongoose').Types;
+
 
 
 function makeOrderId() {
@@ -36,14 +39,22 @@ exports.payPage = async (req, res) => {
 };
 
 // API: return price rules (composite selections) for a service
+// ALSO returns whether service requires a printer and list of printers
 exports.apiGetPricesForService = async (req, res) => {
   try {
     const { serviceId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(serviceId)) return res.status(400).json({ error: 'Invalid service id' });
 
+    // Determine if service requires a printer
+    const serviceDoc = await Service.findById(serviceId).lean();
+    const serviceRequiresPrinter = !!(serviceDoc && serviceDoc.requiresPrinter);
+
     const prices = await ServicePrice.find({ service: serviceId })
       .populate('selections.unit selections.subUnit')
       .lean();
+
+    // fetch printers list for client to show if needed
+    const printers = await Printer.find().select('_id name').sort('name').lean();
 
     const out = prices.map(p => ({
       _id: p._id,
@@ -56,7 +67,7 @@ exports.apiGetPricesForService = async (req, res) => {
       price2: (p.price2 !== undefined && p.price2 !== null) ? p.price2 : null
     }));
 
-    return res.json({ ok: true, prices: out });
+    return res.json({ ok: true, prices: out, serviceRequiresPrinter, printers });
   } catch (err) {
     console.error('apiGetPricesForService error', err);
     return res.status(500).json({ error: 'Error fetching prices' });
@@ -64,7 +75,7 @@ exports.apiGetPricesForService = async (req, res) => {
 };
 
 // API: create order
-// expects body: { items: [{ serviceId, priceRuleId, pages (optional), fb (optional boolean) } , ...] }
+// expects body: { items: [{ serviceId, priceRuleId, pages (optional), fb (optional boolean), printerId (optional) } , ...] }
 // Server-authoritative pricing: when items[].fb is true and the price rule has price2, use price2.
 exports.apiCreateOrder = async (req, res) => {
   try {
@@ -73,12 +84,13 @@ exports.apiCreateOrder = async (req, res) => {
       return res.status(400).json({ error: 'No items provided' });
     }
 
-    // normalize pages and fb flag and validate shape
+    // normalize pages, fb flag and validate shape; also normalize printerId (may be null)
     items = items.map(it => ({
       serviceId: it.serviceId,
       priceRuleId: it.priceRuleId,
       pages: Number(it.pages) || 1,
-      fb: (it.fb === true || it.fb === 'true' || it.fb === 1 || it.fb === '1') ? true : false
+      fb: (it.fb === true || it.fb === 'true' || it.fb === 1 || it.fb === '1') ? true : false,
+      printerId: it.printerId || null
     }));
 
     const builtItems = [];
@@ -117,8 +129,31 @@ exports.apiCreateOrder = async (req, res) => {
         subUnit: s.subUnit && s.subUnit._id ? s.subUnit._id : s.subUnit
       }));
 
+      // Check whether this service requires a printer
+      const svc = await Service.findById(it.serviceId).lean();
+      const svcRequiresPrinter = !!(svc && svc.requiresPrinter);
+
+      // validate printer if required
+      let printerId = null;
+      if (svcRequiresPrinter) {
+        if (!it.printerId || !mongoose.Types.ObjectId.isValid(it.printerId)) {
+          return res.status(400).json({ error: 'Printer required for one or more items' });
+        }
+        const prDoc = await Printer.findById(it.printerId).lean();
+        if (!prDoc) return res.status(400).json({ error: `Printer ${it.printerId} not found` });
+        printerId = new mongoose.Types.ObjectId(it.printerId);
+      } else {
+        // if provided but invalid, ignore or validate format
+        if (it.printerId && mongoose.Types.ObjectId.isValid(it.printerId)) {
+          // allow storing if client provided printer for non-required service (optional)
+          const maybePrinter = await Printer.findById(it.printerId).lean();
+          if (maybePrinter) printerId = new mongoose.Types.ObjectId(it.printerId);
+        }
+      }
+
       builtItems.push({
         service: it.serviceId,
+        printer: printerId, // may be null
         selections: selectionsForOrder,
         selectionLabel,
         unitPrice,
@@ -140,7 +175,7 @@ exports.apiCreateOrder = async (req, res) => {
     await order.save();
 
     // --- MATERIAL MATCHING & RECORDING ---
- try {
+    try {
       // load all materials (global + those scoped to services involved)
       const serviceIds = Array.from(new Set(builtItems.map(it => String(it.service))));
       const mats = await Material.find().lean();
@@ -209,6 +244,7 @@ exports.apiCreateOrder = async (req, res) => {
     return res.status(500).json({ error: 'Error creating order' });
   }
 };
+
 // API: fetch order by orderId (returns order summary)
 exports.apiGetOrderById = async (req, res) => {
   try {

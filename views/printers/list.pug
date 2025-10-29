@@ -1,0 +1,386 @@
+extends ../layout
+
+block content
+  .d-flex.justify-content-between.align-items-center.mb-4
+    h3.mb-0 Printers
+    a.btn.btn-secondary(href='/admin/services') Back to Services
+
+  .card
+    .card-body
+      p.text-muted.mb-3 Manage physical printers used for printing jobs. Add a printer, edit its name, or remove it.
+
+      // Add Printer inline form (Bootstrap validation) — still works without JS
+      form#add-printer-form.needs-validation(method='post', action='/admin/printers', class='row g-2 align-items-center mb-3', novalidate)
+        .col
+          input.form-control(type='text', name='name', id='addPrinterName', placeholder='Printer name (e.g., Epson-1)', required)
+          .invalid-feedback Please provide a printer name.
+        .col-auto
+          button.btn.btn-primary(type='submit', id='addPrinterBtn')
+            span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', style='display:none;', id='addPrinterSpinner')
+            | Add Printer
+
+      // Success message container (for AJAX)
+      .mt-2
+        .alert.alert-success.role-alert#addPrinterSuccess(style='display:none;')
+          strong Added —
+          span#addPrinterSuccessText
+
+      hr
+
+      // Printers table — initially server-rendered; client JS will update it
+      if printers && printers.length
+        table.table.table-sm.table-hover
+          thead
+            tr
+              th Name
+              th.text-end Actions
+          tbody#printersTbody
+            each pr in printers
+              tr(data-id=pr._id)
+                td.printer-name= pr.name
+                td.text-end
+                  .btn-group
+                    button.btn.btn-sm.btn-light.edit-printer-btn(type='button', data-printer-id=pr._id, data-printer-name=pr.name)
+                      i.bi.bi-pencil.me-1
+                      | Edit
+                    button.btn.btn-sm.btn-light.delete-printer-btn(type='button', data-action=`/admin/printers/${pr._id}`, data-printer-name=pr.name)
+                      i.bi.bi-trash.me-1
+                      | Delete
+      else
+        p.text-muted.mb-0 No printers defined yet.
+
+  // Edit Printer Modal (so edit_items.js can use a consistent modal pattern — but we wire it locally too)
+  .modal.fade(id='editPrinterModal', tabindex='-1', aria-labelledby='editPrinterModalLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id='editPrinterModalLabel') Edit Printer
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          form#editPrinterForm
+            input(type='hidden', id='editPrinterId', name='id')
+            .mb-3
+              label.form-label(for='editPrinterName') Printer Name
+              input.form-control(type='text', id='editPrinterName', name='name', required)
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary(type='button', id='saveEditPrinterBtn') Save changes
+
+  // Small inline delete confirmation modal (used only on this page)
+  .modal.fade(id='printersDeleteConfirm', tabindex='-1', aria-labelledby='printersDeleteConfirmLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id='printersDeleteConfirmLabel') Confirm delete
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          p#printersDeleteMessage Are you sure you want to delete this printer?
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-danger(type='button', id='confirmDeletePrinterBtn') Yes, delete
+
+block append scripts
+  // Page-specific AJAX handlers for printers (add / edit / delete)
+  script.
+    (function () {
+      'use strict';
+
+      // Elements
+      const addForm = document.getElementById('add-printer-form');
+      const addNameEl = document.getElementById('addPrinterName');
+      const addBtn = document.getElementById('addPrinterBtn');
+      const addSpinner = document.getElementById('addPrinterSpinner');
+      const addSuccess = document.getElementById('addPrinterSuccess');
+      const addSuccessText = document.getElementById('addPrinterSuccessText');
+      const printersTbody = document.getElementById('printersTbody');
+
+      const editModalEl = document.getElementById('editPrinterModal');
+      const editModal = (window.bootstrap && editModalEl) ? new bootstrap.Modal(editModalEl) : null;
+      const editForm = document.getElementById('editPrinterForm');
+      const editIdEl = document.getElementById('editPrinterId');
+      const editNameEl = document.getElementById('editPrinterName');
+      const saveEditBtn = document.getElementById('saveEditPrinterBtn');
+
+      const delModalEl = document.getElementById('printersDeleteConfirm');
+      const delModal = (window.bootstrap && delModalEl) ? new bootstrap.Modal(delModalEl) : null;
+      const delMessage = document.getElementById('printersDeleteMessage');
+      const confirmDeleteBtn = document.getElementById('confirmDeletePrinterBtn');
+
+      let pendingDeleteAction = null;
+      let pendingDeleteRow = null;
+
+      // Utility: create a table row for a printer object { _id, name }
+      function createPrinterRow(pr) {
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-id', pr._id);
+        tr.innerHTML = `
+          <td class="printer-name">${escapeHtml(pr.name)}</td>
+          <td class="text-end">
+            <div class="btn-group">
+              <button class="btn btn-sm btn-light edit-printer-btn" type="button" data-printer-id="${pr._id}" data-printer-name="${escapeHtmlAttr(pr.name)}">
+                <i class="bi bi-pencil me-1"></i> Edit
+              </button>
+              <button class="btn btn-sm btn-light delete-printer-btn" type="button" data-action="/admin/printers/${pr._id}" data-printer-name="${escapeHtmlAttr(pr.name)}">
+                <i class="bi bi-trash me-1"></i> Delete
+              </button>
+            </div>
+          </td>
+        `;
+        return tr;
+      }
+
+      function escapeHtml(s) {
+        if (!s) return '';
+        return String(s).replace(/[&<>"'`=\/]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
+      }
+      function escapeHtmlAttr(s) {
+        if (!s) return '';
+        return String(s).replace(/["']/g, function (c) { return c === '"' ? '&quot;' : '&#39;'; });
+      }
+
+      // Add printer via AJAX (falls back to normal form if JS disabled)
+      if (addForm) {
+        addForm.addEventListener('submit', async function (ev) {
+          ev.preventDefault();
+          if (!addNameEl || !addNameEl.value.trim()) {
+            try { addNameEl.classList.add('is-invalid'); } catch (e) {}
+            return;
+          }
+          const name = addNameEl.value.trim();
+
+          // UI guard
+          addBtn.disabled = true;
+          if (addSpinner) addSpinner.style.display = 'inline-block';
+
+          // also defensively show any spinner-border the global forms spinner might have inserted
+          try {
+            const extraSpinners = addBtn.querySelectorAll && addBtn.querySelectorAll('.spinner-border');
+            if (extraSpinners && extraSpinners.length) {
+              extraSpinners.forEach(s => { try { s.style.display = 'inline-block'; } catch(_){} });
+            }
+          } catch(e) {}
+
+          try {
+            const body = new URLSearchParams();
+            body.append('name', name);
+
+            const res = await fetch(addForm.action, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+              body: body.toString()
+            });
+
+            if (!res.ok) {
+              const ct = res.headers.get('content-type') || '';
+              if (ct.includes('application/json')) {
+                const j = await res.json().catch(()=>null);
+                alert((j && j.error) ? j.error : 'Failed to add printer');
+                return;
+              }
+              // fallback: reload
+              window.location.reload();
+              return;
+            }
+
+            const j = await res.json().catch(()=>null);
+            const created = j && j.printer ? j.printer : null;
+            // If server returns JSON with created printer, use it; otherwise fallback to reloading.
+            if (created && created._id) {
+              if (!printersTbody) {
+                window.location.reload();
+                return;
+              }
+              // append row
+              const tr = createPrinterRow(created);
+              printersTbody.appendChild(tr);
+              // clear form
+              addNameEl.value = '';
+              // show success toast/alert
+              if (addSuccess && addSuccessText) {
+                addSuccessText.textContent = created.name;
+                addSuccess.style.display = 'block';
+                setTimeout(()=> { addSuccess.style.display = 'none'; }, 2600);
+              } else {
+                try { window.showGlobalToast && window.showGlobalToast('Printer added', 2000); } catch(_) {}
+              }
+            } else {
+              // if JSON not returned, reload to show update
+              window.location.reload();
+            }
+          } catch (err) {
+            console.error('Add printer failed', err);
+            alert('Failed to add printer');
+          } finally {
+            // always hide OUR spinner and any other spinner-border nodes that might have been added by global scripts
+            try {
+              if (addSpinner) addSpinner.style.display = 'none';
+              // hide any spinner-border elements inside the button (handles extra spinner appended by forms_spinner.js)
+              const spinners = addBtn.querySelectorAll ? addBtn.querySelectorAll('.spinner-border') : [];
+              if (spinners && spinners.length) {
+                spinners.forEach(s => { try { s.style.display = 'none'; } catch(_){} });
+              }
+            } catch(e) { console.error('hide spinners failed', e); }
+
+            addBtn.disabled = false;
+          }
+        });
+      }
+
+      // Delegate clicks for edit / delete buttons in the printers table
+      document.addEventListener('click', function (ev) {
+        const editBtn = ev.target.closest ? ev.target.closest('.edit-printer-btn') : null;
+        if (editBtn) {
+          ev.preventDefault();
+          const pid = editBtn.dataset.printerId;
+          const pname = editBtn.dataset.printerName || '';
+          if (!pid) return;
+          if (editIdEl) editIdEl.value = pid;
+          if (editNameEl) { editNameEl.value = pname; try { editNameEl.focus(); editNameEl.setSelectionRange(editNameEl.value.length, editNameEl.value.length); } catch(e){} }
+          if (editModal) editModal.show();
+          return;
+        }
+
+        const delBtn = ev.target.closest ? ev.target.closest('.delete-printer-btn') : null;
+        if (delBtn) {
+          ev.preventDefault();
+          const action = delBtn.dataset.action || delBtn.getAttribute('data-action') || null;
+          const pname = delBtn.dataset.printerName || '';
+          if (!action) return;
+          pendingDeleteAction = action;
+          pendingDeleteRow = delBtn.closest('tr');
+          if (delMessage) {
+            delMessage.textContent = pname ? `Delete printer: "${pname}"?` : 'Delete this printer?';
+          }
+          if (delModal) delModal.show();
+          else {
+            // fallback confirmation
+            if (confirm(`Delete printer: "${pname}"?`)) {
+              performDeletePrinter(action, pendingDeleteRow);
+            }
+          }
+          return;
+        }
+      });
+
+      // Save Edit (AJAX PUT)
+      if (saveEditBtn) {
+        saveEditBtn.addEventListener('click', async function () {
+          const id = editIdEl ? editIdEl.value : null;
+          const name = editNameEl ? editNameEl.value.trim() : '';
+          if (!id || !name) {
+            if (editNameEl) editNameEl.classList.add('is-invalid');
+            return;
+          }
+          saveEditBtn.disabled = true;
+          try {
+            const body = new URLSearchParams();
+            body.append('name', name);
+
+            const res = await fetch(`/admin/printers/${encodeURIComponent(id)}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+              body: body.toString()
+            });
+
+            if (!res.ok) {
+              const ct = res.headers.get('content-type') || '';
+              if (ct.includes('application/json')) {
+                const j = await res.json().catch(()=>null);
+                alert((j && j.error) ? j.error : 'Failed to update printer');
+                return;
+              }
+              window.location.reload();
+              return;
+            }
+
+            const j = await res.json().catch(()=>null);
+            const updated = j && j.printer ? j.printer : null;
+            if (updated && updated._id) {
+              // update row in table if present
+              if (printersTbody) {
+                const row = printersTbody.querySelector(`tr[data-id="${updated._id}"]`);
+                if (row) {
+                  const nameCell = row.querySelector('.printer-name');
+                  if (nameCell) nameCell.textContent = updated.name;
+                  // update data attributes on buttons
+                  const btn = row.querySelector('.edit-printer-btn');
+                  if (btn) btn.dataset.printerName = updated.name;
+                  const del = row.querySelector('.delete-printer-btn');
+                  if (del) del.dataset.printerName = updated.name;
+                } else {
+                  // not found — append
+                  printersTbody.appendChild(createPrinterRow(updated));
+                }
+              } else {
+                window.location.reload();
+                return;
+              }
+              if (editModal) editModal.hide();
+              try { window.showGlobalToast && window.showGlobalToast('Printer updated', 1800); } catch(_) {}
+            } else {
+              window.location.reload();
+            }
+          } catch (err) {
+            console.error('Save edit printer failed', err);
+            alert('Failed to update printer');
+          } finally {
+            saveEditBtn.disabled = false;
+          }
+        });
+      }
+
+      // Confirm delete button
+      if (confirmDeleteBtn) {
+        confirmDeleteBtn.addEventListener('click', async function () {
+          if (!pendingDeleteAction) {
+            if (delModal) delModal.hide();
+            return;
+          }
+          confirmDeleteBtn.disabled = true;
+          try {
+            await performDeletePrinter(pendingDeleteAction, pendingDeleteRow);
+            if (delModal) delModal.hide();
+          } catch (err) {
+            console.error('Delete printer failed', err);
+            alert('Failed to delete printer');
+          } finally {
+            confirmDeleteBtn.disabled = false;
+            pendingDeleteAction = null;
+            pendingDeleteRow = null;
+          }
+        });
+      }
+
+      // Performs the delete request (AJAX) and removes the row on success
+      async function performDeletePrinter(actionUrl, row) {
+        if (!actionUrl) return;
+        try {
+          const res = await fetch(actionUrl, {
+            method: 'DELETE',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+          if (!res.ok) {
+            const ct = res.headers.get('content-type') || '';
+            if (ct.includes('application/json')) {
+              const j = await res.json().catch(()=>null);
+              alert((j && j.error) ? j.error : 'Failed to delete printer');
+              return;
+            }
+            window.location.reload();
+            return;
+          }
+          // success -> remove row from DOM if present
+          if (row && row.parentNode) {
+            row.parentNode.removeChild(row);
+            try { window.showGlobalToast && window.showGlobalToast('Printer deleted', 1800); } catch(_) {}
+          } else {
+            // fallback reload
+            window.location.reload();
+          }
+        } catch (err) {
+          console.error('performDeletePrinter err', err);
+          throw err;
+        }
+      }
+
+    })();

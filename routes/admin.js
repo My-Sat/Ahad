@@ -9,7 +9,7 @@ const priceController = require('../controllers/price');
 const materialsController = require('../controllers/materials');
 router.get('/', (req, res) => res.redirect('/admin/services'));
 const recordsController = require('../controllers/records');
-
+const printersController = require('../controllers/printers');
 // Units
 router.post('/units', unitController.create);
 router.put('/units/:id', unitController.update);
@@ -61,5 +61,13 @@ router.get('/records', recordsController.index);
 router.get('/records/usage', recordsController.usageData);
 // CSV export of filtered usages
 router.get('/records/export', recordsController.exportCsv);
+
+router.get('/printers', printersController.list);
+router.post('/printers', printersController.create);
+router.put('/printers/:id', printersController.update);
+router.delete('/printers/:id', printersController.remove);
+
+// also expose simple API endpoint for client-side listing if needed
+router.get('/api/printers', printersController.listAll);
 
 module.exports = router;
