@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const orderDetailsModalEl = document.getElementById('orderDetailsModal');
   const orderDetailsModal = (window.bootstrap && orderDetailsModalEl) ? new bootstrap.Modal(orderDetailsModalEl) : null;
   const orderDetailsMeta = document.getElementById('orderDetailsMeta');
-  const orderDetailsJson = document.getElementById('orderDetailsJson');
+  const orderDetailsJson = document.getElementById('orderDetailsJson'); // we'll fill HTML into this element
   const copyDetailOrderIdBtn = document.getElementById('copyDetailOrderIdBtn');
   const printDetailOrderBtn = document.getElementById('printDetailOrderBtn');
 
@@ -55,12 +55,30 @@ document.addEventListener('DOMContentLoaded', function () {
     return `${yr}-${mm}-${dd}`;
   }
 
+  // highlight active preset button (visual + aria-pressed)
+  function setActivePreset(activeBtn) {
+    const presets = [presetTodayBtn, presetYesterdayBtn, presetThisWeekBtn].filter(Boolean);
+    presets.forEach(btn => {
+      if (!btn) return;
+      if (btn === activeBtn) {
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-primary');
+        btn.setAttribute('aria-pressed', 'true');
+      } else {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-outline-secondary');
+        btn.setAttribute('aria-pressed', 'false');
+      }
+    });
+  }
+
   // default date range => today
   function setDefaultDateRange() {
     const today = new Date();
     ordersFromEl.value = isoDate(today);
     ordersToEl.value = isoDate(today);
     if (ordersCountEl) ordersCountEl.textContent = 'Default: Today';
+    setActivePreset(presetTodayBtn);
   }
 
   // Parse a selectionLabel of form "Unit: Sub + Unit2: Sub2" into only subunit names [Sub, Sub2]
@@ -534,7 +552,14 @@ document.addEventListener('DOMContentLoaded', function () {
   function formatDateTimeForDisplay(dtStr) {
     try {
       const d = new Date(dtStr);
-      return d.toLocaleString();
+      // produce "29/10/2025, 14:47:32"
+      const dd = String(d.getDate()).padStart(2,'0');
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const yyyy = d.getFullYear();
+      const hh = String(d.getHours()).padStart(2,'0');
+      const min = String(d.getMinutes()).padStart(2,'0');
+      const ss = String(d.getSeconds()).padStart(2,'0');
+      return `${dd}/${mm}/${yyyy}, ${hh}:${min}:${ss}`;
     } catch (e) { return dtStr || ''; }
   }
 
@@ -544,7 +569,6 @@ document.addEventListener('DOMContentLoaded', function () {
       const url = `/api/orders?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
       const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
       if (!res.ok) {
-        // show friendly message — server might not implement listing endpoint
         const ct = res.headers.get('content-type') || '';
         let msg = `Failed to fetch orders (${res.status})`;
         if (ct.includes('application/json')) {
@@ -617,15 +641,45 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
       const o = j.order;
+
+      // Build friendly meta
       const metaText = `Order ID: ${o.orderId} — Total: GH₵ ${formatMoney(o.total)} — Status: ${o.status} — Created: ${formatDateTimeForDisplay(o.createdAt)}`;
       if (orderDetailsMeta) orderDetailsMeta.textContent = metaText;
+
+      // Build itemized HTML list/table
+      let html = '';
+      if (o.items && o.items.length) {
+        html += `<div class="table-responsive"><table class="table table-sm table-borderless mb-0"><thead><tr>
+          <th>Selection</th><th class="text-center">QTY</th><th class="text-end">Unit</th><th class="text-end">Subtotal</th><th class="text-center">Printer</th>
+        </tr></thead><tbody>`;
+        o.items.forEach(it => {
+          // Use selectionLabel if present, otherwise try to build fallback string from selections (but mostly selectionLabel exists)
+          const selLabel = it.selectionLabel ? escapeHtml(it.selectionLabel) : (it.selections && it.selections.length ? escapeHtml(it.selections.map(s => `${s.unit}:${s.subUnit}`).join(', ')) : '(no label)');
+          const qty = (typeof it.pages !== 'undefined' && it.pages !== null) ? String(it.pages) : '1';
+          const unitPrice = (typeof it.unitPrice === 'number' || !isNaN(Number(it.unitPrice))) ? formatMoney(it.unitPrice) : (it.unitPrice || '');
+          const subtotal = (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))) ? formatMoney(it.subtotal) : (it.subtotal || '');
+          const printerStr = it.printer ? escapeHtml(String(it.printer)) : '-';
+          html += `<tr>
+            <td>${selLabel}</td>
+            <td class="text-center">${escapeHtml(qty)}</td>
+            <td class="text-end">GH₵ ${escapeHtml(unitPrice)}</td>
+            <td class="text-end">GH₵ ${escapeHtml(subtotal)}</td>
+            <td class="text-center">${printerStr}</td>
+          </tr>`;
+        });
+        html += `</tbody></table></div>`;
+      } else {
+        html += '<p class="text-muted small mb-0">No items listed for this order.</p>';
+      }
+
+      // Additional details (createdAt/paidAt)
+      html += `<div class="mt-3 small text-muted">
+        <div>Created: ${formatDateTimeForDisplay(o.createdAt)}</div>
+        <div>Paid at: ${o.paidAt ? formatDateTimeForDisplay(o.paidAt) : 'Not paid'}</div>
+      </div>`;
+
       if (orderDetailsJson) {
-        // show formatted JSON for full details (items etc.)
-        try {
-          orderDetailsJson.textContent = JSON.stringify(o, null, 2);
-        } catch (e) {
-          orderDetailsJson.textContent = String(o);
-        }
+        orderDetailsJson.innerHTML = html;
       }
       if (orderDetailsModal) orderDetailsModal.show();
     } catch (err) {
@@ -641,22 +695,22 @@ document.addEventListener('DOMContentLoaded', function () {
     openOrdersExplorerBtn.addEventListener('click', function () {
       setDefaultDateRange();
       if (ordersExplorerModal) ordersExplorerModal.show();
-
-      // Auto-fetch for the default range immediately
+      // Auto-fetch immediately for the default range
       const from = ordersFromEl.value || isoDate(new Date());
       const to = ordersToEl.value || isoDate(new Date());
-      // best-effort: fetch list and ignore errors (fetchOrdersList handles errors/display)
       fetchOrdersList(from, to);
     });
   }
   if (presetTodayBtn) presetTodayBtn.addEventListener('click', function () {
     setDefaultDateRange();
+    setActivePreset(presetTodayBtn);
   });
   if (presetYesterdayBtn) presetYesterdayBtn.addEventListener('click', function () {
     const d = new Date();
     d.setDate(d.getDate() - 1);
     ordersFromEl.value = isoDate(d);
     ordersToEl.value = isoDate(d);
+    setActivePreset(presetYesterdayBtn);
   });
   if (presetThisWeekBtn) presetThisWeekBtn.addEventListener('click', function () {
     const now = new Date();
@@ -666,6 +720,7 @@ document.addEventListener('DOMContentLoaded', function () {
     monday.setDate(now.getDate() - diffToMonday);
     ordersFromEl.value = isoDate(monday);
     ordersToEl.value = isoDate(now);
+    setActivePreset(presetThisWeekBtn);
   });
 
   if (fetchOrdersBtn) {
@@ -712,7 +767,7 @@ document.addEventListener('DOMContentLoaded', function () {
   if (printDetailOrderBtn) {
     printDetailOrderBtn.addEventListener('click', function () {
       const meta = orderDetailsMeta ? orderDetailsMeta.textContent : '';
-      const json = orderDetailsJson ? orderDetailsJson.textContent : '';
+      const html = orderDetailsJson ? orderDetailsJson.innerHTML : '';
       // open print window
       const w = window.open('', '_blank', 'toolbar=0,location=0,menubar=0');
       if (!w) { alert('Unable to open print window (blocked).'); return; }
@@ -720,11 +775,11 @@ document.addEventListener('DOMContentLoaded', function () {
       w.document.open();
       w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
         <meta name="viewport" content="width=device-width,initial-scale=1">
-        <style>body{font-family:Arial,Helvetica,sans-serif;padding:22px;color:#111}pre{white-space:pre-wrap;background:#f8f9fa;padding:12px;border-radius:6px}</style>
+        <style>body{font-family:Arial,Helvetica,sans-serif;padding:22px;color:#111}pre{white-space:pre-wrap;background:#f8f9fa;padding:12px;border-radius:6px}table{width:100%;border-collapse:collapse}td,th{padding:6px;border-bottom:1px solid #eee}</style>
         </head><body>
         <div><img src="/public/images/AHAD LOGO.png" style="max-height:60px"/></div>
         <h2>Order</h2><p>${escapeHtml(meta || '')}</p>
-        <h3>Details</h3><pre>${escapeHtml(json || '')}</pre>
+        <div>${html || '<p>No details</p>'}</div>
         </body></html>`);
       w.document.close();
       w.focus();
