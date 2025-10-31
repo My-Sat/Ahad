@@ -181,6 +181,28 @@ document.addEventListener('DOMContentLoaded', function () {
         mid.appendChild(printerWrap);
       }
 
+            // SPOILED input (only shown for services that require a printer)
+      if (serviceRequiresPrinter) {
+        const spoiledWrap = document.createElement('div');
+        spoiledWrap.className = 'ms-2 d-flex align-items-center';
+        const spoiledLabel = document.createElement('label');
+        spoiledLabel.className = 'small mb-0 me-2';
+        spoiledLabel.textContent = 'Spoiled';
+        spoiledWrap.appendChild(spoiledLabel);
+
+        const spoiledInput = document.createElement('input');
+        spoiledInput.type = 'number';
+        spoiledInput.min = '0';
+        spoiledInput.step = '1';
+        spoiledInput.value = '0';
+        spoiledInput.className = 'form-control form-control-sm spoiled-input';
+        spoiledInput.style.width = '96px';
+        spoiledWrap.appendChild(spoiledInput);
+
+        mid.appendChild(spoiledWrap);
+      }
+
+
       // right: apply button
       const right = document.createElement('div');
       right.className = 'ms-auto';
@@ -240,8 +262,9 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // add item to cart
-  function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, pages, fb, printerId }) {
+  function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, pages, fb, printerId, spoiled }) {
     pages = Number(pages) || 1;
+    spoiled = Math.max(0, Math.floor(Number(spoiled) || 0));
     const subtotal = Number((Number(unitPrice) * pages).toFixed(2));
     cart.push({
       serviceId,
@@ -252,7 +275,8 @@ document.addEventListener('DOMContentLoaded', function () {
       pages,
       subtotal,
       fb: !!fb,
-      printerId: printerId || null
+      printerId: printerId || null,
+      spoiled
     });
     renderCart();
   }
@@ -275,7 +299,7 @@ document.addEventListener('DOMContentLoaded', function () {
       tr.innerHTML = `
         <td>
           <div class="small text-muted">${escapeHtml(it.serviceName || '')}</div>
-          <div>${escapeHtml(it.selectionLabel)}${it.fb ? ' (F/B)' : ''}</div>
+          <div>${escapeHtml(it.selectionLabel)}${it.fb ? ' (F/B)' : ''}${it.spoiled && it.spoiled > 0 ? '<br/><small class="text-danger">Spoiled: ' + String(it.spoiled) + '</small>' : ''}</div>
         </td>
         <td class="text-center">${it.pages}</td>
         <td class="text-end">GH₵ ${formatMoney(it.unitPrice)}</td>
@@ -317,6 +341,15 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
 
+        // read spoiled value from same row (if present), coerce to integer >= 0
+    let spoiled = 0;
+    const spoiledInput = row ? row.querySelector('.spoiled-input') : null;
+    if (spoiledInput && spoiledInput.value !== undefined && spoiledInput.value !== null && String(spoiledInput.value).trim() !== '') {
+      const n = Number(spoiledInput.value);
+      spoiled = (isNaN(n) || n < 0) ? 0 : Math.floor(n);
+    }
+
+
     // choose unitPrice: price2 if F/B checked and price2 available, else price
     let chosenPrice = Number(priceObj.unitPrice);
     if (fbChecked && priceObj.price2 !== null && priceObj.price2 !== undefined) {
@@ -332,10 +365,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const serviceName = (serviceSelect && serviceSelect.options[serviceSelect.selectedIndex]) ? (serviceSelect.options[serviceSelect.selectedIndex].text || '') : '';
 
     // pass printerId through (kept internally) but do NOT display it in cart
-    addToCart({ serviceId, serviceName, priceRuleId: prId, label, unitPrice: chosenPrice, pages, fb: fbChecked, printerId: selectedPrinterId });
+    addToCart({ serviceId, serviceName, priceRuleId: prId, label, unitPrice: chosenPrice, pages, fb: fbChecked, printerId: selectedPrinterId, spoiled });
 
     // FIX: clear input fields after Apply (qty input, fb checkbox, printer select)
     try {
+      if (spoiledInput) { spoiledInput.value = '0'; }
       if (pagesInput) pagesInput.value = '';
       if (fbCheckbox) { fbCheckbox.checked = false; }
       const printerSelect = row ? row.querySelector('.printer-select') : null;
@@ -374,7 +408,8 @@ document.addEventListener('DOMContentLoaded', function () {
           priceRuleId: it.priceRuleId,
           pages: it.pages,
           fb: !!it.fb,
-          printerId: it.printerId || null
+          printerId: it.printerId || null,
+          spoiled: (typeof it.spoiled === 'number') ? it.spoiled : 0
         }))
       };
       const res = await fetch('/api/orders', {
