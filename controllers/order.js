@@ -85,13 +85,23 @@ exports.apiCreateOrder = async (req, res) => {
     }
 
     // normalize pages, fb flag and validate shape; also normalize printerId (may be null)
-    items = items.map(it => ({
-      serviceId: it.serviceId,
-      priceRuleId: it.priceRuleId,
-      pages: Number(it.pages) || 1,
-      fb: (it.fb === true || it.fb === 'true' || it.fb === 1 || it.fb === '1') ? true : false,
-      printerId: it.printerId || null
-    }));
+    items = items.map(it => {
+      const pages = Number(it.pages) || 1;
+      const fb = (it.fb === true || it.fb === 'true' || it.fb === 1 || it.fb === '1') ? true : false;
+      let spoiled = 0;
+      if (it.spoiled !== undefined && it.spoiled !== null && String(it.spoiled).trim() !== '') {
+        const sp = Number(it.spoiled);
+        spoiled = (isNaN(sp) || sp < 0) ? 0 : Math.floor(sp);
+      }
+      return {
+        serviceId: it.serviceId,
+        priceRuleId: it.priceRuleId,
+        pages,
+        fb,
+        printerId: it.printerId || null,
+        spoiled
+      };
+    });
 
     const builtItems = [];
     let total = 0;
@@ -158,7 +168,8 @@ exports.apiCreateOrder = async (req, res) => {
         selectionLabel,
         unitPrice,
         pages,
-        subtotal
+        subtotal,
+        spoiled: Number(it.spoiled) || 0
       });
 
       total += subtotal;
@@ -199,13 +210,17 @@ exports.apiCreateOrder = async (req, res) => {
             // Determine final count using pages & fb detection:
             let pages = Number(it.pages) || 1;
             const isFb = String(it.selectionLabel || '').includes('(F/B)');
-            let count = 1;
+            let baseCount = 1;
             if (!pages || pages <= 0) {
-              count = 1;
+              baseCount = 1;
             } else {
-              if (isFb) count = Math.ceil(pages / 2);
-              else count = pages;
+              if (isFb) baseCount = Math.ceil(pages / 2);
+              else baseCount = pages;
             }
+
+            // ensure spoiled is integer >= 0
+            const spoiled = (it.spoiled !== undefined && it.spoiled !== null) ? Math.floor(Number(it.spoiled) || 0) : 0;
+            const count = Math.max(0, baseCount) + Math.max(0, spoiled);
 
             // create usage record
             await MaterialUsage.create({
@@ -223,8 +238,7 @@ exports.apiCreateOrder = async (req, res) => {
               { upsert: true, new: true }
             );
 
-            // NEW: decrement stock for the material (allow negative to indicate backorder)
-            // We decrement even if stock becomes negative (so admins can spot shortages)
+            // decrement stock for the material (allow negative to indicate backorder)
             try {
               await Material.findByIdAndUpdate(m._id, { $inc: { stock: -count } });
             } catch (stockErr) {
