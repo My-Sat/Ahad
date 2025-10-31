@@ -268,6 +268,27 @@ exports.apiGetOrderById = async (req, res) => {
     const order = await Order.findOne({ orderId }).lean();
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
+    // Populate printer names for items that reference a printer (keep existing behavior otherwise)
+    try {
+      const printerIds = Array.from(new Set((order.items || []).filter(it => it.printer).map(it => String(it.printer))));
+      if (printerIds.length) {
+        const printers = await Printer.find({ _id: { $in: printerIds } }).select('_id name').lean();
+        const pmap = {};
+        printers.forEach(p => { pmap[String(p._id)] = p.name || String(p._id); });
+        // replace item.printer (id) with printer name string for client convenience
+        order.items = (order.items || []).map(it => {
+          if (it.printer) {
+            const pid = String(it.printer);
+            return Object.assign({}, it, { printer: (pmap[pid] || pid) });
+          }
+          return it;
+        });
+      }
+    } catch (pErr) {
+      // If printer lookup fails, keep original ids (do not block response)
+      console.error('Failed to populate printer names for order items', pErr);
+    }
+
     // return minimal data
     return res.json({
       ok: true,

@@ -687,21 +687,32 @@ document.addEventListener('DOMContentLoaded', function () {
         html += `<div class="table-responsive"><table class="table table-sm table-borderless mb-0"><thead><tr>
           <th>Selection</th><th class="text-center">QTY</th><th class="text-end">Unit</th><th class="text-end">Subtotal</th><th class="text-center">Printer</th>
         </tr></thead><tbody>`;
+
         o.items.forEach(it => {
-          // Use selectionLabel if present, otherwise try to build fallback string from selections (but mostly selectionLabel exists)
-          const selLabel = it.selectionLabel ? escapeHtml(it.selectionLabel) : (it.selections && it.selections.length ? escapeHtml(it.selections.map(s => `${s.unit}:${s.subUnit}`).join(', ')) : '(no label)');
+          // Show ONLY the sub-unit names (comma-separated). Use selectionLabel if present.
+          const rawLabel = it.selectionLabel || '';
+          const selLabel = subUnitsOnlyFromLabel(rawLabel) || (it.selections && it.selections.length ? it.selections.map(s => (s.subUnit ? (s.subUnit.name || String(s.subUnit)) : '')).join(', ') : '(no label)');
+          const isFb = (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
+          const cleanLabel = isFb ? selLabel.replace(/\s*\(F\/B\)\s*$/i, '').trim() : selLabel;
+
           const qty = (typeof it.pages !== 'undefined' && it.pages !== null) ? String(it.pages) : '1';
           const unitPrice = (typeof it.unitPrice === 'number' || !isNaN(Number(it.unitPrice))) ? formatMoney(it.unitPrice) : (it.unitPrice || '');
           const subtotal = (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))) ? formatMoney(it.subtotal) : (it.subtotal || '');
+          // Use printer name if server provided it, otherwise dash
           const printerStr = it.printer ? escapeHtml(String(it.printer)) : '-';
+
+          // Render selection inline, not broken into lines
+          const labelHtml = `<div>${escapeHtml(cleanLabel)}${isFb ? ' <span class="badge bg-secondary ms-2">F/B</span>' : ''}</div>`;
+
           html += `<tr>
-            <td>${selLabel}</td>
+            <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;">${labelHtml}</td>
             <td class="text-center">${escapeHtml(qty)}</td>
             <td class="text-end">GH₵ ${escapeHtml(unitPrice)}</td>
             <td class="text-end">GH₵ ${escapeHtml(subtotal)}</td>
             <td class="text-center">${printerStr}</td>
           </tr>`;
         });
+
         html += `</tbody></table></div>`;
       } else {
         html += '<p class="text-muted small mb-0">No items listed for this order.</p>';

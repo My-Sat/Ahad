@@ -30,19 +30,41 @@ document.addEventListener('DOMContentLoaded', function () {
     currentOrderId = order.orderId;
     currentOrderTotal = order.total;
 
-    // Build items list
+    // helper: extract sub-units-only from selectionLabel "Unit: Sub + Unit2: Sub2" -> "Sub, Sub2"
+    function subUnitsOnlyFromLabel(selectionLabel) {
+      if (!selectionLabel) return '';
+      const parts = selectionLabel.split(/\s*\+\s*/);
+      const subs = parts.map(part => {
+        const idx = part.indexOf(':');
+        if (idx >= 0) return part.slice(idx + 1).trim();
+        return part.trim();
+      }).filter(Boolean);
+      return subs.join(', ');
+    }
+
+    // Build items list (inline selection per item; printer name shown)
     const itemsHtml = (order.items && order.items.length)
-      ? `<ul class="mb-2">${order.items.map(it => {
-        const label = it.selectionLabel || '(item)';
-        // detect fb either by explicit flag or by label suffix
-        const isFb = (it.fb === true) || (typeof label === 'string' && label.includes('(F/B)'));
-        const cleanLabel = (isFb) ? label.replace(/\s*\(F\/B\)\s*$/i, '').trim() : label;
+      ? `<div class="mb-2"><div class="list-group">` + order.items.map(it => {
+        const rawLabel = it.selectionLabel || '(item)';
+        const isFb = (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
+        const cleanLabel = isFb ? subUnitsOnlyFromLabel(rawLabel).replace(/\s*\(F\/B\)\s*$/i, '').trim() : subUnitsOnlyFromLabel(rawLabel) || rawLabel;
         const qty = Number(it.pages || 1);
         const unit = Number(it.unitPrice || 0);
         const subtotal = Number(it.subtotal || (qty * unit));
         const fbBadge = isFb ? ' <span class="badge bg-secondary ms-2">F/B</span>' : '';
-        return `<li>${escapeHtml(cleanLabel)}${fbBadge} — ${qty} × GH₵ ${fmt(unit)} = GH₵ ${fmt(subtotal)}</li>`;
-      }).join('')}</ul>`
+        // printer: server should send name; fallback to id/string
+        const printerName = it.printer ? escapeHtml(String(it.printer)) : '-';
+        return `<div class="list-group-item d-flex justify-content-between align-items-center">
+            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:420px;">
+              ${escapeHtml(cleanLabel)}${fbBadge}
+            </div>
+            <div class="text-end small text-muted">
+              <div>${qty} × GH₵ ${fmt(unit)}</div>
+              <div>Printer: ${printerName}</div>
+            </div>
+            <div class="ms-3"><strong>GH₵ ${fmt(subtotal)}</strong></div>
+          </div>`;
+      }).join('') + `</div></div>`
       : '<p class="text-muted">No items in this order.</p>';
 
     const statusLabel = order.status ? escapeHtml(order.status) : 'unknown';
