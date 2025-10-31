@@ -103,6 +103,53 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+    // ------------------------------------------------------------------
+  // Small reusable modal alert (creates DOM element on first use)
+  // Usage: showAlertModal('Message text', 'Optional Title');
+  // ------------------------------------------------------------------
+  function showAlertModal(message, title = 'Notice') {
+    // prefer existing global toast if that's desired, but we also create a modal
+    // create modal only once
+    let modalEl = document.getElementById('genericAlertModal');
+    if (!modalEl) {
+      const html = `
+<div class="modal fade" id="genericAlertModal" tabindex="-1" aria-labelledby="genericAlertModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="genericAlertModalLabel"></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="genericAlertModalBody"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      document.body.appendChild(container.firstElementChild);
+      modalEl = document.getElementById('genericAlertModal');
+    }
+
+    try {
+      const titleEl = modalEl.querySelector('#genericAlertModalLabel');
+      const bodyEl = modalEl.querySelector('#genericAlertModalBody');
+      if (titleEl) titleEl.textContent = title || 'Notice';
+      if (bodyEl) {
+        // keep message as plain text for safety, allow simple markup if needed
+        bodyEl.innerHTML = escapeHtml(String(message || ''));
+      }
+      const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+      inst.show();
+    } catch (err) {
+      // fallback: if modal show fails, fall back to alert (worst-case)
+      try { alert(message); } catch (e) { console.error('Alert fallback failed', e); }
+    }
+  }
+
+
   // render the prices list (each item: selection (subunits comma-separated), qty input, F/B checkbox, Apply button)
   function renderPrices() {
     if (!prices || !prices.length) {
@@ -346,7 +393,9 @@ document.addEventListener('DOMContentLoaded', function () {
       selectedPrinterId = printerSelect ? (printerSelect.value || null) : null;
       if (!selectedPrinterId) {
         try { window.showGlobalToast && window.showGlobalToast('Please select a printer for this service', 2200); } catch(_) {}
-        return alert('This service requires a printer. Please choose a printer before adding to cart.');
+        // use modal instead of native alert for a nicer UI
+        showAlertModal('This service requires a printer. Please choose a printer before adding to cart.', 'Printer required');
+        return;
       }
     }
 
