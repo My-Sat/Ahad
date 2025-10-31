@@ -113,31 +113,33 @@ document.addEventListener('DOMContentLoaded', function () {
     container.className = 'list-group';
     prices.forEach(p => {
       const row = document.createElement('div');
-      row.className = 'list-group-item d-flex align-items-center gap-3 flex-column flex-md-row';
+      // keep everything on a single horizontal row and prevent wrapping
+      row.className = 'list-group-item d-flex align-items-center gap-3 flex-nowrap';
 
       // left: label (only subunits)
       const left = document.createElement('div');
-      left.className = 'flex-grow-1';
+      left.className = 'flex-grow-1 text-truncate'; // allow ellipsis if too long
       const subOnly = subUnitsOnlyFromLabel(p.selectionLabel || '');
       const label = document.createElement('div');
-      label.innerHTML = `<strong>${escapeHtml(subOnly)}</strong>`;
+      label.innerHTML = `<strong class="d-inline-block text-truncate" style="max-width:420px;">${escapeHtml(subOnly)}</strong>`;
       left.appendChild(label);
 
-      // middle: qty input and FB checkbox
+      // middle: qty input, FB checkbox, optional printer + spoiled inputs
       const mid = document.createElement('div');
-      mid.className = 'me-2 d-flex align-items-center gap-2';
+      // fixed layout container that won't wrap; children will be inline and spaced
+      mid.className = 'd-flex align-items-center gap-2 flex-nowrap';
 
       const input = document.createElement('input');
       input.type = 'number';
       input.min = '1';
       input.className = 'form-control form-control-sm pages-input';
-      input.placeholder = 'Qty (optional)';
-      input.style.width = '110px';
+      input.placeholder = 'Qty';
+      input.style.width = '90px';
       mid.appendChild(input);
 
       // F/B checkbox
       const fbWrap = document.createElement('div');
-      fbWrap.className = 'form-check form-check-inline ms-2';
+      fbWrap.className = 'form-check form-check-inline ms-1';
       const fbInput = document.createElement('input');
       fbInput.type = 'checkbox';
       fbInput.className = 'form-check-input fb-checkbox';
@@ -154,7 +156,7 @@ document.addEventListener('DOMContentLoaded', function () {
       // printer select (if service requires)
       if (serviceRequiresPrinter) {
         const printerWrap = document.createElement('div');
-        printerWrap.className = 'ms-2 d-flex align-items-center';
+        printerWrap.className = 'd-flex align-items-center';
         const sel = document.createElement('select');
         sel.className = 'form-select form-select-sm printer-select';
         sel.style.width = '220px';
@@ -179,29 +181,23 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         printerWrap.appendChild(sel);
         mid.appendChild(printerWrap);
-      }
 
-            // SPOILED input (only shown for services that require a printer)
-      if (serviceRequiresPrinter) {
+        // SPOILED input (only shown for services that require a printer)
         const spoiledWrap = document.createElement('div');
-        spoiledWrap.className = 'ms-2 d-flex align-items-center';
-        const spoiledLabel = document.createElement('label');
-        spoiledLabel.className = 'small mb-0 me-2';
-        spoiledLabel.textContent = 'Spoiled';
-        spoiledWrap.appendChild(spoiledLabel);
-
+        spoiledWrap.className = 'd-flex align-items-center';
         const spoiledInput = document.createElement('input');
         spoiledInput.type = 'number';
         spoiledInput.min = '0';
         spoiledInput.step = '1';
-        spoiledInput.value = '0';
+        spoiledInput.value = '';
+        spoiledInput.placeholder = 'Spoiled';
+        spoiledInput.setAttribute('aria-label', 'Spoiled count');
         spoiledInput.className = 'form-control form-control-sm spoiled-input';
         spoiledInput.style.width = '96px';
+        spoiledInput.title = 'Spoiled count';
         spoiledWrap.appendChild(spoiledInput);
-
         mid.appendChild(spoiledWrap);
       }
-
 
       // right: apply button
       const right = document.createElement('div');
@@ -296,10 +292,23 @@ document.addEventListener('DOMContentLoaded', function () {
       total += it.subtotal;
       const tr = document.createElement('tr');
       tr.dataset.idx = idx;
+
+      // prepare display label and avoid duplicate (F/B)
+      let displayLabel = it.selectionLabel || '';
+      const hasFbInLabel = /\(F\/B\)/i.test(displayLabel);
+      if (it.fb && !hasFbInLabel) {
+        displayLabel = `${displayLabel} (F/B)`;
+      }
+
+      // show spoiled inline under label if > 0
+      const spoiledHtml = (it.spoiled && it.spoiled > 0) ? `<br/><small class="text-danger">Spoiled: ${String(it.spoiled)}</small>` : '';
+
       tr.innerHTML = `
         <td>
           <div class="small text-muted">${escapeHtml(it.serviceName || '')}</div>
-          <div>${escapeHtml(it.selectionLabel)}${it.fb ? ' (F/B)' : ''}${it.spoiled && it.spoiled > 0 ? '<br/><small class="text-danger">Spoiled: ' + String(it.spoiled) + '</small>' : ''}</div>
+          <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">
+            ${escapeHtml(displayLabel)}${spoiledHtml}
+          </div>
         </td>
         <td class="text-center">${it.pages}</td>
         <td class="text-end">GH₵ ${formatMoney(it.unitPrice)}</td>
@@ -341,41 +350,40 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
 
-        // read spoiled value from same row (if present), coerce to integer >= 0
-    let spoiled = 0;
+ let spoiled = 0;
     const spoiledInput = row ? row.querySelector('.spoiled-input') : null;
     if (spoiledInput && spoiledInput.value !== undefined && spoiledInput.value !== null && String(spoiledInput.value).trim() !== '') {
       const n = Number(spoiledInput.value);
       spoiled = (isNaN(n) || n < 0) ? 0 : Math.floor(n);
     }
 
-
-    // choose unitPrice: price2 if F/B checked and price2 available, else price
+// choose unitPrice: price2 if F/B checked and price2 available, else price
     let chosenPrice = Number(priceObj.unitPrice);
     if (fbChecked && priceObj.price2 !== null && priceObj.price2 !== undefined) {
       chosenPrice = Number(priceObj.price2);
     }
 
-    // label to show in cart should be the subunits-only label, append (F/B) if chosen
+// label to show in cart should be the subunits-only label
     let label = subUnitsOnlyFromLabel(priceObj.selectionLabel || '');
+    // ensure we only append (F/B) once — do not duplicate if label already contains it
     if (fbChecked && (priceObj.price2 !== null && priceObj.price2 !== undefined)) {
-      label = `${label} (F/B)`;
+      if (!/\(F\/B\)/i.test(label)) {
+        label = `${label} (F/B)`;
+      }
     }
 
     const serviceName = (serviceSelect && serviceSelect.options[serviceSelect.selectedIndex]) ? (serviceSelect.options[serviceSelect.selectedIndex].text || '') : '';
-
-    // pass printerId through (kept internally) but do NOT display it in cart
+// pass printerId and spoiled through (kept internally) but do NOT display printer id in cart
     addToCart({ serviceId, serviceName, priceRuleId: prId, label, unitPrice: chosenPrice, pages, fb: fbChecked, printerId: selectedPrinterId, spoiled });
 
-    // FIX: clear input fields after Apply (qty input, fb checkbox, printer select)
+    // clear inputs after Apply (qty input, fb checkbox, printer select, spoiled)
     try {
-      if (spoiledInput) { spoiledInput.value = '0'; }
       if (pagesInput) pagesInput.value = '';
       if (fbCheckbox) { fbCheckbox.checked = false; }
       const printerSelect = row ? row.querySelector('.printer-select') : null;
       if (printerSelect) { printerSelect.selectedIndex = 0; }
+      if (spoiledInput) { spoiledInput.value = ''; }
     } catch (err) {
-      // ignore any clearing errors
       console.warn('Failed to clear inputs after Apply', err);
     }
 
