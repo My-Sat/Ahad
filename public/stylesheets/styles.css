@@ -1,4 +1,3 @@
-
 /* grey app background */
 body.app-bg {
   background: #f3f4f6;
@@ -19,7 +18,7 @@ header {
   max-width: 1100px;
 }
 
-/* tab link styles */
+/* tab link styles (originally used .nav-tabs; kept intact) */
 .nav-tabs .nav-link {
   color: #374151;
   border: none;
@@ -47,10 +46,9 @@ header {
   .nav-tabs .nav-item { display: inline-block; }
 }
 
-
 /* --- UI tweaks: service link color and no-underline --- */
 a.service-link {
-  color: #000000; /* teal-ish, nicer than default blue */
+  color: #000000; /* intentional: neutral black for clarity */
   text-decoration: none;
   font-weight: 400;
 }
@@ -96,3 +94,160 @@ a.service-link:focus {
 
 /* align action column compactly */
 .table td.text-end { vertical-align: middle; white-space: nowrap; }
+
+/* === Added/enhanced brand + logo + pills nav (scoped to avoid conflicts) === */
+
+/* Consolidated logo rule — use .site-logo throughout templates */
+.site-logo,
+header a img[alt="AHAD Logo"] {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  display: block;
+  border-radius: 6px;
+}
+
+/* Responsive logo fallback */
+@media (max-width: 767.98px) {
+  .site-logo,
+  header a img[alt="AHAD Logo"] {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* Nav pills — scoped to the topTabs nav so it doesn't clash with existing .nav-tabs rules */
+nav#topTabs .nav-pills {
+  --bs-nav-link-padding-x: .9rem;
+  --bs-nav-link-padding-y: .45rem;
+}
+
+nav#topTabs .nav-pills .nav-link {
+  padding: .5rem .9rem;
+  border-radius: 999px;
+  color: #343a40;
+  transition: box-shadow .18s ease, transform .08s ease, background-color .12s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+nav#topTabs .nav-pills .nav-link .bi {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+/* Active state: stronger visual, but keep logic (classes/IDs) unchanged */
+nav#topTabs .nav-pills .nav-link.active {
+  background-color: #0d6efd !important; /* bootstrap primary */
+  color: #fff !important;
+  box-shadow: 0 8px 20px rgba(13,110,253,0.14);
+  transform: translateY(-1px);
+}
+
+/* Hover and focus affordance for topTabs pills only */
+nav#topTabs .nav-pills .nav-link:hover,
+nav#topTabs .nav-pills .nav-link:focus {
+  box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+  transform: translateY(-1px);
+}
+
+/* Compact badges next to labels */
+nav#topTabs .nav-pills .badge {
+  font-size: .65rem;
+  padding: .18rem .45rem;
+  border-radius: .5rem;
+}
+
+/* Make sure the mobile dropdown is visible only on small screens (keeps existing d-* classes intact) */
+@media (min-width: 768px) {
+  .d-md-none {
+    display: none !important;
+  }
+}
+
+/* Small visual polish for the toast so it reads well over content */
+#assignToast .toast-header {
+  background: transparent;
+}
+
+/* Ensure topTabs nav container doesn't wrap awkwardly on narrow widths */
+nav#topTabs ul.nav {
+  white-space: nowrap;
+}
+
+/* Keep link text from overflowing in the topTabs pills */
+nav#topTabs .nav-link {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  max-width: 11.5rem;
+}
+
+/* Brand: wrapper groups clickable logo and plain title to its right (title is NOT a link) */
+.brand-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+/* If the logo is wrapped in an anchor, prevent anchor from styling the title or showing an underline */
+.brand-wrap a {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Brand block (plain title + optional subtitle) */
+.brand {
+  min-width: 0; /* allow truncation */
+  line-height: 1;
+}
+/* prominent plain title (NOT a link) */
+.brand-name {
+  font-size: 1.125rem; /* 18px */
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  display: block;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 18rem; /* prevents pushing nav on narrower viewports */
+  text-decoration: none; /* ensure it never looks like a link */
+  cursor: default;
+}
+.brand-sub {
+  color: #6b7280;
+  font-size: 0.75rem;
+  margin-top: -2px;
+  display: block;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 18rem;
+}
+
+/* Responsive adjustments for brand */
+@media (max-width: 767.98px) {
+  .brand-name {
+    font-size: 1rem;
+    max-width: 10rem;
+  }
+  .brand-sub { display: none; } /* keep header compact */
+  .site-logo,
+  header a img[alt="AHAD Logo"] { width: 48px; height: 48px; }
+}
+
+/* Ensure header container spacing remains tidy */
+header .container-fluid { gap: 0.5rem; }
+
+/* Minor safeguard: keep header logo anchor from inheriting link styles on hover or focus */
+.brand-wrap a:focus,
+.brand-wrap a:hover {
+  text-decoration: none;
+  outline: none;
+}
+
+/* Keep existing CSS rules below intact (no changes) */
+/* [Rest of stylesheet content remains unchanged — keep it as-is] */

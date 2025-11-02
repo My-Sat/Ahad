@@ -48,7 +48,6 @@ block content
                       // Bootstrap dropdown (using bootstrap icon)
                       .dropdown.d-inline-block
                         button.btn.btn-sm.btn-light.dropdown-toggle(type='button', id=`serviceMenuBtn-${svc._id}`, data-bs-toggle='dropdown', aria-expanded='false', aria-haspopup='true', title='Actions')
-                          i(class='bi bi-three-dots-vertical', aria-hidden='true')
                           span.visually-hidden Actions
                         ul.dropdown-menu.dropdown-menu-end(aria-labelledby=`serviceMenuBtn-${svc._id}`)
                           li
@@ -103,7 +102,6 @@ block content
                               // compact bootstrap dropdown per subunit (uses bootstrap icon)
                               .dropdown.d-inline-block
                                 button.btn.btn-sm.btn-light.dropdown-toggle(type='button', id=`subMenuBtn-${su._id}`, data-bs-toggle='dropdown', aria-expanded='false', aria-haspopup='true', title='Actions')
-                                  i(class='bi bi-three-dots-vertical', aria-hidden='true')
                                   span.visually-hidden Actions
                                 ul.dropdown-menu.dropdown-menu-end(aria-labelledby=`subMenuBtn-${su._id}`)
                                   li
@@ -131,7 +129,6 @@ block content
                       .d-flex.justify-content-end.align-items-center.mt-3
                         .dropdown
                           button.btn.btn-sm.btn-light.dropdown-toggle(type='button', id=`unitMenuBtn-${u._id}`, data-bs-toggle='dropdown', aria-expanded='false', aria-haspopup='true', title='Unit actions')
-                            i(class='bi bi-three-dots-vertical', aria-hidden='true')
                             span.visually-hidden Actions
                           ul.dropdown-menu.dropdown-menu-end(aria-labelledby=`unitMenuBtn-${u._id}`)
                             li
@@ -227,4 +224,3 @@ block content
 
   // small footer note
   .mt-3.text-muted
-    small Changes here use standard server routes; forms will reload the page after submission if JS is disabled.
