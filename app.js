@@ -56,7 +56,7 @@ app.use('/admin', adminRoutes);
 app.use('/api', apiRoutes);
 app.use('/orders', ordersRoutes);
 
-app.get('/', (req, res) => res.send('POS Service Section running. Visit /admin/services'));
+app.get('/admin/services', (req, res) => res.send('POS Service Section running. Visit /admin/services'));
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
