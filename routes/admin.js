@@ -62,10 +62,16 @@ router.get('/records/usage', recordsController.usageData);
 // CSV export of filtered usages
 router.get('/records/export', recordsController.exportCsv);
 
+// Printers
 router.get('/printers', printersController.list);
+router.get('/printers/:id/stats', printersController.stats);
 router.post('/printers', printersController.create);
 router.put('/printers/:id', printersController.update);
 router.delete('/printers/:id', printersController.remove);
+router.get('/printers/:id/usage', printersController.usage);      // GET usage log (AJAX)
+router.post('/printers/:id/adjust', printersController.adjustCount); // POST adjust/set total (AJAX)
+
+
 
 // also expose simple API endpoint for client-side listing if needed
 router.get('/api/printers', printersController.listAll);

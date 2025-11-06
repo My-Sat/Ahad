@@ -251,6 +251,39 @@ exports.apiCreateOrder = async (req, res) => {
       // material recording failure should not block order creation, but we log it
       console.error('Material matching/recording error', matErr);
     }
+        // --- PRINTER USAGE RECORDING ---
+    try {
+      const PrinterUsage = require('../models/printer_usage');
+      // for each order item, if printer exists, increment that printer by pages (QTY)
+      for (let idx = 0; idx < builtItems.length; idx++) {
+        const it = builtItems[idx];
+        if (!it.printer) continue;
+        // pages (quantity) default is 1 already
+        const pages = Number(it.pages) || 1;
+        // We record pages as count increment. Do NOT include 'spoiled' for printer count unless you want that
+        const count = Math.max(0, Math.floor(pages));
+
+        // create usage record
+        await PrinterUsage.create({
+          printer: it.printer,
+          orderId: order.orderId,
+          orderRef: order._id,
+          itemIndex: idx,
+          count,
+          note: 'order-created'
+        });
+
+        // update printer aggregate (atomic increment)
+        try {
+          await Printer.findByIdAndUpdate(it.printer, { $inc: { totalCount: count } });
+        } catch (pErr) {
+          console.error('Failed to increment printer totalCount', pErr, 'printerId=', it.printer);
+        }
+      }
+    } catch (puErr) {
+      console.error('Printer usage recording error', puErr);
+    }
+
     // return order info
     return res.json({ ok: true, orderId: order.orderId, total });
   } catch (err) {

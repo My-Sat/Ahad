@@ -5,7 +5,8 @@ const PrinterSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   nameNormalized: { type: String, required: true, trim: true, lowercase: true },
   location: { type: String, trim: true, default: '' },
-  // stock/availability/status fields can be added later
+  // new field: total count recorded by app (can be adjusted)
+  totalCount: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -14,7 +15,6 @@ PrinterSchema.pre('validate', function (next) {
   next();
 });
 
-// unique index on normalized name to avoid duplicates (case-insensitive)
 PrinterSchema.index({ nameNormalized: 1 }, { unique: true });
 
 module.exports = mongoose.model('Printer', PrinterSchema);
