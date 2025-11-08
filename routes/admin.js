@@ -8,7 +8,6 @@ const serviceController = require('../controllers/service');
 const priceController = require('../controllers/price');
 const materialsController = require('../controllers/materials');
 router.get('/', (req, res) => res.redirect('/admin/services'));
-const recordsController = require('../controllers/records');
 const printersController = require('../controllers/printers');
 // Units
 router.post('/units', unitController.create);
@@ -54,13 +53,6 @@ router.get('/stock', materialsController.stock);
 
 // Simple API to adjust stock for a material (AJAX)
 router.post('/materials/:id/stock', materialsController.setStock);
-
-// Records dashboard / UI
-router.get('/records', recordsController.index);
-// JSON data for filtered usages (AJAX)
-router.get('/records/usage', recordsController.usageData);
-// CSV export of filtered usages
-router.get('/records/export', recordsController.exportCsv);
 
 // Printers
 router.get('/printers', printersController.list);
