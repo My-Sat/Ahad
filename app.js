@@ -54,7 +54,7 @@ mongoose.connect(MONGO_URI)
 // routes
 app.use('/admin', adminRoutes);
 app.use('/api', apiRoutes);
-app.use('/orders', ordersRoutes);
+app.use('/admin/orders', ordersRoutes);
 
 app.get('/admin/services', (req, res) => res.send('POS Service Section running. Visit /admin/services'));
 

@@ -42,12 +42,14 @@
       const path = target.pathname.replace(/\/$/, '');
       const mapping = {
         '/admin/services': 'tab-services',
-        '/admin/printers': 'tab-printers',   // <--- added printers mapping
+        '/admin/printers': 'tab-printers',
         '/admin/stock': 'tab-stock',
         '/admin/users': 'tab-users',
         '/admin/messaging': 'tab-messaging',
-        '/admin/reports': 'tab-reports'      // <--- reports replaces records mapping
+        '/admin/reports': 'tab-reports',
+        '/admin/orders': 'tab-orders'   // <--- NEW: orders mapping
       };
+
       // default to services if root /admin
       let id = mapping[path] || (path === '/admin' ? 'tab-services' : null);
       if (!id && path.startsWith('/admin')) {
@@ -58,6 +60,7 @@
         else if (path.startsWith('/admin/users')) id = 'tab-users';
         else if (path.startsWith('/admin/messaging')) id = 'tab-messaging';
         else if (path.startsWith('/admin/reports')) id = 'tab-reports';
+        else if (path.startsWith('/admin/orders')) id = 'tab-orders'; // <--- NEW partial match for orders
       }
       // toggle active class
       document.querySelectorAll('#topTabs .nav-link').forEach(a => a.classList.remove('active'));

@@ -28,7 +28,7 @@ html(lang="en")
         // Right: Large-screen pills nav + mobile utilities (nav moved to right)
         .d-flex.align-items-center.gap-2
           nav#topTabs.nav.d-none.d-md-block
-            ul.nav.nav-pills.mb-0.rounded-pill.shadow-sm(style='overflow:hidden')
+            ul.nav.nav-pills.mb-0.rounded-pill.shadow-sm(style='overflow:visible')
               li.nav-item
                 a.nav-link.d-flex.align-items-center(href='/admin/services', data-ajax='true', role='tab', id='tab-services')
                   i.bi.bi-folder2-open.me-2(aria-hidden='true')
@@ -54,6 +54,20 @@ html(lang="en")
                   i.bi.bi-chat-dots.me-2(aria-hidden='true')
                   | Messaging
                   span.badge.bg-warning.ms-2#badge-messaging
+
+              // Orders dropdown (NEW)
+              li.nav-item.dropdown
+                // dropdown toggle is also the tab element (id used by JS to mark active)
+                a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-orders', role='button', data-bs-toggle='dropdown', aria-expanded='false')
+                  i.bi.bi-basket2.me-2(aria-hidden='true')
+                  | Orders
+                  span.badge.bg-dark.ms-2#badge-orders
+                ul.dropdown-menu
+                  li
+                    a.dropdown-item(href='/admin/orders/new', data-ajax='true', id='tab-orders-new') Orders page
+                  li
+                    a.dropdown-item(href='/admin/orders/pay', data-ajax='true', id='tab-orders-pay') Payment page
+
               li.nav-item
                 // Reports is a placeholder (unimplemented) like Messaging/Users
                 a.nav-link.d-flex.align-items-center(href='#' data-ajax='true' role='tab' id='tab-reports')
@@ -79,6 +93,11 @@ html(lang="en")
                 li
                   // Mobile Reports placeholder (unimplemented)
                   a.dropdown-item(href='#' data-ajax='true' id='tab-reports-sm') Reports
+                li
+                  a.dropdown-item(href='/admin/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — New
+                li
+                  a.dropdown-item(href='/admin/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Orders — Pay
+
 
     // ... (rest of layout.pug unchanged) ...
 
