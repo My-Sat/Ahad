@@ -1,39 +1,80 @@
 (function() {
   // fetch a URL and replace #main-content with its #main-content fragment
-  async function loadPage(url, push = true) {
-    try {
-      const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-      if (!res.ok) {
-        // fallback to full navigation
-        window.location.href = url;
-        return;
-      }
-      const html = await res.text();
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-      const newMain = doc.querySelector('#main-content');
-      if (!newMain) {
-        window.location.href = url;
-        return;
-      }
-      const main = document.getElementById('main-content');
-      main.innerHTML = newMain.innerHTML;
-
-      // update active tab
-      setActiveTabByUrl(url);
-
-      if (push) history.pushState({ url }, '', url);
-
-      // re-run page initializers
-      initializePage();
-
-      // smooth scroll to top of main content
-      window.scrollTo({ top: main.getBoundingClientRect().top + window.scrollY - 20, behavior: 'smooth' });
-    } catch (err) {
-      console.error('Page load failed', err);
+// fetch a URL and replace #main-content with its #main-content fragment
+async function loadPage(url, push = true) {
+  try {
+    // Only allow same-origin fetches for safety
+    if (!isSameOrigin(url)) {
       window.location.href = url;
+      return;
     }
+
+    // Force fresh fetch and small cache-busting param
+    const u = new URL(url, window.location.href);
+    u.searchParams.set('_', Date.now());
+
+    const res = await fetch(u.href, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      cache: 'no-store',
+      credentials: 'same-origin'
+    });
+
+    if (!res.ok) {
+      window.location.href = url;
+      return;
+    }
+
+    const html = await res.text();
+
+    // debug: show we received a response
+    console.debug('[dashboard_nav] fetched', url, 'len', html.length);
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    let newMain = doc.querySelector('#main-content');
+
+    if (!newMain) {
+      // try a second parse (defensive). If still not found -> full navigation
+      const fallbackDoc = parser.parseFromString(html, 'text/html');
+      const fallbackMain = fallbackDoc.querySelector('#main-content');
+      if (!fallbackMain) {
+        window.location.href = url;
+        return;
+      }
+      // <-- FIX: assign fallback to newMain so we can use it below
+      newMain = fallbackMain;
+    }
+
+    const main = document.getElementById('main-content');
+    if (!main) {
+      window.location.href = url;
+      return;
+    }
+
+    // Replace content
+    main.innerHTML = newMain.innerHTML;
+
+    // Re-run scripts found inside the returned fragment
+    reExecuteScripts(newMain, main);
+
+    // update active tab
+    setActiveTabByUrl(url);
+
+    if (push) history.pushState({ url }, '', url);
+
+    // re-run page initializers
+    initializePage();
+
+    // notify listeners
+    document.dispatchEvent(new CustomEvent('ajax:page:loaded', { detail: { url } }));
+
+    // scroll
+    window.scrollTo({ top: main.getBoundingClientRect().top + window.scrollY - 20, behavior: 'smooth' });
+  } catch (err) {
+    console.error('Page load failed', err);
+    window.location.href = url;
   }
+}
 
   // set active tab based on URL pathname
   function setActiveTabByUrl(url) {
