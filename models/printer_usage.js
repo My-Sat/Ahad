@@ -1,4 +1,3 @@
-// models/printer_usage.js
 const mongoose = require('mongoose');
 
 const PrinterUsageSchema = new mongoose.Schema({
@@ -11,6 +10,8 @@ const PrinterUsageSchema = new mongoose.Schema({
   itemIndex: { type: Number, default: 0 },
   // number of units incremented (positive for increments, negative for adjustments if desired)
   count: { type: Number, required: true, default: 0 },
+  // optional type: 'monochrome' | 'colour' | null — used to tag the usage entry
+  type: { type: String, enum: ['monochrome', 'colour', null], default: null },
   // optional note (e.g., 'manual adjust' or 'order-created')
   note: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now, index: true }

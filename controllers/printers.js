@@ -89,7 +89,7 @@ exports.remove = async (req, res) => {
 
 exports.listAll = async (req, res) => {
   try {
-    const printers = await Printer.find().select('_id name totalCount').sort('name').lean();
+    const printers = await Printer.find().select('_id name totalCount monochromeCount colourCount').sort('name').lean();
     return res.json({ ok: true, printers });
   } catch (err) {
     console.error('printers.listAll error', err);
@@ -97,7 +97,6 @@ exports.listAll = async (req, res) => {
   }
 };
 
-// --- New: return usage log for a printer (paginated)
 exports.usage = async (req, res) => {
   try {
     const id = req.params.id;
@@ -118,7 +117,6 @@ exports.usage = async (req, res) => {
   }
 };
 
-// --- New: adjust count (POST) — accept { delta } OR { setTo }
 exports.adjustCount = async (req, res) => {
   try {
     const id = req.params.id;
@@ -138,32 +136,56 @@ exports.adjustCount = async (req, res) => {
       if (isNaN(setTo)) setTo = null;
     }
 
+    const target = (req.body.target && String(req.body.target).toLowerCase()) ? String(req.body.target).toLowerCase() : 'total';
+    const allowedTargets = ['total', 'monochrome', 'colour'];
+    const finalTarget = allowedTargets.includes(target) ? target : 'total';
+
     if (delta === null && setTo === null) {
       return res.status(400).json({ ok: false, error: 'Provide delta or setTo value' });
     }
 
+    // determine appliedDelta for the selected target
     let appliedDelta;
     if (setTo !== null) {
-      appliedDelta = setTo - (printer.totalCount || 0);
+      // compute difference relative to the selected target
+      if (finalTarget === 'monochrome') {
+        appliedDelta = setTo - (printer.monochromeCount || 0);
+      } else if (finalTarget === 'colour') {
+        appliedDelta = setTo - (printer.colourCount || 0);
+      } else {
+        appliedDelta = setTo - (printer.totalCount || 0);
+      }
     } else {
       appliedDelta = delta;
     }
 
-    // create usage record noting it's a manual adjust
+    // create usage record noting it's a manual adjust (type set for mono/colour)
     const usage = await PrinterUsage.create({
       printer: printer._id,
       orderId: null,
       orderRef: null,
       itemIndex: -1,
       count: appliedDelta,
-      note: (setTo !== null) ? `Manual set to ${setTo}` : `Manual delta ${delta}`
+      type: (finalTarget === 'total') ? null : finalTarget,
+      note: (setTo !== null) ? `Manual set to ${setTo} (${finalTarget})` : `Manual delta ${delta} (${finalTarget})`
     });
 
-    // atomic increment
-    printer.totalCount = (printer.totalCount || 0) + appliedDelta;
-    await printer.save();
+    // atomic increment: apply to appropriate field(s)
+    const inc = {};
+    if (finalTarget === 'monochrome') {
+      inc.monochromeCount = appliedDelta;
+      inc.totalCount = appliedDelta;
+    } else if (finalTarget === 'colour') {
+      inc.colourCount = appliedDelta;
+      inc.totalCount = appliedDelta;
+    } else {
+      inc.totalCount = appliedDelta;
+    }
 
-    return res.json({ ok: true, printer: printer.toObject(), usage });
+    // Use findByIdAndUpdate to apply increments and return updated doc
+    const updatedPrinter = await Printer.findByIdAndUpdate(printer._id, { $inc: inc }, { new: true }).lean();
+
+    return res.json({ ok: true, printer: updatedPrinter, usage });
   } catch (err) {
     console.error('printers.adjustCount error', err);
     return res.status(500).json({ ok: false, error: 'Failed to adjust printer count' });

@@ -37,7 +37,10 @@ block content
               th.text-center Actions
           tbody#printersTbody
             each pr in printers
-              tr(data-id=pr._id)
+              // include data attributes for client to know breakdown counts (defaults 0)
+              - const mono = (typeof pr.monochromeCount !== 'undefined' && pr.monochromeCount !== null) ? pr.monochromeCount : 0;
+              - const colour = (typeof pr.colourCount !== 'undefined' && pr.colourCount !== null) ? pr.colourCount : 0;
+              tr(data-id=pr._id data-mono-count=mono data-colour-count=colour)
                 td
                   .d-flex.align-items-center.justify-content-between
                     .me-3(style='min-width:0;')
@@ -49,6 +52,21 @@ block content
                   .d-flex.align-items-center.justify-content-center
                     span.small.text-muted.me-2 Total:
                     strong.ms-1 #{pr.totalCount || 0}
+                    if (mono || colour)
+                      // chevron-button toggle instead of text link
+                      button.btn.btn-sm.btn-link.ms-3.expand-toggle(type='button', aria-expanded='false', aria-controls=`printer-totals-${pr._id}`, title='Show breakdown', data-bs-toggle='collapse', data-bs-target=`#printer-totals-${pr._id}`)
+                        i.bi.bi-chevron-down
+
+                  // collapse for breakdown (hidden when none)
+                  if (mono || colour)
+                    .collapse.mt-2(id=`printer-totals-${pr._id}`)
+                      .card.card-body.p-2
+                        if mono
+                          div.small.mb-1.mono-value Monochrome: #{mono}
+                        if colour
+                          div.small.mb-0.colour-value Colour: #{colour}
+
+
                 td.text-center
                   .btn-group
                     button.btn.btn-sm.btn-light.dropdown-toggle(type='button', data-bs-toggle='dropdown', aria-expanded='false', title='Actions')
@@ -73,7 +91,7 @@ block content
       else
         p.text-muted.mb-0 No printers defined yet.
 
-  // Edit Printer Modal
+  // Edit Printer Modal (unchanged)
   .modal.fade(id='editPrinterModal', tabindex='-1', aria-labelledby='editPrinterModalLabel', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
       .modal-content
@@ -90,7 +108,7 @@ block content
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary(type='button', id='saveEditPrinterBtn') Save changes
 
-  // Delete confirm modal
+  // Delete confirm modal (unchanged)
   .modal.fade(id='printersDeleteConfirm', tabindex='-1', aria-labelledby='printersDeleteConfirmLabel', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
       .modal-content
@@ -103,7 +121,7 @@ block content
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-danger(type='button', id='confirmDeletePrinterBtn') Yes, delete
 
-  // Adjust Printer Count Modal
+  // Adjust Printer Count Modal (now includes target select)
   .modal.fade(id='adjustPrinterModal', tabindex='-1', aria-labelledby='adjustPrinterModalLabel', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
       .modal-content
@@ -113,6 +131,13 @@ block content
         .modal-body
           form#adjustPrinterForm
             input(type='hidden', id='adjustPrinterId', name='id')
+            .mb-2
+              label.form-label(for='adjustPrinterTarget') Target
+              // populated by client: Total, Monochrome, Colour (depending on printer)
+              select.form-select(id='adjustPrinterTarget')
+                option(value='total') Total
+                option(value='monochrome') Monochrome
+                option(value='colour') Colour
             .mb-2
               label.form-label(for='adjustPrinterMode') Mode
               select.form-select(id='adjustPrinterMode')
@@ -126,7 +151,7 @@ block content
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary(type='button', id='doAdjustPrinterBtn') Apply
 
-  // Printer Details Modal (updated: only one value per container; inline date pickers + refresh)
+  // Printer Details Modal (unchanged)
   .modal.fade(id='printerDetailsModal', tabindex='-1', aria-labelledby='printerDetailsModalLabel', aria-hidden='true')
     .modal-dialog.modal-lg.modal-dialog-centered
       .modal-content

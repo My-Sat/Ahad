@@ -106,75 +106,88 @@ exports.apiCreateOrder = async (req, res) => {
     const builtItems = [];
     let total = 0;
 
-    for (const it of items) {
-      if (!mongoose.Types.ObjectId.isValid(it.serviceId) || !mongoose.Types.ObjectId.isValid(it.priceRuleId)) {
-        return res.status(400).json({ error: 'Invalid IDs in items' });
-      }
+for (const it of items) {
+  if (!mongoose.Types.ObjectId.isValid(it.serviceId) || !mongoose.Types.ObjectId.isValid(it.priceRuleId)) {
+    return res.status(400).json({ error: 'Invalid IDs in items' });
+  }
 
-      // populate selections/unit/subUnit so we can store and later match materials
-      const pr = await ServicePrice.findById(it.priceRuleId).populate('selections.unit selections.subUnit').lean();
-      if (!pr) return res.status(404).json({ error: `Price rule ${it.priceRuleId} not found` });
+  // populate selections/unit/subUnit so we can store and later match materials
+  const pr = await ServicePrice.findById(it.priceRuleId).populate('selections.unit selections.subUnit').lean();
+  if (!pr) return res.status(404).json({ error: `Price rule ${it.priceRuleId} not found` });
 
-      // Determine which price to use: use price2 only when client requested FB and price2 exists
-      let unitPrice = Number(pr.price);
-      let usedFB = false;
-      if (it.fb && pr.price2 !== undefined && pr.price2 !== null) {
-        unitPrice = Number(pr.price2);
-        usedFB = true;
-      }
+  // Determine which price to use: use price2 only when client requested FB and price2 exists
+  let unitPrice = Number(pr.price);
+  let usedFB = false;
+  if (it.fb && pr.price2 !== undefined && pr.price2 !== null) {
+    unitPrice = Number(pr.price2);
+    usedFB = true;
+  }
 
-      const pages = Number(it.pages) || 1;
-      const subtotal = Number((unitPrice * pages).toFixed(2));
+  const pages = Number(it.pages) || 1;
+  const subtotal = Number((unitPrice * pages).toFixed(2));
 
-      // build human-friendly selection label
-      const selectionLabel = pr.selectionLabel || ((pr.selections || []).map(s => {
-        const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
-        const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
-        return `${u}: ${su}`;
-      }).join(' + ')) + (usedFB ? ' (F/B)' : '');
+  // build human-friendly selection label
+  const selectionLabel = pr.selectionLabel || ((pr.selections || []).map(s => {
+    const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
+    const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
+    return `${u}: ${su}`;
+  }).join(' + ')) + (usedFB ? ' (F/B)' : '');
 
-      // store selections as unit/subUnit objectIds (not populated objects)
-      const selectionsForOrder = (pr.selections || []).map(s => ({
-        unit: s.unit && s.unit._id ? s.unit._id : s.unit,
-        subUnit: s.subUnit && s.subUnit._id ? s.subUnit._id : s.subUnit
-      }));
+  // store selections as unit/subUnit objectIds (not populated objects)
+  const selectionsForOrder = (pr.selections || []).map(s => ({
+    unit: s.unit && s.unit._id ? s.unit._id : s.unit,
+    subUnit: s.subUnit && s.subUnit._id ? s.subUnit._id : s.subUnit
+  }));
 
-      // Check whether this service requires a printer
-      const svc = await Service.findById(it.serviceId).lean();
-      const svcRequiresPrinter = !!(svc && svc.requiresPrinter);
+  // Determine printer-type for this price rule (inspect populated subUnit names)
+  let printerType = null;
+  try {
+    // prefer 'colour' if any subunit contains 'colour' or 'color', otherwise 'monochrome' if present
+    const subs = (pr.selections || []).map(s => (s.subUnit && s.subUnit.name) ? String(s.subUnit.name) : '');
+    const hasColour = subs.some(n => /colour|color/i.test(n));
+    const hasMono = subs.some(n => /monochrome/i.test(n));
+    if (hasColour) printerType = 'colour';
+    else if (hasMono) printerType = 'monochrome';
+  } catch (e) {
+    printerType = null;
+  }
 
-      // validate printer if required
-      let printerId = null;
-      if (svcRequiresPrinter) {
-        if (!it.printerId || !mongoose.Types.ObjectId.isValid(it.printerId)) {
-          return res.status(400).json({ error: 'Printer required for one or more items' });
-        }
-        const prDoc = await Printer.findById(it.printerId).lean();
-        if (!prDoc) return res.status(400).json({ error: `Printer ${it.printerId} not found` });
-        printerId = new mongoose.Types.ObjectId(it.printerId);
-      } else {
-        // if provided but invalid, ignore or validate format
-        if (it.printerId && mongoose.Types.ObjectId.isValid(it.printerId)) {
-          // allow storing if client provided printer for non-required service (optional)
-          const maybePrinter = await Printer.findById(it.printerId).lean();
-          if (maybePrinter) printerId = new mongoose.Types.ObjectId(it.printerId);
-        }
-      }
+  // Check whether this service requires a printer
+  const svc = await Service.findById(it.serviceId).lean();
+  const svcRequiresPrinter = !!(svc && svc.requiresPrinter);
 
-      builtItems.push({
-        service: it.serviceId,
-        printer: printerId, // may be null
-        selections: selectionsForOrder,
-        selectionLabel,
-        unitPrice,
-        pages,
-        subtotal,
-        spoiled: Number(it.spoiled) || 0
-      });
-
-      total += subtotal;
+  // validate printer if required
+  let printerId = null;
+  if (svcRequiresPrinter) {
+    if (!it.printerId || !mongoose.Types.ObjectId.isValid(it.printerId)) {
+      return res.status(400).json({ error: 'Printer required for one or more items' });
     }
+    const prDoc = await Printer.findById(it.printerId).lean();
+    if (!prDoc) return res.status(400).json({ error: `Printer ${it.printerId} not found` });
+    printerId = new mongoose.Types.ObjectId(it.printerId);
+  } else {
+    // if provided but invalid, ignore or validate format
+    if (it.printerId && mongoose.Types.ObjectId.isValid(it.printerId)) {
+      // allow storing if client provided printer for non-required service (optional)
+      const maybePrinter = await Printer.findById(it.printerId).lean();
+      if (maybePrinter) printerId = new mongoose.Types.ObjectId(it.printerId);
+    }
+  }
 
+  builtItems.push({
+    service: it.serviceId,
+    printer: printerId, // may be null
+    selections: selectionsForOrder,
+    selectionLabel,
+    unitPrice,
+    pages,
+    subtotal,
+    spoiled: Number(it.spoiled) || 0,
+    printerType // NEW: 'monochrome' | 'colour' | null
+  });
+
+  total += subtotal;
+}
     total = Number(total.toFixed(2));
 
     const order = new Order({
@@ -252,38 +265,47 @@ exports.apiCreateOrder = async (req, res) => {
       console.error('Material matching/recording error', matErr);
     }
         // --- PRINTER USAGE RECORDING ---
+try {
+  const PrinterUsage = require('../models/printer_usage');
+  // for each order item, if printer exists, increment that printer by pages (QTY)
+  for (let idx = 0; idx < builtItems.length; idx++) {
+    const it = builtItems[idx];
+    if (!it.printer) continue;
+    // pages (quantity) default is 1 already
+    const pages = Number(it.pages) || 1;
+    // We record pages as count increment. Do NOT include 'spoiled' for printer count unless you want that
+    const count = Math.max(0, Math.floor(pages));
+
+    // determine type for this usage (may be 'monochrome'|'colour'|null)
+    const usageType = (it.printerType === 'monochrome' || it.printerType === 'colour') ? it.printerType : null;
+
+    // create usage record
+    await PrinterUsage.create({
+      printer: it.printer,
+      orderId: order.orderId,
+      orderRef: order._id,
+      itemIndex: idx,
+      count,
+      type: usageType,
+      note: 'order-created'
+    });
+
+    // update printer aggregate (atomic increment)
     try {
-      const PrinterUsage = require('../models/printer_usage');
-      // for each order item, if printer exists, increment that printer by pages (QTY)
-      for (let idx = 0; idx < builtItems.length; idx++) {
-        const it = builtItems[idx];
-        if (!it.printer) continue;
-        // pages (quantity) default is 1 already
-        const pages = Number(it.pages) || 1;
-        // We record pages as count increment. Do NOT include 'spoiled' for printer count unless you want that
-        const count = Math.max(0, Math.floor(pages));
-
-        // create usage record
-        await PrinterUsage.create({
-          printer: it.printer,
-          orderId: order.orderId,
-          orderRef: order._id,
-          itemIndex: idx,
-          count,
-          note: 'order-created'
-        });
-
-        // update printer aggregate (atomic increment)
-        try {
-          await Printer.findByIdAndUpdate(it.printer, { $inc: { totalCount: count } });
-        } catch (pErr) {
-          console.error('Failed to increment printer totalCount', pErr, 'printerId=', it.printer);
-        }
+      if (usageType === 'monochrome') {
+        await Printer.findByIdAndUpdate(it.printer, { $inc: { monochromeCount: count, totalCount: count } });
+      } else if (usageType === 'colour') {
+        await Printer.findByIdAndUpdate(it.printer, { $inc: { colourCount: count, totalCount: count } });
+      } else {
+        await Printer.findByIdAndUpdate(it.printer, { $inc: { totalCount: count } });
       }
-    } catch (puErr) {
-      console.error('Printer usage recording error', puErr);
+    } catch (pErr) {
+      console.error('Failed to increment printer counts', pErr, 'printerId=', it.printer);
     }
-
+  }
+} catch (puErr) {
+  console.error('Printer usage recording error', puErr);
+}
     // return order info
     return res.json({ ok: true, orderId: order.orderId, total });
   } catch (err) {

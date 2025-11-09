@@ -1,4 +1,3 @@
-// models/printer.js
 const mongoose = require('mongoose');
 
 const PrinterSchema = new mongoose.Schema({
@@ -7,6 +6,9 @@ const PrinterSchema = new mongoose.Schema({
   location: { type: String, trim: true, default: '' },
   // new field: total count recorded by app (can be adjusted)
   totalCount: { type: Number, default: 0 },
+  // new breakdown fields (track monochrome and colour separately)
+  monochromeCount: { type: Number, default: 0 },
+  colourCount: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 });
 

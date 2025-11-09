@@ -251,3 +251,40 @@ header .container-fluid { gap: 0.5rem; }
 
 /* Keep existing CSS rules below intact (no changes) */
 /* [Rest of stylesheet content remains unchanged — keep it as-is] */
+
+/* Smoothly rotate the chevron icon when the expand toggle is active.
+   We rely on the button carrying aria-expanded="true" (the JS already sets this). */
+.expand-toggle i {
+  display: inline-block;            /* allow transform */
+  transition: transform 0.18s ease; /* smooth rotation */
+  will-change: transform;
+}
+
+/* rotate 180deg when expanded (chevron down -> up) */
+.expand-toggle[aria-expanded="true"] i {
+  transform: rotate(180deg);
+}
+
+/* Make the expand/collapse chevron black (instead of link-blue) */
+/* Keep existing smooth-rotation rule; ensure icon inherits the button color. */
+
+.expand-toggle {
+  color: #000;               /* black */
+  text-decoration: none;     /* avoid underlines on hover */
+  outline: none;
+}
+
+.expand-toggle:hover,
+.expand-toggle:focus {
+  color: #000;               /* remain black on hover/focus */
+  text-decoration: none;
+  box-shadow: none;
+}
+
+/* Icon inherits the color and rotates smoothly (keeps previously added transition) */
+.expand-toggle i {
+  display: inline-block;
+  color: inherit;            /* use the button color */
+  transition: transform 0.18s ease, color 0.12s ease;
+  will-change: transform;
+}
