@@ -49,15 +49,19 @@ block content
                         br
                         small.text-muted #{pr.location}
                 td.text-center
-                  .d-flex.align-items-center.justify-content-center
-                    span.small.text-muted.me-2 Total:
-                    strong.ms-1 #{pr.totalCount || 0}
+                  .printer-total-wrap.position-relative
+                    // fixed-size centered box so every row uses the same centering
+                    .printer-total-box.d-flex.align-items-center.justify-content-center
+                      span.total-label.small.text-muted.me-2 Total:
+                      span.total-value.text-end
+                        strong #{pr.totalCount || 0}
+
+                    // chevron-button (keeps existing collapse wiring) — absolute so it doesn't affect centering
                     if (mono || colour)
-                      // chevron-button toggle instead of text link
-                      button.btn.btn-sm.btn-link.ms-3.expand-toggle(type='button', aria-expanded='false', aria-controls=`printer-totals-${pr._id}`, title='Show breakdown', data-bs-toggle='collapse', data-bs-target=`#printer-totals-${pr._id}`)
+                      button.btn.btn-sm.btn-link.expand-toggle.position-absolute.top-50.end-0.translate-middle-y(type='button', aria-expanded='false', aria-controls=`printer-totals-${pr._id}`, title='Show breakdown', data-bs-toggle='collapse', data-bs-target=`#printer-totals-${pr._id}`)
                         i.bi.bi-chevron-down
 
-                  // collapse for breakdown (hidden when none)
+                  // breakdown collapse (kept as before)
                   if (mono || colour)
                     .collapse.mt-2(id=`printer-totals-${pr._id}`)
                       .card.card-body.p-2
@@ -65,7 +69,6 @@ block content
                           div.small.mb-1.mono-value Monochrome: #{mono}
                         if colour
                           div.small.mb-0.colour-value Colour: #{colour}
-
 
                 td.text-center
                   .btn-group

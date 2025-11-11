@@ -88,23 +88,25 @@ function createPrinterRow(pr) {
       </div>
     </td>
     <td class="text-center">
-      <div class="d-flex align-items-center justify-content-center">
-        <span class="small text-muted me-2">Total:</span>
-        <strong class="ms-1">${pr.totalCount || 0}</strong>
-        ${ (monoExists || colourExists) ? `
-          <button type="button" class="btn btn-sm btn-link ms-3 expand-toggle" aria-expanded="false" aria-controls="${collapseId}" title="Show breakdown">
+      <div class="printer-total-wrap position-relative">
+        <div class="printer-total-box d-flex align-items-center justify-content-center">
+          <span class="total-label small text-muted me-2">Total:</span>
+          <span class="total-value text-end"><strong>${pr.totalCount || 0}</strong></span>
+        </div>
+        ${ (pr.monochromeCount || pr.colourCount) ? `
+          <button class="btn btn-sm btn-link expand-toggle position-absolute top-50 end-0 translate-middle-y" type="button" aria-expanded="false" aria-controls="printer-totals-${pr._id}" title="Show breakdown" data-bs-toggle="collapse" data-bs-target="#printer-totals-${pr._id}">
             <i class="bi bi-chevron-down"></i>
           </button>
         ` : '' }
       </div>
 
-      ${ (monoExists || colourExists) ? `
-      <div class="collapse mt-2" id="${collapseId}">
-        <div class="card card-body p-2">
-          ${monoHtml}
-          ${colourHtml}
+      ${ (pr.monochromeCount || pr.colourCount) ? `
+        <div class="collapse mt-2" id="printer-totals-${pr._id}">
+          <div class="card card-body p-2">
+            ${ pr.monochromeCount ? `<div class="small mb-1 mono-value">Monochrome: ${pr.monochromeCount}</div>` : '' }
+            ${ pr.colourCount ? `<div class="small mb-0 colour-value">Colour: ${pr.colourCount}</div>` : '' }
+          </div>
         </div>
-      </div>
       ` : '' }
     </td>
     <td class="text-center">

@@ -288,3 +288,64 @@ header .container-fluid { gap: 0.5rem; }
   transition: transform 0.18s ease, color 0.12s ease;
   will-change: transform;
 }
+
+/* Printer totals alignment: fixed-size centered box so all rows align identically */
+:root {
+  --printer-total-width: 180px; /* total width of the centered box (tweak as needed) */
+  --printer-label-width: 70px;  /* width of the "Total:" label part */
+  --printer-value-width: calc(var(--printer-total-width) - var(--printer-label-width)); /* remainder for the numeric value */
+}
+
+/* wrapper keeps chevron out of normal flow */
+.printer-total-wrap {
+  position: relative;
+  padding: 6px 0; /* give vertical breathing room */
+}
+
+/* centered box of constant width; keeps same center for all rows */
+.printer-total-box {
+  width: var(--printer-total-width);
+  min-width: var(--printer-total-width);
+  max-width: var(--printer-total-width);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0 auto;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+/* label fixed width, right-aligned so label/value feel tight */
+.total-label {
+  display: inline-block;
+  width: var(--printer-label-width);
+  text-align: right;
+}
+
+/* numeric value area */
+.total-value {
+  display: inline-block;
+  width: var(--printer-value-width);
+  text-align: right;
+}
+
+/* absolute chevron appearance (same as before but make sure high enough z-index) */
+.expand-toggle {
+  z-index: 10;
+  color: black !important; /* user wanted black chevron */
+}
+
+/* responsive: reduce width on small screens */
+@media (max-width: 560px) {
+  :root { --printer-total-width: 140px; --printer-label-width: 60px; }
+  .printer-total-box { width: var(--printer-total-width); min-width: var(--printer-total-width); }
+}
+
+.expand-toggle .bi {
+  transition: transform 0.18s ease;
+}
+.collapse.show + .expand-toggle .bi,
+.expand-toggle[aria-expanded="true"] .bi {
+  transform: rotate(180deg);
+}
