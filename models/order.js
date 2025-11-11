@@ -20,8 +20,21 @@ const OrderItemSchema = new mongoose.Schema({
   // optional multiplier (e.g., number of pages)
   pages: { type: Number, default: 1 },
   // computed line subtotal (unitPrice * pages)
-  subtotal: { type: Number, required: true }
+  subtotal: { type: Number, required: true },
+  // optional flags stored per-item (backwards compat)
+  fb: { type: Boolean, default: false },
+  spoiled: { type: Number, default: 0 },
+  printerType: { type: String, enum: ['monochrome', 'colour', null], default: null }
 }, { _id: false });
+
+const PaymentSchema = new mongoose.Schema({
+  method: { type: String, enum: ['cash', 'momo', 'cheque', 'other'], default: 'cash' },
+  amount: { type: Number, required: true },
+  // store optional metadata: momoNumber, momoTxId, chequeNumber, any free-form note
+  meta: { type: mongoose.Schema.Types.Mixed, default: {} },
+  note: { type: String, default: '' },
+  createdAt: { type: Date, default: Date.now }
+}, { _id: true });
 
 const OrderSchema = new mongoose.Schema({
   orderId: { type: String, unique: true, index: true }, // generated human-friendly ID
@@ -29,7 +42,22 @@ const OrderSchema = new mongoose.Schema({
   total: { type: Number, required: true, default: 0 },
   status: { type: String, enum: ['pending', 'paid', 'cancelled'], default: 'pending' },
   createdAt: { type: Date, default: Date.now },
-  paidAt: { type: Date, default: null }
+  paidAt: { type: Date, default: null },
+
+  // New: record payment events (supports part payments)
+  payments: { type: [PaymentSchema], default: [] }
+});
+
+// instance helper to compute paid so far (not persisted)
+OrderSchema.methods.paidSoFar = function () {
+  if (!this.payments || !this.payments.length) return 0;
+  return this.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+};
+
+// virtual outstanding (total - paidSoFar)
+OrderSchema.virtual('outstanding').get(function () {
+  const paid = (this.payments && this.payments.length) ? this.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0) : 0;
+  return Number((Number(this.total || 0) - paid).toFixed(2));
 });
 
 module.exports = mongoose.model('Order', OrderSchema);

@@ -6,7 +6,18 @@ block content
       .col-12.col-md-6
         .card.shadow-sm
           .card-body
-            h4.mb-3 Pay Order
+            .d-flex.justify-content-between.align-items-center.mb-3
+              h4.mb-0 Pay Order
+              .d-flex.gap-2
+                // Orders (existing style) kept for parity with job order page
+                a.btn.btn-outline-secondary.btn-sm(href='/orders', title='Orders') 
+                  i.bi.bi-list-check.me-1
+                  | Orders
+                // Debtors button (new)
+                button.btn.btn-outline-secondary.btn-sm#openDebtorsBtn(type='button', title='Debtors')
+                  i.bi.bi-people.me-1
+                  | Debtors
+
             p.text-muted Enter the Order ID to fetch the amount due and mark it as paid.
 
             form#fetchOrderForm(class='row g-2 mb-3', novalidate)
@@ -21,8 +32,65 @@ block content
                 #orderInfo
                   p.text-muted No order loaded.
 
+                // Payment controls (appear after order is fetched)
+                .mt-3#paymentControls(style='display:none;')
+                  // Payment method selector
+                  .mb-2
+                    label.form-label.mb-1(for='paymentMethod') Payment method
+                    select.form-select.form-select-sm#paymentMethod
+                      option(value='cash') Cash
+                      option(value='momo') MoMo
+                      option(value='cheque') Cheque
+
+                  // MoMo fields
+                  .row.g-2.mb-2#paymentMomoFields(style='display:none;')
+                    .col-6
+                      label.form-label.mb-0(for='momoNumber') MoMo Number
+                      input.form-control.form-control-sm(type='text', id='momoNumber', placeholder='e.g. 054xxxxxxxx')
+                    .col-6
+                      label.form-label.mb-0(for='momoTxId') Transaction ID
+                      input.form-control.form-control-sm(type='text', id='momoTxId', placeholder='MoMo transaction id')
+
+                  // Cheque field
+                  .mb-2#paymentChequeField(style='display:none;')
+                    label.form-label.mb-0(for='chequeNumber') Cheque number
+                    input.form-control.form-control-sm(type='text', id='chequeNumber', placeholder='Cheque number')
+
+                  // Part payment toggle and amount
+                  .form-check.mb-2
+                    input.form-check-input(type='checkbox', id='partPaymentToggle')
+                    label.form-check-label(for='partPaymentToggle') Part payment (manual amount)
+                  .mb-2#partPaymentAmountWrapper(style='display:none;')
+                    label.form-label.mb-0(for='partPaymentAmount') Enter amount to pay now (GH₵)
+                    input.form-control.form-control-sm(type='number', id='partPaymentAmount', min='0.01', step='0.01', placeholder='Amount')
+
                 .d-flex.justify-content-end.mt-3
                   button.btn.btn-success#payNowBtn(type='button', disabled) Pay Now
+
+  // Debtors modal (lists part-payment transactions; client fetches /api/debtors)
+  .modal.fade(id='debtorsModal', tabindex='-1', aria-labelledby='debtorsModalLabel', aria-hidden='true')
+    .modal-dialog.modal-lg.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id='debtorsModalLabel') Debtors / Part-payments
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          p.text-muted.small#debtorsCount Loading...
+          .table-responsive
+            table.table.table-sm.table-hover#debtorsTable
+              thead
+                tr
+                  th Order ID
+                  th Debtor
+                  th.text-end Amount Due
+                  th.text-end Paid So Far
+                  th.text-end Outstanding
+                  th.text-center Actions
+              tbody
+                tr
+                  td.text-muted(colspan='6') Loading...
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
 block append scripts
   script(src='/public/javascripts/orders_pay.js')

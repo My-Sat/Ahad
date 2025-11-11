@@ -22,5 +22,8 @@ router.get('/orders/:orderId', orderController.apiGetOrderById);
 router.post('/orders/:orderId/pay', orderController.apiPayOrder);
 
 router.get('/orders', ordersController.apiListOrders);
+// expose debtors list for admin UI
+router.get('/debtors', orderController.apiGetDebtors);
+
 
 module.exports = router;

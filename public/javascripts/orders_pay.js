@@ -8,8 +8,27 @@ document.addEventListener('DOMContentLoaded', function () {
   const orderInfo = document.getElementById('orderInfo');
   const payNowBtn = document.getElementById('payNowBtn');
 
+  // new UI elements
+  const paymentControls = document.getElementById('paymentControls');
+  const paymentMethodSel = document.getElementById('paymentMethod');
+  const momoFields = document.getElementById('paymentMomoFields');
+  const momoNumberInput = document.getElementById('momoNumber');
+  const momoTxInput = document.getElementById('momoTxId');
+  const chequeField = document.getElementById('paymentChequeField');
+  const chequeNumberInput = document.getElementById('chequeNumber');
+  const partToggle = document.getElementById('partPaymentToggle');
+  const partWrapper = document.getElementById('partPaymentAmountWrapper');
+  const partAmountInput = document.getElementById('partPaymentAmount');
+
+  const openDebtorsBtn = document.getElementById('openDebtorsBtn');
+  const debtorsModalEl = document.getElementById('debtorsModal');
+  const debtorsModal = (window.bootstrap && debtorsModalEl) ? new bootstrap.Modal(debtorsModalEl) : null;
+  const debtorsTable = document.getElementById('debtorsTable');
+  const debtorsCount = document.getElementById('debtorsCount');
+
   let currentOrderId = null;
   let currentOrderTotal = 0;
+  let currentOrderStatus = null;
 
   // Helper: format money
   function fmt(n) {
@@ -25,7 +44,6 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Extract sub-unit names from a selectionLabel like "Unit: Sub + Unit2: Sub2"
-  // Returns "Sub, Sub2" (comma-separated). If selectionLabel falsy returns ''.
   function subUnitsOnlyFromLabel(selectionLabel) {
     if (!selectionLabel) return '';
     const parts = selectionLabel.split(/\s*\+\s*/);
@@ -49,7 +67,6 @@ document.addEventListener('DOMContentLoaded', function () {
     return document.body.lastElementChild;
   }
 
-  // Alert modal: informational/error messages
   function showAlertModal(message, title = 'Notice') {
     let modalEl = document.getElementById('ordersPayAlertModal');
     if (!modalEl) {
@@ -82,8 +99,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // Confirm modal: returns Promise<boolean>
-  function showConfirmModal(message, title = 'Confirm') {
+  async function showConfirmModal(message, title = 'Confirm') {
     return new Promise((resolve) => {
       let modalEl = document.getElementById('ordersPayConfirmModal');
       if (!modalEl) {
@@ -155,26 +171,26 @@ document.addEventListener('DOMContentLoaded', function () {
   function renderOrderDetails(order) {
     if (!order) {
       orderInfo.innerHTML = '<p class="text-muted">No order loaded.</p>';
+      if (paymentControls) paymentControls.style.display = 'none';
       payNowBtn.style.display = 'none';
       payNowBtn.disabled = true;
       currentOrderId = null;
       currentOrderTotal = 0;
+      currentOrderStatus = null;
       return;
     }
 
     currentOrderId = order.orderId;
     currentOrderTotal = order.total;
+    currentOrderStatus = order.status;
 
-    // Build item rows using flex so there are no bullets and alignment is consistent
     let itemsHtml = '';
     if (order.items && order.items.length) {
       itemsHtml += `<div class="list-group mb-2">`;
       order.items.forEach(it => {
-        // Get only sub-unit names, comma-separated, single-line
         const rawLabel = it.selectionLabel || '';
         let selLabel = subUnitsOnlyFromLabel(rawLabel);
         if (!selLabel && it.selections && it.selections.length) {
-          // fallback: if selections include populated subUnit.name use that
           selLabel = it.selections.map(s => {
             if (s.subUnit && typeof s.subUnit === 'object' && s.subUnit.name) return s.subUnit.name;
             if (s.subUnit && typeof s.subUnit === 'string') return s.subUnit;
@@ -182,16 +198,12 @@ document.addEventListener('DOMContentLoaded', function () {
           }).filter(Boolean).join(', ');
         }
         if (!selLabel) selLabel = '(no label)';
-
-        // detect fb either by explicit flag or by raw label suffix
         const isFb = (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
         const fbBadge = isFb ? ' <span class="badge bg-secondary ms-2">F/B</span>' : '';
-
         const qty = Number(it.pages || 1);
         const unit = Number(it.unitPrice || 0);
         const subtotal = Number(it.subtotal || (qty * unit));
 
-        // single row, left = selection (single-line), right = qty/unit/subtotal
         itemsHtml += `
           <div class="list-group-item d-flex align-items-center justify-content-between" style="padding:0.5rem 0.75rem;">
             <div style="flex:1;min-width:0;">
@@ -214,7 +226,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     const statusLabel = order.status ? escapeHtml(order.status) : 'unknown';
-
     orderInfo.innerHTML = `
       <p><strong>Order ID:</strong> ${escapeHtml(order.orderId)}</p>
       <p><strong>Status:</strong> ${statusLabel}</p>
@@ -222,13 +233,30 @@ document.addEventListener('DOMContentLoaded', function () {
       <p class="text-end"><strong>Total: GH₵ ${fmt(order.total)}</strong></p>
     `;
 
-    // Hide Pay button completely if already paid; otherwise show it and enable if not paid
+    // show payment controls only if not paid
     if (order.status === 'paid') {
+      if (paymentControls) paymentControls.style.display = 'none';
       payNowBtn.style.display = 'none';
       payNowBtn.disabled = true;
     } else {
+      if (paymentControls) paymentControls.style.display = '';
       payNowBtn.style.display = '';
       payNowBtn.disabled = false;
+
+      // default payment method -> cash
+      if (paymentMethodSel) {
+        paymentMethodSel.value = 'cash';
+        momoFields && (momoFields.style.display = 'none');
+        chequeField && (chequeField.style.display = 'none');
+      }
+
+      // clear momo/cheque/part fields
+      momoNumberInput && (momoNumberInput.value = '');
+      momoTxInput && (momoTxInput.value = '');
+      chequeNumberInput && (chequeNumberInput.value = '');
+      partToggle && (partToggle.checked = false);
+      partWrapper && (partWrapper.style.display = 'none');
+      partAmountInput && (partAmountInput.value = '');
     }
   }
 
@@ -278,6 +306,37 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  // PAYMENT UI wiring -----------------------------------------------------
+
+  if (paymentMethodSel) {
+    paymentMethodSel.addEventListener('change', function () {
+      const v = this.value;
+      if (v === 'momo') {
+        momoFields.style.display = '';
+        chequeField.style.display = 'none';
+      } else if (v === 'cheque') {
+        chequeField.style.display = '';
+        momoFields.style.display = 'none';
+      } else {
+        momoFields.style.display = 'none';
+        chequeField.style.display = 'none';
+      }
+    });
+  }
+
+  if (partToggle) {
+    partToggle.addEventListener('change', function () {
+      if (this.checked) {
+        partWrapper.style.display = '';
+        // prefill with order total by default (user can change)
+        if (partAmountInput && currentOrderTotal) partAmountInput.value = Number(currentOrderTotal).toFixed(2);
+      } else {
+        partWrapper.style.display = 'none';
+        if (partAmountInput) partAmountInput.value = '';
+      }
+    });
+  }
+
   // pay now: confirm with modal, server authoritatively marks paid, then re-fetch order to show updated state
   if (payNowBtn) {
     payNowBtn.addEventListener('click', async function () {
@@ -286,17 +345,67 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
+      // validate fields depending on method & part payment
+      const method = paymentMethodSel ? paymentMethodSel.value : 'cash';
+      const isPart = partToggle ? !!partToggle.checked : false;
+      let partAmount = null;
+
+      if (isPart) {
+        if (!partAmountInput || !partAmountInput.value) {
+          showAlertModal('Enter the part payment amount', 'Missing amount');
+          return;
+        }
+        partAmount = Number(partAmountInput.value);
+        if (isNaN(partAmount) || partAmount <= 0) {
+          showAlertModal('Enter a valid part payment amount (> 0)', 'Invalid amount');
+          return;
+        }
+        // do not allow part payment larger than order total (basic guard)
+        if (partAmount > Number(currentOrderTotal)) {
+          showAlertModal('Part payment amount cannot exceed total', 'Invalid amount');
+          return;
+        }
+      }
+
+      if (method === 'momo') {
+        const num = momoNumberInput ? (momoNumberInput.value || '').trim() : '';
+        const tx = momoTxInput ? (momoTxInput.value || '').trim() : '';
+        if (!num || !tx) {
+          showAlertModal('Enter MoMo number and transaction id', 'Missing MoMo details');
+          return;
+        }
+      } else if (method === 'cheque') {
+        const cnum = chequeNumberInput ? (chequeNumberInput.value || '').trim() : '';
+        if (!cnum) {
+          showAlertModal('Enter cheque number', 'Missing cheque number');
+          return;
+        }
+      }
+
       // Confirm using modal
-      const ok = await showConfirmModal('Mark this order as paid?', 'Confirm payment');
+      const confirmMsg = isPart ? `Record a part payment of GH₵ ${fmt(partAmount)} for order ${escapeHtml(currentOrderId)}?` : `Mark order ${escapeHtml(currentOrderId)} as paid?`;
+      const ok = await showConfirmModal(confirmMsg, 'Confirm payment');
       if (!ok) return;
 
       payNowBtn.disabled = true;
       const origText = payNowBtn.textContent;
       payNowBtn.textContent = 'Processing...';
       try {
+        // Build payload - server currently ignores metadata, but this is prepared for backend support
+        const payload = {
+          paymentMethod: method,
+          momoNumber: (momoNumberInput && momoNumberInput.value) ? momoNumberInput.value.trim() : null,
+          momoTxId: (momoTxInput && momoTxInput.value) ? momoTxInput.value.trim() : null,
+          chequeNumber: (chequeNumberInput && chequeNumberInput.value) ? chequeNumberInput.value.trim() : null,
+          partPayment: isPart,
+          partPaymentAmount: isPart ? Number(partAmount) : null
+        };
+
+        // send as JSON; existing server action will still mark paid as before.
         const res = await fetch(`/api/orders/${encodeURIComponent(currentOrderId)}/pay`, {
           method: 'POST',
-          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          body: JSON.stringify(payload)
         });
         const j = await res.json().catch(() => null);
         if (!res.ok) {
@@ -317,6 +426,82 @@ document.addEventListener('DOMContentLoaded', function () {
       } finally {
         payNowBtn.disabled = false;
         payNowBtn.textContent = origText;
+      }
+    });
+  }
+
+  // -------------------------
+  // Debtors modal: fetch list of debtors/part payments
+  // NOTE: backend endpoint /api/debtors is expected to return { ok: true, debtors: [ ... ] }
+  // each debtor row ideally: { orderId, debtorName, amountDue, paidSoFar, outstanding }
+  // If you don't have this endpoint yet, the client will show a message. Implement server side to populate.
+  // -------------------------
+  async function fetchDebtorsList() {
+    if (!debtorsTable || !debtorsCount) return;
+    debtorsCount.textContent = 'Loading...';
+    const tbody = debtorsTable.querySelector('tbody');
+    if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">Loading...</td></tr>`;
+    try {
+      const res = await fetch('/api/debtors', { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+      if (!res.ok) {
+        const j = await res.json().catch(()=>null);
+        const msg = (j && j.error) ? j.error : `Failed to fetch debtors (${res.status})`;
+        if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">${escapeHtml(msg)}</td></tr>`;
+        debtorsCount.textContent = '0 results';
+        return;
+      }
+      const j = await res.json().catch(()=>null);
+      if (!j || !Array.isArray(j.debtors)) {
+        if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">No debtors found.</td></tr>`;
+        debtorsCount.textContent = '0 results';
+        return;
+      }
+      const rows = j.debtors;
+      if (!rows.length) {
+        if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">No debtors found.</td></tr>`;
+        debtorsCount.textContent = '0 results';
+        return;
+      }
+      // populate table
+      const html = rows.map(d => {
+        const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
+        return `<tr data-order-id="${escapeHtml(d.orderId || '')}">
+          <td>${escapeHtml(d.orderId || '')}</td>
+          <td>${escapeHtml(d.debtorName || '-')}</td>
+          <td class="text-end">GH₵ ${escapeHtml(Number(d.amountDue || 0).toFixed(2))}</td>
+          <td class="text-end">GH₵ ${escapeHtml(Number(d.paidSoFar || 0).toFixed(2))}</td>
+          <td class="text-end">GH₵ ${escapeHtml(out)}</td>
+          <td class="text-center"><button class="btn btn-sm btn-outline-primary view-debtor-order" type="button" data-order-id="${escapeHtml(d.orderId || '')}">View</button></td>
+        </tr>`;
+      }).join('');
+      if (tbody) tbody.innerHTML = html;
+      debtorsCount.textContent = `${rows.length} result${rows.length > 1 ? 's' : ''}`;
+    } catch (err) {
+      console.error('fetch debtors err', err);
+      if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">Network error while fetching debtors.</td></tr>`;
+      debtorsCount.textContent = '0 results';
+    }
+  }
+
+  if (openDebtorsBtn) {
+    openDebtorsBtn.addEventListener('click', function () {
+      if (debtorsModal) debtorsModal.show();
+      fetchDebtorsList();
+    });
+  }
+
+  // delegate click in debtors table - view order (open that order in the pay page)
+  if (debtorsTable) {
+    debtorsTable.addEventListener('click', function (ev) {
+      const btn = ev.target.closest('.view-debtor-order');
+      if (btn) {
+        const id = btn.dataset.orderId;
+        if (id) {
+          // close modal and load order on page
+          if (debtorsModal) debtorsModal.hide();
+          fetchOrderIdInput.value = id;
+          fetchOrderById(id);
+        }
       }
     });
   }
