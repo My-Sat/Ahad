@@ -362,25 +362,147 @@ exports.apiGetOrderById = async (req, res) => {
   }
 };
 
-// API: mark order paid
+// API: mark order paid (record payment)
 // POST /api/orders/:orderId/pay
 exports.apiPayOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
     if (!orderId) return res.status(400).json({ error: 'No orderId provided' });
 
+    // Accept JSON body for payment metadata:
+    // { paymentMethod, momoNumber, momoTxId, chequeNumber, partPayment (bool), partPaymentAmount (number), note }
+    const body = req.body || {};
+    const method = (body.paymentMethod || 'cash').toString().toLowerCase();
+    const isPart = !!body.partPayment;
+    let amount = null;
+    if (isPart) {
+      amount = Number(body.partPaymentAmount || 0);
+      if (isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ error: 'Invalid part payment amount' });
+      }
+    }
+
+    // Load order
     const order = await Order.findOne({ orderId });
     if (!order) return res.status(404).json({ error: 'Order not found' });
-    if (order.status === 'paid') return res.status(400).json({ error: 'Order already paid' });
 
-    order.status = 'paid';
-    order.paidAt = new Date();
+    // If already fully paid, short-circuit
+    const currentPaid = order.paidSoFar ? order.paidSoFar() : (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    if (order.status === 'paid' && (Number(currentPaid) >= Number(order.total || 0))) {
+      return res.status(400).json({ error: 'Order already paid' });
+    }
+
+    // Determine payment amount to record
+    let toRecordAmount = 0;
+    if (isPart) {
+      toRecordAmount = Number(amount);
+    } else {
+      // full payment: if client supplied partPaymentAmount treat it as amount, otherwise use remaining outstanding
+      if (body.partPaymentAmount) {
+        toRecordAmount = Number(body.partPaymentAmount);
+      } else {
+        // remaining outstanding
+        const remaining = Number(order.total || 0) - Number(currentPaid || 0);
+        toRecordAmount = remaining > 0 ? remaining : 0;
+      }
+    }
+    if (toRecordAmount <= 0) {
+      return res.status(400).json({ error: 'Payment amount must be greater than zero' });
+    }
+
+    // Build meta object for momo/cheque etc
+    const meta = {};
+    if (method === 'momo') {
+      if (body.momoNumber) meta.momoNumber = String(body.momoNumber);
+      if (body.momoTxId) meta.momoTxId = String(body.momoTxId);
+    } else if (method === 'cheque') {
+      if (body.chequeNumber) meta.chequeNumber = String(body.chequeNumber);
+    }
+    // other arbitrary metadata allowed in body.meta
+    if (body.meta && typeof body.meta === 'object') {
+      Object.assign(meta, body.meta);
+    }
+
+    // Create payment record and push
+    const payment = {
+      method: ['cash','momo','cheque','other'].includes(method) ? method : 'other',
+      amount: Number(toRecordAmount),
+      meta,
+      note: body.note || (isPart ? 'part-payment' : 'full-payment'),
+      createdAt: new Date()
+    };
+
+    order.payments = order.payments || [];
+    order.payments.push(payment);
+
+    // recompute paid so far
+    const newPaidSoFar = order.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    const outstanding = Number((Number(order.total || 0) - newPaidSoFar).toFixed(2));
+
+    // If fully paid now, mark paid and set paidAt
+    if (outstanding <= 0) {
+      order.status = 'paid';
+      order.paidAt = new Date();
+    }
+
     await order.save();
 
-    return res.json({ ok: true, orderId: order.orderId });
+    return res.json({
+      ok: true,
+      orderId: order.orderId,
+      paidSoFar: Number(newPaidSoFar.toFixed(2)),
+      outstanding: Number(outstanding.toFixed(2)),
+      status: order.status
+    });
   } catch (err) {
     console.error('apiPayOrder error', err);
     return res.status(500).json({ error: 'Error paying order' });
+  }
+};
+
+
+// API: list debtors (orders with outstanding > 0)
+// GET /api/debtors
+exports.apiGetDebtors = async (req, res) => {
+  try {
+    // aggregate: compute paidSoFar and outstanding per order then filter outstanding > 0
+    const rows = await Order.aggregate([
+      // compute paidSoFar (sum of payments.amount)
+      { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
+      // outstanding = total - paidSoFar
+      { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
+      // only those with outstanding > 0
+      { $match: { outstanding: { $gt: 0 } } },
+      // project fields useful for frontend
+      { $project: {
+        orderId: 1,
+        total: 1,
+        paidSoFar: 1,
+        outstanding: 1,
+        // attempt to include a debtor name if present on the order document
+        debtorName: { $ifNull: ['$customerName', { $ifNull: ['$customer', null] }] },
+        createdAt: 1,
+        status: 1
+      } },
+      { $sort: { outstanding: -1, createdAt: -1 } },
+      { $limit: 1000 }
+    ]);
+
+    // Normalize output so amounts are numbers with 2 decimals
+    const out = (rows || []).map(r => ({
+      orderId: r.orderId,
+      debtorName: r.debtorName || '',
+      amountDue: Number((r.total || 0).toFixed(2)),
+      paidSoFar: Number((r.paidSoFar || 0).toFixed(2)),
+      outstanding: Number((r.outstanding || 0).toFixed(2)),
+      createdAt: r.createdAt,
+      status: r.status
+    }));
+
+    return res.json({ ok: true, debtors: out });
+  } catch (err) {
+    console.error('apiGetDebtors error', err);
+    return res.status(500).json({ error: 'Error fetching debtors' });
   }
 };
 
