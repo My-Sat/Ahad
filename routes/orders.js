@@ -6,5 +6,5 @@ const orderController = require('../controllers/order');
 // Staff pages (non-admin)
 router.get('/new', orderController.newOrderPage);
 router.get('/pay', orderController.payPage);
-
+router.get('/view/:orderId', orderController.viewOrderPage);
 module.exports = router;

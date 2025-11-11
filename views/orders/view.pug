@@ -1,0 +1,119 @@
+extends ../layout
+
+block content
+  .container
+    .row.justify-content-center
+      .col-12.col-md-10
+        .card.shadow-sm
+          .card-body
+            .d-flex.justify-content-between.align-items-center.mb-3
+              h4.mb-0 Order Details
+              .btn-group
+
+            // Order meta
+            .mb-3
+              p.mb-1
+                strong Order ID:
+                |  #{order.orderId}
+              p.mb-1
+                strong Status:
+                |  #{order.status}
+              p.mb-1
+                strong Created:
+                |  #{order.createdAt ? new Date(order.createdAt).toLocaleString() : ''}
+
+            // Items
+            h6.mb-2 Items
+            if order.items && order.items.length
+              .list-group.mb-3
+                each it in order.items
+                  - var rawLabel = it.selectionLabel || ''
+                  - var subs = (rawLabel && rawLabel.length) ? rawLabel.split(/\s*\+\s*/).map(p => { const idx = p.indexOf(':'); return idx>=0 ? p.slice(idx+1).trim() : p.trim(); }).filter(Boolean).join(', ') : '(no label)';
+                  .list-group-item.d-flex.justify-content-between.align-items-center
+                    .me-2(style='min-width:0;flex:1;')
+                      span(style='display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:480px;') #{subs}
+                      if it.fb
+                        span.badge.bg-secondary.ms-2 F/B
+                      if it.spoiled
+                        span.text-danger.ms-2 Spoiled: #{it.spoiled}
+                    .text-end(style='min-width:180px;')
+                      div QTY: #{it.pages || 1}
+                      div Unit: GH₵ #{(it.unitPrice||0).toFixed(2)}
+                      div Subtotal: GH₵ #{(it.subtotal||0).toFixed(2)}
+                      if it.printerName
+                        div.small.text-muted Printer: #{it.printerName}
+
+            else
+              p.text-muted No items listed.
+
+            // Totals + payments summary
+            .d-flex.justify-content-end.mb-2
+              .me-3
+                div Total:
+                strong GH₵ #{(order.total || 0).toFixed(2)}
+              .me-3
+                div Paid so far:
+                strong GH₵ #{paidSoFar.toFixed(2)}
+              .me-3
+                div Remaining:
+                if outstanding > 0
+                  strong.text-danger GH₵ #{outstanding.toFixed(2)}
+                else
+                  strong.text-success GH₵ 0.00
+
+            // Payment history
+            h6.mb-2 Payment History
+            if order.payments && order.payments.length
+              .table-responsive
+                table.table.table-sm.table-striped
+                  thead
+                    tr
+                      th Date
+                      th Method
+                      th.text-end Amount
+                      th Details
+                      th Note
+                  tbody
+                    each p in order.payments
+                        - const dt = p.createdAt ? new Date(p.createdAt).toLocaleString() : ''
+                        - const method = (p.method || 'unknown').toLowerCase()
+                        - const amount = Number(p.amount || 0).toFixed(2)
+                        - const meta = p.meta && typeof p.meta === 'object' ? p.meta : {}
+                        - // known meta keys that we show explicitly
+                        - const knownKeys = ['momoNumber','momoTxId','chequeNumber']
+                        - // build extraMeta containing only keys not in knownKeys
+                        - const extraMeta = {}
+                        - Object.keys(meta || {}).forEach(function(k){ if (knownKeys.indexOf(k) === -1) extraMeta[k] = meta[k]; })
+
+                        tr
+                        td #{dt}
+                        td #{method.toUpperCase()}
+                        td.text-end GH₵ #{amount}
+                        td
+                            if method === 'momo'
+                            if meta.momoNumber
+                                div.mb-1
+                                small.text-muted Number:
+                                span.ms-2 #{meta.momoNumber}
+                            if meta.momoTxId
+                                div
+                                small.text-muted TxID:
+                                span.ms-2 #{meta.momoTxId}
+                            else if method === 'cheque'
+                            if meta.chequeNumber
+                                div
+                                small.text-muted Cheque:
+                                span.ms-2 #{meta.chequeNumber}
+                            else
+                            // nothing special for other methods
+
+                            // print any extra meta keys (only those not shown above)
+                            if Object.keys(extraMeta).length
+                            div.mt-1
+
+                        td #{p.note || ''}
+            else
+              p.text-muted No payments recorded.
+
+            // Actions (record payment -> jumps to /orders/pay with id)
+            .d-flex.justify-content-end.mt-3

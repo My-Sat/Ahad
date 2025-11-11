@@ -226,12 +226,28 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     const statusLabel = order.status ? escapeHtml(order.status) : 'unknown';
+
+    // compute outstanding: prefer server-supplied, otherwise compute from payments
+    let outstanding = null;
+    if (typeof order.outstanding !== 'undefined' && order.outstanding !== null) {
+      outstanding = Number(order.outstanding);
+    } else {
+      // sum payments if present
+      let paid = 0;
+      if (order.payments && Array.isArray(order.payments)) {
+        order.payments.forEach(p => { const a = Number(p.amount || 0); if (!isNaN(a)) paid += a; });
+      }
+      outstanding = Number((Number(order.total || 0) - paid).toFixed(2));
+    }
+
     orderInfo.innerHTML = `
       <p><strong>Order ID:</strong> ${escapeHtml(order.orderId)}</p>
       <p><strong>Status:</strong> ${statusLabel}</p>
       ${itemsHtml}
       <p class="text-end"><strong>Total: GH₵ ${fmt(order.total)}</strong></p>
+      ${ (outstanding !== null && outstanding > 0) ? `<p class="text-end text-danger"><strong>Remaining: GH₵ ${fmt(outstanding)}</strong></p>` : '' }
     `;
+
 
     // show payment controls only if not paid
     if (order.status === 'paid') {
@@ -471,7 +487,7 @@ document.addEventListener('DOMContentLoaded', function () {
           <td class="text-end">GH₵ ${escapeHtml(Number(d.amountDue || 0).toFixed(2))}</td>
           <td class="text-end">GH₵ ${escapeHtml(Number(d.paidSoFar || 0).toFixed(2))}</td>
           <td class="text-end">GH₵ ${escapeHtml(out)}</td>
-          <td class="text-center"><button class="btn btn-sm btn-outline-primary view-debtor-order" type="button" data-order-id="${escapeHtml(d.orderId || '')}">View</button></td>
+          <td class="text-center"><button class="btn btn-sm btn-outline-primary view-debtor-order" type="button" data-order-id="${escapeHtml(d.orderId || '')}">Update</button></td>
         </tr>`;
       }).join('');
       if (tbody) tbody.innerHTML = html;
@@ -508,4 +524,199 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Initial state
   renderOrderDetails(null);
+
+  // at the end of orders_pay.js (after initial render)
+(function prefillFromQuery() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('orderId');
+    if (id && fetchOrderIdInput) {
+      fetchOrderIdInput.value = id;
+      // automatically fetch (but do not submit form)
+      fetchOrderById(id);
+    }
+  } catch (e) { /* ignore */ }
+})();
+
+  // -------------------------
+  // Orders Explorer for Pay page (re-uses server /api/orders)
+  // - openOrdersExplorerBtn opens modal and auto-loads today's orders
+  // - clicking Order ID link or the View button navigates to server-rendered /orders/view/:orderId
+  // -------------------------
+  (function ordersExplorerForPay() {
+    const openBtn = document.getElementById('openOrdersExplorerBtn');
+    const modalEl = document.getElementById('ordersExplorerModal');
+    const modal = (window.bootstrap && modalEl) ? new bootstrap.Modal(modalEl) : null;
+    const ordersFrom = document.getElementById('ordersFrom');
+    const ordersTo = document.getElementById('ordersTo');
+    const fetchBtn = document.getElementById('ordersFetchBtn');
+    const presetToday = document.getElementById('ordersPresetToday');
+    const presetYesterday = document.getElementById('ordersPresetYesterday');
+    const presetThisWeek = document.getElementById('ordersPresetThisWeek');
+    const table = document.getElementById('ordersModalTable');
+    const countEl = document.getElementById('ordersCount');
+
+    if (!openBtn || !modalEl || !ordersFrom || !ordersTo || !table) return;
+
+    function isoDate(d) {
+      const dt = d ? new Date(d) : new Date();
+      const yr = dt.getFullYear();
+      const mm = String(dt.getMonth() + 1).padStart(2, '0');
+      const dd = String(dt.getDate()).padStart(2, '0');
+      return `${yr}-${mm}-${dd}`;
+    }
+
+    function formatDateTimeForDisplay(dtStr) {
+      try {
+        const d = new Date(dtStr);
+        const dd = String(d.getDate()).padStart(2,'0');
+        const mm = String(d.getMonth()+1).padStart(2,'0');
+        const yyyy = d.getFullYear();
+        const hh = String(d.getHours()).padStart(2,'0');
+        const min = String(d.getMinutes()).padStart(2,'0');
+        const ss = String(d.getSeconds()).padStart(2,'0');
+        return `${dd}/${mm}/${yyyy}, ${hh}:${min}:${ss}`;
+      } catch (e) { return dtStr || ''; }
+    }
+
+    function setDefaultRangeToToday() {
+      const t = new Date();
+      ordersFrom.value = isoDate(t);
+      ordersTo.value = isoDate(t);
+      setActivePreset(presetToday);
+    }
+
+    function setActivePreset(activeBtn) {
+      [presetToday, presetYesterday, presetThisWeek].forEach(btn => {
+        if (!btn) return;
+        if (btn === activeBtn) {
+          btn.classList.remove('btn-outline-secondary');
+          btn.classList.add('btn-primary');
+          btn.setAttribute('aria-pressed','true');
+        } else {
+          btn.classList.remove('btn-primary');
+          btn.classList.add('btn-outline-secondary');
+          btn.setAttribute('aria-pressed','false');
+        }
+      });
+    }
+
+    async function fetchOrdersList(from, to) {
+      if (!from || !to) return renderOrdersListError('Invalid date range');
+      table.querySelector('tbody').innerHTML = `<tr><td class="text-muted" colspan="5">Loading...</td></tr>`;
+      try {
+        const url = `/api/orders?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+        const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+        if (!res.ok) {
+          const j = await res.json().catch(()=>null);
+          const msg = (j && j.error) ? j.error : `Failed to fetch orders (${res.status})`;
+          return renderOrdersListError(msg);
+        }
+        const j = await res.json().catch(()=>null);
+        if (!j || !Array.isArray(j.orders)) return renderOrdersListError('Invalid response from server.');
+        renderOrdersList(j.orders);
+      } catch (err) {
+        console.error('fetchOrdersList err', err);
+        renderOrdersListError('Network error while fetching orders.');
+      }
+    }
+
+    function renderOrdersListError(msg) {
+      table.querySelector('tbody').innerHTML = `<tr><td class="text-muted" colspan="5">${msg}</td></tr>`;
+      if (countEl) countEl.textContent = '0 results';
+    }
+
+    function escapeHtml(s) {
+      if (!s) return '';
+      return String(s).replace(/[&<>"'`=\/]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
+    }
+
+    function renderOrdersList(orders) {
+      const tbody = table.querySelector('tbody');
+      if (!orders || !orders.length) {
+        tbody.innerHTML = '<tr><td class="text-muted" colspan="5">No orders in this range.</td></tr>';
+        if (countEl) countEl.textContent = '0 results';
+        return;
+      }
+      tbody.innerHTML = '';
+      orders.forEach(o => {
+        const oid = escapeHtml(o.orderId || o._id || '');
+        const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : '';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><a href="/admin/orders/view/${encodeURIComponent(o.orderId || o._id || '')}" class="orders-explorer-link">${oid}</a></td>
+          <td class="text-end">GH₵ ${Number(o.total || 0).toFixed(2)}</td>
+          <td>${escapeHtml(o.status || '')}</td>
+          <td>${escapeHtml(created)}</td>
+          <td class="text-center"><button class="btn btn-sm btn-outline-secondary orders-explorer-view-btn" data-order-id="${escapeHtml(o.orderId || o._id || '')}">View</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+      if (countEl) countEl.textContent = `${orders.length} result${orders.length > 1 ? 's' : ''}`;
+    }
+
+    // open modal and auto-fetch
+    openBtn.addEventListener('click', function () {
+      setDefaultRangeToToday();
+      if (modal) modal.show();
+      // immediate fetch for today
+      const from = ordersFrom.value || isoDate(new Date());
+      const to = ordersTo.value || isoDate(new Date());
+      fetchOrdersList(from, to);
+    });
+
+    // preset handlers
+    presetToday && presetToday.addEventListener('click', function () {
+      setDefaultRangeToToday();
+    });
+    presetYesterday && presetYesterday.addEventListener('click', function () {
+      const d = new Date(); d.setDate(d.getDate() - 1);
+      ordersFrom.value = isoDate(d);
+      ordersTo.value = isoDate(d);
+      setActivePreset(presetYesterday);
+    });
+    presetThisWeek && presetThisWeek.addEventListener('click', function () {
+      const now = new Date();
+      const day = now.getDay();
+      const diffToMonday = (day + 6) % 7;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - diffToMonday);
+      ordersFrom.value = isoDate(monday);
+      ordersTo.value = isoDate(now);
+      setActivePreset(presetThisWeek);
+    });
+
+    // refresh button
+    fetchBtn && fetchBtn.addEventListener('click', function () {
+      const from = ordersFrom.value || isoDate(new Date());
+      const to = ordersTo.value || isoDate(new Date());
+      if (new Date(from) > new Date(to)) {
+        alert('From date cannot be after To date');
+        return;
+      }
+      fetchOrdersList(from, to);
+    });
+
+    // delegate clicks inside table: anchor -> native navigation; view button -> navigate programmatically
+    table.addEventListener('click', function (ev) {
+      const a = ev.target.closest('.orders-explorer-link');
+      if (a) {
+        // let native navigation happen
+        return;
+      }
+      const vb = ev.target.closest('.orders-explorer-view-btn');
+      if (vb) {
+        const id = vb.dataset.orderId;
+        if (id) {
+          // navigate to server-rendered order view
+          window.location.href = '/admin/orders/view/' + encodeURIComponent(id);
+        }
+      }
+    });
+
+    // set initial defaults (do not auto-fetch)
+    setDefaultRangeToToday();
+  })();
+
+
 });

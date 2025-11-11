@@ -10,12 +10,12 @@ block content
               h4.mb-0 Pay Order
               .d-flex.gap-2
                 // Orders (existing style) kept for parity with job order page
-                a.btn.btn-outline-secondary.btn-sm(href='/orders', title='Orders') 
+                button.btn.btn-outline-secondary.btn-sm#openOrdersExplorerBtn(type='button', title='View orders') 
                   i.bi.bi-list-check.me-1
                   | Orders
                 // Debtors button (new)
                 button.btn.btn-outline-secondary.btn-sm#openDebtorsBtn(type='button', title='Debtors')
-                  i.bi.bi-people.me-1
+                  i.bi.bi-list-check.me-1
                   | Debtors
 
             p.text-muted Enter the Order ID to fetch the amount due and mark it as paid.
@@ -89,6 +89,46 @@ block content
               tbody
                 tr
                   td.text-muted(colspan='6') Loading...
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
+  // Orders Explorer Modal (same UX as new.pug)
+  .modal.fade(id='ordersExplorerModal', tabindex='-1', aria-labelledby='ordersExplorerModalLabel', aria-hidden='true')
+    .modal-dialog.modal-xl.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id='ordersExplorerModalLabel') Orders Explorer
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          .row.g-2.mb-3.align-items-center
+            .col-auto
+              label.form-label.mb-0 Small Date Range
+            .col-auto
+              input.form-control(type='date', id='ordersFrom')
+            .col-auto
+              input.form-control(type='date', id='ordersTo')
+            .col
+              .btn-group
+                button.btn.btn-outline-secondary.btn-sm#ordersPresetToday(type='button') Today
+                button.btn.btn-outline-secondary.btn-sm#ordersPresetYesterday(type='button') Yesterday
+                button.btn.btn-outline-secondary.btn-sm#ordersPresetThisWeek(type='button') This Week
+              button.btn.btn-primary.btn-sm.ms-2#ordersFetchBtn(type='button') Refresh
+            .col-auto.text-end
+              small.text-muted#ordersCount -- results
+
+          // orders table
+          .table-responsive
+            table.table.table-hover.table-sm#ordersModalTable
+              thead
+                tr
+                  th Order ID
+                  th.text-end Total
+                  th Status
+                  th Created
+                  th.text-center Actions
+              tbody
+                tr
+                  td.text-muted(colspan='5') Use the date filters above and click Refresh to load orders.
+
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 

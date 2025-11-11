@@ -697,11 +697,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     tbody.innerHTML = '';
     orders.forEach(o => {
+      const safeOrderId = escapeHtml(o.orderId || o._id || '');
+      const viewHref = '/admin/orders/view/' + encodeURIComponent(o.orderId || o._id || '');
       const tr = document.createElement('tr');
       tr.dataset.orderId = o.orderId || o._id || '';
       const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : (o.createdAt || '');
       tr.innerHTML = `
-        <td><a href="#" class="orders-explorer-open-order" data-order-id="${escapeHtml(o.orderId || o._id || '')}">${escapeHtml(o.orderId || o._id || '')}</a></td>
+        <td><a href="${viewHref}" class="orders-explorer-open-order" data-order-id="${safeOrderId}">${safeOrderId}</a></td>
         <td class="text-end">GH₵ ${formatMoney(o.total)}</td>
         <td>${escapeHtml(o.status || '')}</td>
         <td>${escapeHtml(created)}</td>
@@ -840,20 +842,22 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // delegate clicks in orders table (open detail)
+    // delegate clicks in orders table (open detail)
   if (ordersTable) {
     ordersTable.addEventListener('click', function (ev) {
+      // If user clicked the anchor (link), allow native navigation - do nothing.
       const a = ev.target.closest('.orders-explorer-open-order');
       if (a) {
-        ev.preventDefault();
-        const id = a.dataset.orderId;
-        viewOrderDetails(id);
+        // do not preventDefault -> let browser follow href to /orders/view/:orderId
         return;
       }
+      // If user clicked the "View" button, navigate programmatically.
       const vbtn = ev.target.closest('.view-order-btn');
       if (vbtn) {
         const id = vbtn.dataset.orderId;
-        viewOrderDetails(id);
+        if (id) {
+          window.location.href = '/admin/orders/view/' + encodeURIComponent(id);
+        }
       }
     });
   }

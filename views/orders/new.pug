@@ -100,22 +100,6 @@ block content
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
-  // Order Details Modal (re-uses copy/print behaviours)
-  .modal.fade(id='orderDetailsModal', tabindex='-1', aria-labelledby='orderDetailsModalLabel', aria-hidden='true')
-    .modal-dialog.modal-dialog-centered
-      .modal-content
-        .modal-header
-          h5.modal-title(id='orderDetailsModalLabel') Order Details
-          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
-        .modal-body
-          // details loaded via JS
-          .mb-2
-            p.small.text-muted#orderDetailsMeta Loading...
-          .small#orderDetailsJson(style='white-space:normal;') 
-        .modal-footer
-          button.btn.btn-outline-secondary(type='button', id='copyDetailOrderIdBtn') Copy Order ID
-          button.btn.btn-outline-primary(type='button', id='printDetailOrderBtn') Print
-          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
 block append scripts
   script(src='/public/javascripts/orders_client.js')

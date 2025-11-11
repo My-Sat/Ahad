@@ -28,6 +28,61 @@ exports.newOrderPage = async (req, res) => {
   }
 };
 
+exports.viewOrderPage = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    if (!orderId) return res.status(400).send('Missing orderId');
+
+    // find order and include payments/items
+    const orderDoc = await Order.findOne({ orderId }).lean();
+    if (!orderDoc) return res.status(404).send('Order not found');
+
+    // Populate printer names for items that reference a printer (non-blocking; keep behavior consistent)
+    try {
+      const printerIds = Array.from(new Set((orderDoc.items || []).filter(it => it.printer).map(it => String(it.printer))));
+      let printers = [];
+      if (printerIds.length) {
+        printers = await Printer.find({ _id: { $in: printerIds } }).select('_id name').lean();
+      }
+      const pmap = {};
+      printers.forEach(p => { pmap[String(p._id)] = p.name || String(p._id); });
+      orderDoc.items = (orderDoc.items || []).map(it => {
+        if (it.printer) {
+          const pid = String(it.printer);
+          return Object.assign({}, it, { printerName: (pmap[pid] || pid) });
+        }
+        return Object.assign({}, it, { printerName: null });
+      });
+    } catch (e) {
+      console.error('Failed to populate printers for order view', e);
+      // keep original items if population fails
+      orderDoc.items = orderDoc.items || [];
+    }
+
+    // compute payments summary
+    let paidSoFar = 0;
+    if (orderDoc.payments && Array.isArray(orderDoc.payments)) {
+      for (const p of orderDoc.payments) {
+        const a = Number(p && p.amount ? p.amount : 0);
+        if (!isNaN(a)) paidSoFar += a;
+      }
+    }
+    paidSoFar = Number(paidSoFar.toFixed(2));
+    const total = Number(orderDoc.total || 0);
+    const outstanding = Number((total - paidSoFar).toFixed(2));
+
+    // render server-side page
+    return res.render('orders/view', {
+      order: orderDoc,
+      paidSoFar,
+      outstanding
+    });
+  } catch (err) {
+    console.error('viewOrderPage error', err);
+    return res.status(500).send('Error loading order');
+  }
+};
+
 // Render payment page
 exports.payPage = async (req, res) => {
   try {
@@ -344,7 +399,20 @@ exports.apiGetOrderById = async (req, res) => {
       console.error('Failed to populate printer names for order items', pErr);
     }
 
-    // return minimal data
+    // Compute payments summary (backwards-compatible: may be undefined)
+    let paidSoFar = 0;
+    if (order.payments && Array.isArray(order.payments)) {
+      for (const p of order.payments) {
+        const a = Number(p && p.amount ? p.amount : 0);
+        if (!isNaN(a)) paidSoFar += a;
+      }
+    }
+    // round to 2 decimals
+    paidSoFar = Number(paidSoFar.toFixed(2));
+    const total = Number((order.total || 0));
+    const outstanding = Number((total - paidSoFar).toFixed(2));
+
+    // return minimal data plus payments summary
     return res.json({
       ok: true,
       order: {
@@ -353,7 +421,11 @@ exports.apiGetOrderById = async (req, res) => {
         status: order.status,
         items: order.items,
         createdAt: order.createdAt,
-        paidAt: order.paidAt
+        paidAt: order.paidAt,
+        // new fields:
+        paidSoFar,
+        outstanding,
+        payments: order.payments || []
       }
     });
   } catch (err) {
