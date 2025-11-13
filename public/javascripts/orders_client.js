@@ -453,48 +453,132 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   // create order — POST /api/orders
-  orderNowBtn.addEventListener('click', async function () {
-    if (!cart.length) return;
-    orderNowBtn.disabled = true;
-    const originalText = orderNowBtn.textContent;
-    orderNowBtn.textContent = 'Placing...';
-    try {
-      const payload = {
-        items: cart.map(it => ({
-          serviceId: it.serviceId,
-          priceRuleId: it.priceRuleId,
-          pages: it.pages,
-          fb: !!it.fb,
-          printerId: it.printerId || null,
-          spoiled: (typeof it.spoiled === 'number') ? it.spoiled : 0
-        })),
-        customerId: (document.getElementById('orderCustomerId') && document.getElementById('orderCustomerId').value) ? document.getElementById('orderCustomerId').value : null
-      };
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        body: JSON.stringify(payload)
-      });
-      const j = await res.json().catch(() => null);
-      if (!res.ok) {
-        alert((j && j.error) ? j.error : 'Order creation failed');
-        return;
-      }
-
-      // Show modal (instead of window.alert) with order details and copy/print actions
-      showOrderSuccessModal(j.orderId, j.total);
-      if (typeof showGlobalToast === 'function') showGlobalToast(`Order created: ${j.orderId}`, 3200);
-
-      cart = [];
-      renderCart();
-    } catch (err) {
-      console.error('create order err', err);
-      alert('Failed to create order');
-    } finally {
-      orderNowBtn.disabled = false;
-      orderNowBtn.textContent = originalText;
+// Helper: show the "no customer" modal and return 'proceed' or 'back'
+function showNoCustomerModal() {
+  return new Promise((resolve) => {
+    // create modal HTML if not present
+    let modalEl = document.getElementById('noCustomerModal');
+    if (!modalEl) {
+      const html = `
+<div class="modal fade" id="noCustomerModal" tabindex="-1" aria-labelledby="noCustomerModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="noCustomerModalLabel">No customer attached</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>This order does not have a customer attached. You can proceed without a customer, or go back to the Customers page to register or select a customer first.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-action="back">Back to Customers Page</button>
+        <button type="button" class="btn btn-primary" data-action="proceed">Proceed anyway</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      document.body.appendChild(container.firstElementChild);
+      modalEl = document.getElementById('noCustomerModal');
     }
+
+    const btnProceed = modalEl.querySelector('button[data-action="proceed"]');
+    const btnBack = modalEl.querySelector('button[data-action="back"]');
+    const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+
+    function cleanup() {
+      try {
+        btnProceed.removeEventListener('click', onProceed);
+        btnBack.removeEventListener('click', onBack);
+        modalEl.removeEventListener('hidden.bs.modal', onHidden);
+      } catch (e) {}
+    }
+    function onProceed() { cleanup(); inst.hide(); resolve('proceed'); }
+    function onBack() { cleanup(); inst.hide(); resolve('back'); }
+    function onHidden() { cleanup(); resolve(null); }
+
+    btnProceed.addEventListener('click', onProceed);
+    btnBack.addEventListener('click', onBack);
+    modalEl.addEventListener('hidden.bs.modal', onHidden);
+
+    inst.show();
   });
+}
+
+// Extracted order placement logic so we can re-use it from modal
+async function placeOrderFlow() {
+  if (!cart.length) return;
+  orderNowBtn.disabled = true;
+  const originalText = orderNowBtn.textContent;
+  orderNowBtn.textContent = 'Placing...';
+  try {
+    const payload = {
+      items: cart.map(it => ({
+        serviceId: it.serviceId,
+        priceRuleId: it.priceRuleId,
+        pages: it.pages,
+        fb: !!it.fb,
+        printerId: it.printerId || null,
+        spoiled: (typeof it.spoiled === 'number') ? it.spoiled : 0
+      })),
+      customerId: (document.getElementById('orderCustomerId') && document.getElementById('orderCustomerId').value) ? document.getElementById('orderCustomerId').value : null
+    };
+    const res = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify(payload)
+    });
+    const j = await res.json().catch(() => null);
+    if (!res.ok) {
+      alert((j && j.error) ? j.error : 'Order creation failed');
+      return;
+    }
+
+    // Show modal (instead of window.alert) with order details and copy/print actions
+    showOrderSuccessModal(j.orderId, j.total);
+    if (typeof showGlobalToast === 'function') showGlobalToast(`Order created: ${j.orderId}`, 3200);
+
+    cart = [];
+    renderCart();
+  } catch (err) {
+    console.error('create order err', err);
+    alert('Failed to create order');
+  } finally {
+    orderNowBtn.disabled = false;
+    orderNowBtn.textContent = originalText;
+  }
+}
+
+// New click handler that checks for customer, shows modal if none, then proceeds/back accordingly
+orderNowBtn.addEventListener('click', async function () {
+  if (!cart.length) return;
+
+  // determine if a customer is attached
+  const customerEl = document.getElementById('orderCustomerId');
+  const hasCustomer = !!(customerEl && customerEl.value && customerEl.value.trim());
+
+  if (!hasCustomer) {
+    // show modal offering proceed or go back
+    const choice = await showNoCustomerModal();
+    if (choice === 'back') {
+      // navigate to customers page to register/select a customer
+      // change this path if your customers page is at a different route
+      window.location.href = '/customers';
+      return;
+    } else if (choice === 'proceed') {
+      // proceed with the existing flow
+      await placeOrderFlow();
+      return;
+    } else {
+      // modal dismissed or closed -> do nothing
+      return;
+    }
+  }
+
+  // if customer present, proceed directly
+  await placeOrderFlow();
+});
 
   // Auto-load prices when service changes
   if (serviceSelect) {
