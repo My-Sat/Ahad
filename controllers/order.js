@@ -577,27 +577,67 @@ exports.apiPayOrder = async (req, res) => {
 exports.apiGetDebtors = async (req, res) => {
   try {
     // aggregate: compute paidSoFar and outstanding per order then filter outstanding > 0
-    const rows = await Order.aggregate([
-      // compute paidSoFar (sum of payments.amount)
-      { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
-      // outstanding = total - paidSoFar
-      { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
-      // only those with outstanding > 0
-      { $match: { outstanding: { $gt: 0 } } },
-      // project fields useful for frontend
-      { $project: {
-        orderId: 1,
-        total: 1,
-        paidSoFar: 1,
-        outstanding: 1,
-        // attempt to include a debtor name if present on the order document
-        debtorName: { $ifNull: ['$customerName', { $ifNull: ['$customer', null] }] },
-        createdAt: 1,
-        status: 1
-      } },
-      { $sort: { outstanding: -1, createdAt: -1 } },
-      { $limit: 1000 }
-    ]);
+    // aggregate: compute paidSoFar and outstanding per order then filter outstanding > 0
+const rows = await Order.aggregate([
+  // compute paidSoFar (sum of payments.amount)
+  { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
+  // outstanding = total - paidSoFar
+  { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
+  // only those with outstanding > 0
+  { $match: { outstanding: { $gt: 0 } } },
+
+  // lookup customer doc (if order.customer references a Customer)
+  { $lookup: {
+      from: 'customers',
+      localField: 'customer',
+      foreignField: '_id',
+      as: 'customer_doc'
+  } },
+
+  // derive a debtorName: prefer explicit order.customerName,
+  // otherwise use customer_doc info (artist -> businessName|phone, else firstName|businessName|phone),
+  // otherwise fallback to empty string
+  { $addFields: {
+      debtorName: {
+        $ifNull: [
+          '$customerName',
+          {
+            $cond: [
+              { $gt: [ { $size: '$customer_doc' }, 0 ] },
+              {
+                $let: {
+                  vars: { c: { $arrayElemAt: ['$customer_doc', 0] } },
+                  in: {
+                    $cond: [
+                      { $eq: ['$$c.category', 'artist'] },
+                      { $ifNull: ['$$c.businessName', { $ifNull: ['$$c.phone', ''] }] },
+                      { $ifNull: ['$$c.firstName', { $ifNull: ['$$c.businessName', { $ifNull: ['$$c.phone', ''] }] }] }
+                    ]
+                  }
+                }
+              },
+              '' // no customer doc and no customerName -> empty string
+            ]
+          }
+        ]
+      }
+  } },
+
+  // project fields useful for frontend
+  { $project: {
+      orderId: 1,
+      total: 1,
+      paidSoFar: 1,
+      outstanding: 1,
+      debtorName: 1,
+      createdAt: 1,
+      status: 1
+  } },
+
+  { $sort: { outstanding: -1, createdAt: -1 } },
+  { $limit: 1000 }
+]);
+
 
     // Normalize output so amounts are numbers with 2 decimals
     const out = (rows || []).map(r => ({
