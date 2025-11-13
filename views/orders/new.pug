@@ -12,7 +12,17 @@ block content
                 input(type='hidden', id='orderCustomerId', value=customer._id)
 
               h4.mb-0 Job Order
-              // Orders explorer trigger
+              // Orders explorer trigger + Customers button
+              .mb-2
+                // Customers page link
+                a.btn.btn-outline-secondary.btn-sm(href='/customers', title='Customers')
+                  i.bi.bi-people.me-1
+                  | Customers
+                // Orders button (existing)
+                button.btn.btn-outline-secondary.btn-sm#openOrdersExplorerBtn(type='button', title='View orders')
+                  i.bi.bi-list-check.me-1
+                  | Orders
+
               if customer
                 .mb-2
                   div.small.text-muted Selected customer:
@@ -23,13 +33,6 @@ block content
                     strong(style='color:#ff7a18;') #{customer.firstName || customer.businessName || customer.phone}
                   // phone shown as a proper <small> element
                   small.text-muted.ms-3 #{customer.phone}
-
-              button.btn.btn-outline-secondary.btn-sm#openOrdersExplorerBtn(type='button', title='View orders')
-                i.bi.bi-list-check.me-1
-                | Orders
-              
-
-
             // selection row
             .row.g-2.mb-3
               .col-md-7
