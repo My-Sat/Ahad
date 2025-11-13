@@ -12,6 +12,7 @@ var logger = require('morgan');
 const adminRoutes = require('./routes/admin'); 
 const apiRoutes = require('./routes/api'); 
 const ordersRoutes = require('./routes/orders');
+const customersRoutes = require('./routes/customers');
 
 var app = express();
 
@@ -55,6 +56,7 @@ mongoose.connect(MONGO_URI)
 app.use('/admin', adminRoutes);
 app.use('/api', apiRoutes);
 app.use('/admin/orders', ordersRoutes);
+app.use('/', customersRoutes);
 
 app.get('/admin/services', (req, res) => res.send('POS Service Section running. Visit /admin/services'));
 

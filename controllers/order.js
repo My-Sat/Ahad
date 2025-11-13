@@ -19,9 +19,17 @@ function makeOrderId() {
 // Render order creation page
 exports.newOrderPage = async (req, res) => {
   try {
-    // load basic services list (name + id)
     const services = await Service.find().select('_id name').sort('name').lean();
-    res.render('orders/new', { services });
+
+    // optional preselected customer
+    let customer = null;
+    const customerId = req.query.customerId;
+    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+      const Customer = require('../models/customer');
+      customer = await Customer.findById(customerId).select('_id firstName businessName phone category').lean();
+    }
+
+    res.render('orders/new', { services, customer });
   } catch (err) {
     console.error('newOrderPage error', err);
     res.status(500).send('Error loading order page');
@@ -251,7 +259,27 @@ for (const it of items) {
       total
     });
 
+    const customerId = req.body.customerId;
+    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+      order.customer = new mongoose.Types.ObjectId(customerId);
+    }
+
     await order.save();
+
+    // If the order has a customer attached, re-evaluate their 'regular' status.
+// Do this in background but wait a short time to capture any potential synchronous listeners.
+try {
+  if (order.customer) {
+    // require the customer controller helper and call it (non-blocking)
+    const customerController = require('./customer');
+    // fire-and-forget but await to handle occasional DB consistency; swallow errors
+    customerController.updateRegularStatus(order.customer).catch(err => {
+      console.error('updateRegularStatus failed for customer', String(order.customer), err);
+    });
+  }
+} catch (e) {
+  console.error('post-order regular update dispatch error', e);
+}
 
     // --- MATERIAL MATCHING & RECORDING ---
     try {
@@ -399,6 +427,17 @@ exports.apiGetOrderById = async (req, res) => {
       console.error('Failed to populate printer names for order items', pErr);
     }
 
+        let customerInfo = null;
+    if (order.customer) {
+      try {
+        const Customer = require('../models/customer');
+        const c = await Customer.findById(order.customer).select('_id firstName businessName phone category').lean();
+        if (c) {
+          customerInfo = c;
+        }
+      } catch (e) { console.error('Failed to populate customer', e); }
+    }
+
     // Compute payments summary (backwards-compatible: may be undefined)
     let paidSoFar = 0;
     if (order.payments && Array.isArray(order.payments)) {
@@ -414,20 +453,20 @@ exports.apiGetOrderById = async (req, res) => {
 
     // return minimal data plus payments summary
     return res.json({
-      ok: true,
-      order: {
-        orderId: order.orderId,
-        total: order.total,
-        status: order.status,
-        items: order.items,
-        createdAt: order.createdAt,
-        paidAt: order.paidAt,
-        // new fields:
-        paidSoFar,
-        outstanding,
-        payments: order.payments || []
-      }
-    });
+  ok: true,
+  order: {
+    orderId: order.orderId,
+    total: order.total,
+    status: order.status,
+    items: order.items,
+    createdAt: order.createdAt,
+    paidAt: order.paidAt,
+    paidSoFar,
+    outstanding,
+    payments: order.payments || [],
+    customer: customerInfo
+  }
+});
   } catch (err) {
     console.error('apiGetOrderById error', err);
     return res.status(500).json({ error: 'Error fetching order' });

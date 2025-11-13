@@ -8,11 +8,27 @@ block content
           .card-body
             // Title row: Job Order + Orders explorer button
             .d-flex.justify-content-between.align-items-center.mb-3
+              if customer
+                input(type='hidden', id='orderCustomerId', value=customer._id)
+
               h4.mb-0 Job Order
               // Orders explorer trigger
+              if customer
+                .mb-2
+                  div.small.text-muted Selected customer:
+                  // name in orange, prefer businessName for artists
+                  if customer.category === 'artist'
+                    strong(style='color:#ff7a18;') #{customer.businessName || customer.phone}
+                  else
+                    strong(style='color:#ff7a18;') #{customer.firstName || customer.businessName || customer.phone}
+                  // phone shown as a proper <small> element
+                  small.text-muted.ms-3 #{customer.phone}
+
               button.btn.btn-outline-secondary.btn-sm#openOrdersExplorerBtn(type='button', title='View orders')
                 i.bi.bi-list-check.me-1
                 | Orders
+              
+
 
             // selection row
             .row.g-2.mb-3

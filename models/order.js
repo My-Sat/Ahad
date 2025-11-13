@@ -43,8 +43,9 @@ const OrderSchema = new mongoose.Schema({
   status: { type: String, enum: ['pending', 'paid', 'cancelled'], default: 'pending' },
   createdAt: { type: Date, default: Date.now },
   paidAt: { type: Date, default: null },
-
-  // New: record payment events (supports part payments)
+  //optional customer reference
+  customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', default: null },
+  //record payment events (supports part payments)
   payments: { type: [PaymentSchema], default: [] }
 });
 

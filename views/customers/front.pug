@@ -1,0 +1,56 @@
+extends ../layout
+
+block content
+  .container
+    .row.justify-content-center
+      .col-12.col-md-6
+        .card.shadow-sm
+          .card-body
+            .d-flex.justify-content-between.align-items-center.mb-3
+              h4.mb-0 Customer (Front Desk)
+              a.btn.btn-outline-secondary.btn-sm(href='/admin/orders/new') Back to Orders
+
+            p.text-muted.small Enter a customer's phone number to identify them quickly.
+
+            form#customerLookupForm.row.g-2.mb-3(role='form')
+              .col
+                input#lookupPhone.form-control(type='text', placeholder='Customer phone number', aria-label='Phone')
+              .col-auto
+                button.btn.btn-primary#lookupBtn(type='submit') Lookup
+
+            .d-flex.gap-2
+              button.btn.btn-outline-secondary#registerBtn(type='button') Register Customer
+              small.text-muted.align-self-center.ms-2 Default registration type: Customer
+
+  // Registration modal (customer / artist)
+  .modal.fade(id='registerCustomerModal', tabindex='-1', aria-labelledby='registerCustomerModalLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id='registerCustomerModalLabel') Register Customer
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          form#registerCustomerForm
+            .mb-2
+              label.form-label(for='regCategory') Register as
+              select.form-select#regCategory
+                option(value='one_time') Customer
+                option(value='artist') Artist
+            .mb-2#regFirstNameGroup
+              label.form-label(for='regFirstName') First name
+              input.form-control#regFirstName(type='text', placeholder='First name')
+            .mb-2#regBusinessNameGroup(style='display:none;')
+              label.form-label(for='regBusinessName') Business name
+              input.form-control#regBusinessName(type='text', placeholder='Business name')
+            .mb-2
+              label.form-label(for='regPhone') Phone
+              input.form-control#regPhone(type='text', placeholder='Phone number')
+            .mb-2
+              label.form-label(for='regNotes') Notes (optional)
+              input.form-control#regNotes(type='text', placeholder='Notes')
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary#saveCustomerBtn(type='button') Register
+
+block append scripts
+  script(src='/public/javascripts/customers_front.js')

@@ -467,7 +467,8 @@ document.addEventListener('DOMContentLoaded', function () {
           fb: !!it.fb,
           printerId: it.printerId || null,
           spoiled: (typeof it.spoiled === 'number') ? it.spoiled : 0
-        }))
+        })),
+        customerId: (document.getElementById('orderCustomerId') && document.getElementById('orderCustomerId').value) ? document.getElementById('orderCustomerId').value : null
       };
       const res = await fetch('/api/orders', {
         method: 'POST',
