@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   async function lookupByPhone(phone) {
     try {
-      const url = `/api/customers/lookup?phone=${encodeURIComponent(phone)}`;
+      const url = `/customers/lookup?phone=${encodeURIComponent(phone)}`;
       const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
       if (!res.ok) {
         const j = await res.json().catch(()=>null);
@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
     try {
-      const res = await fetch(`/api/customers/search?q=${encodeURIComponent(q)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+      const res = await fetch(`/customers/search?q=${encodeURIComponent(q)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
       if (!res.ok) return hideSuggestions();
       const j = await res.json().catch(()=>null);
       if (!j || !Array.isArray(j.results)) return hideSuggestions();
@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', function () {
         setTimeout(async () => {
           const r = await lookupByPhone(phone);
           if (r && r.found && r.customer) {
-            window.location.href = `/admin/orders/new?customerId=${encodeURIComponent(r.customer._id)}`;
+            window.location.href = `/orders/new?customerId=${encodeURIComponent(r.customer._id)}`;
           } else {
             // fallback: show registration modal with phone prefilled
             if (regPhone) regPhone.value = phone;
@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (r.found) {
           const cust = r.customer;
           // redirect to new order page with customer prefilled
-          window.location.href = `/admin/orders/new?customerId=${encodeURIComponent(cust._id)}`;
+          window.location.href = `/orders/new?customerId=${encodeURIComponent(cust._id)}`;
           return;
         } else {
           // show modal with phone prefilled for registration
@@ -240,7 +240,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       try {
         const payload = { category, phone, firstName, businessName, notes };
-        const res = await fetch('/api/customers', {
+        const res = await fetch('/customers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
           body: JSON.stringify(payload)
@@ -253,11 +253,11 @@ document.addEventListener('DOMContentLoaded', function () {
         if (j && j.ok) {
           const cust = j.customer;
           if (regModal) regModal.hide();
-          window.location.href = `/admin/orders/new?customerId=${encodeURIComponent(cust._id)}`;
+          window.location.href = `/orders/new?customerId=${encodeURIComponent(cust._id)}`;
           return;
         } else if (j && j.customer) {
           if (regModal) regModal.hide();
-          window.location.href = `/admin/orders/new?customerId=${encodeURIComponent(j.customer._id)}`;
+          window.location.href = `/orders/new?customerId=${encodeURIComponent(j.customer._id)}`;
           return;
         } else {
           showAlert('Unexpected response from server');

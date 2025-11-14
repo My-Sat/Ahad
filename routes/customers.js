@@ -3,15 +3,15 @@ const router = express.Router();
 const customerController = require('../controllers/customer');
 
 // front desk customer page
-router.get('/customers', customerController.frontPage);
+router.get('/', customerController.frontPage);
 
 // API: lookup customer by phone
-router.get('/api/customers/lookup', customerController.apiLookupByPhone);
+router.get('/lookup', customerController.apiLookupByPhone);
 
 // API: create new customer
-router.post('/api/customers', customerController.apiCreateCustomer);
+router.post('/', customerController.apiCreateCustomer);
 
 // API: search suggestions (for typeahead)
-router.get('/api/customers/search', customerController.apiSearch);
+router.get('/search', customerController.apiSearch);
 
 module.exports = router;

@@ -10,7 +10,6 @@ var logger = require('morgan');
 
 // adapt these to your actual route filenames
 const adminRoutes = require('./routes/admin'); 
-const apiRoutes = require('./routes/api'); 
 const ordersRoutes = require('./routes/orders');
 const customersRoutes = require('./routes/customers');
 
@@ -54,9 +53,8 @@ mongoose.connect(MONGO_URI)
 
 // routes
 app.use('/admin', adminRoutes);
-app.use('/api', apiRoutes);
-app.use('/admin/orders', ordersRoutes);
-app.use('/', customersRoutes);
+app.use('/orders', ordersRoutes);
+app.use('/customers', customersRoutes);
 
 app.get('/admin/services', (req, res) => res.send('POS Service Section running. Visit /admin/services'));
 

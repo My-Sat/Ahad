@@ -77,42 +77,55 @@ async function loadPage(url, push = true) {
 }
 
   // set active tab based on URL pathname
-  function setActiveTabByUrl(url) {
-    try {
-      const target = new URL(url, window.location.origin);
-      const path = target.pathname.replace(/\/$/, '');
-      const mapping = {
-        '/admin/services': 'tab-services',
-        '/admin/printers': 'tab-printers',
-        '/admin/stock': 'tab-stock',
-        '/admin/users': 'tab-users',
-        '/admin/messaging': 'tab-messaging',
-        '/admin/reports': 'tab-reports',
-        '/admin/orders': 'tab-orders'   // <--- NEW: orders mapping
-      };
+// set active tab based on URL pathname
+function setActiveTabByUrl(url) {
+  try {
+    const target = new URL(url, window.location.origin);
+    const path = target.pathname.replace(/\/$/, '');
 
-      // default to services if root /admin
-      let id = mapping[path] || (path === '/admin' ? 'tab-services' : null);
-      if (!id && path.startsWith('/admin')) {
-        // try to match partial, e.g. /admin/services/123
-        if (path.startsWith('/admin/services')) id = 'tab-services';
-        else if (path.startsWith('/admin/printers')) id = 'tab-printers';
-        else if (path.startsWith('/admin/stock')) id = 'tab-stock';
-        else if (path.startsWith('/admin/users')) id = 'tab-users';
-        else if (path.startsWith('/admin/messaging')) id = 'tab-messaging';
-        else if (path.startsWith('/admin/reports')) id = 'tab-reports';
-        else if (path.startsWith('/admin/orders')) id = 'tab-orders'; // <--- NEW partial match for orders
-      }
-      // toggle active class
-      document.querySelectorAll('#topTabs .nav-link').forEach(a => a.classList.remove('active'));
-      if (id) {
-        const el = document.getElementById(id);
-        if (el) el.classList.add('active');
-      }
-    } catch (err) {
-      console.error('setActiveTabByUrl error', err);
+    // mapping for exact paths (keeps existing admin/* map)
+    const mapping = {
+      '/admin/services': 'tab-services',
+      '/admin/printers': 'tab-printers',
+      '/admin/stock': 'tab-stock',
+      '/admin/users': 'tab-users',
+      '/admin/messaging': 'tab-messaging',
+      '/admin/reports': 'tab-reports',
+      '/admin/orders': 'tab-orders', // legacy admin path
+      '/orders': 'tab-orders'        // new root orders path
+    };
+
+    // default to services if root /admin
+    let id = mapping[path] || (path === '/admin' ? 'tab-services' : null);
+
+    if (!id && path.startsWith('/admin')) {
+      // try to match partial admin/* paths e.g. /admin/services/123
+      if (path.startsWith('/admin/services')) id = 'tab-services';
+      else if (path.startsWith('/admin/printers')) id = 'tab-printers';
+      else if (path.startsWith('/admin/stock')) id = 'tab-stock';
+      else if (path.startsWith('/admin/users')) id = 'tab-users';
+      else if (path.startsWith('/admin/messaging')) id = 'tab-messaging';
+      else if (path.startsWith('/admin/reports')) id = 'tab-reports';
+      else if (path.startsWith('/admin/orders')) id = 'tab-orders';
     }
+
+    if (!id) {
+      // also accept root-level /orders and its subpaths (new URLs)
+      if (path === '/orders' || path.startsWith('/orders')) {
+        id = 'tab-orders';
+      }
+    }
+
+    // toggle active class (clear all first)
+    document.querySelectorAll('#topTabs .nav-link').forEach(a => a.classList.remove('active'));
+    if (id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('active');
+    }
+  } catch (err) {
+    console.error('setActiveTabByUrl error', err);
   }
+}
 
   // initialize page behaviors inside #main-content
   function initializePage() {

@@ -284,7 +284,7 @@ document.addEventListener('DOMContentLoaded', function () {
       return null;
     }
     try {
-      const res = await fetch(`/api/orders/${encodeURIComponent(id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+      const res = await fetch(`/orders/${encodeURIComponent(id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
       const j = await res.json().catch(() => null);
       if (!res.ok) {
         const msg = (j && j.error) ? j.error : 'Order fetch failed';
@@ -418,7 +418,7 @@ document.addEventListener('DOMContentLoaded', function () {
         };
 
         // send as JSON; existing server action will still mark paid as before.
-        const res = await fetch(`/api/orders/${encodeURIComponent(currentOrderId)}/pay`, {
+        const res = await fetch(`/orders/${encodeURIComponent(currentOrderId)}/pay`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
           body: JSON.stringify(payload)
@@ -458,7 +458,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const tbody = debtorsTable.querySelector('tbody');
     if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">Loading...</td></tr>`;
     try {
-      const res = await fetch('/api/debtors', { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+      const res = await fetch('/debtors', { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
       if (!res.ok) {
         const j = await res.json().catch(()=>null);
         const msg = (j && j.error) ? j.error : `Failed to fetch debtors (${res.status})`;
@@ -605,7 +605,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!from || !to) return renderOrdersListError('Invalid date range');
       table.querySelector('tbody').innerHTML = `<tr><td class="text-muted" colspan="5">Loading...</td></tr>`;
       try {
-        const url = `/api/orders?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+        const url = `/orders?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
         const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
         if (!res.ok) {
           const j = await res.json().catch(()=>null);
@@ -709,7 +709,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const id = vb.dataset.orderId;
         if (id) {
           // navigate to server-rendered order view
-          window.location.href = '/admin/orders/view/' + encodeURIComponent(id);
+          window.location.href = '/orders/view/' + encodeURIComponent(id);
         }
       }
     });

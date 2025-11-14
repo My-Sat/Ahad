@@ -278,7 +278,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     pricesList.innerHTML = '<div class="text-muted">Loading price rules…</div>';
     try {
-      const res = await fetch(`/api/services/${encodeURIComponent(serviceId)}/prices`, {
+      const res = await fetch(`/admin/services/${encodeURIComponent(serviceId)}/prices`, {
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
       });
       if (!res.ok) {
@@ -524,7 +524,7 @@ async function placeOrderFlow() {
       })),
       customerId: (document.getElementById('orderCustomerId') && document.getElementById('orderCustomerId').value) ? document.getElementById('orderCustomerId').value : null
     };
-    const res = await fetch('/api/orders', {
+    const res = await fetch('/orders/list', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
       body: JSON.stringify(payload)
@@ -743,7 +743,7 @@ orderNowBtn.addEventListener('click', async function () {
   // fetch orders list from server: expects GET /api/orders?from=YYYY-MM-DD&to=YYYY-MM-DD
   async function fetchOrdersList(from, to) {
     try {
-      const url = `/api/orders?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+      const url = `/orders/list?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
       const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
       if (!res.ok) {
         const ct = res.headers.get('content-type') || '';
@@ -783,7 +783,7 @@ orderNowBtn.addEventListener('click', async function () {
     tbody.innerHTML = '';
     orders.forEach(o => {
       const safeOrderId = escapeHtml(o.orderId || o._id || '');
-      const viewHref = '/admin/orders/view/' + encodeURIComponent(o.orderId || o._id || '');
+      const viewHref = '/orders/view/' + encodeURIComponent(o.orderId || o._id || '');
       const tr = document.createElement('tr');
       tr.dataset.orderId = o.orderId || o._id || '';
       const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : (o.createdAt || '');
@@ -803,7 +803,7 @@ orderNowBtn.addEventListener('click', async function () {
   async function viewOrderDetails(orderId) {
     if (!orderId) return;
     try {
-      const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const res = await fetch(`/orders/list/${encodeURIComponent(orderId)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
       if (!res.ok) {
         const j = await res.json().catch(()=>null);
         const msg = j && j.error ? j.error : `Failed to fetch order ${orderId}`;
@@ -941,7 +941,7 @@ orderNowBtn.addEventListener('click', async function () {
       if (vbtn) {
         const id = vbtn.dataset.orderId;
         if (id) {
-          window.location.href = '/admin/orders/view/' + encodeURIComponent(id);
+          window.location.href = '/orders/view/' + encodeURIComponent(id);
         }
       }
     });

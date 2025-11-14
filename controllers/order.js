@@ -101,42 +101,6 @@ exports.payPage = async (req, res) => {
   }
 };
 
-// API: return price rules (composite selections) for a service
-// ALSO returns whether service requires a printer and list of printers
-exports.apiGetPricesForService = async (req, res) => {
-  try {
-    const { serviceId } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(serviceId)) return res.status(400).json({ error: 'Invalid service id' });
-
-    // Determine if service requires a printer
-    const serviceDoc = await Service.findById(serviceId).lean();
-    const serviceRequiresPrinter = !!(serviceDoc && serviceDoc.requiresPrinter);
-
-    const prices = await ServicePrice.find({ service: serviceId })
-      .populate('selections.unit selections.subUnit')
-      .lean();
-
-    // fetch printers list for client to show if needed
-    const printers = await Printer.find().select('_id name').sort('name').lean();
-
-    const out = prices.map(p => ({
-      _id: p._id,
-      selectionLabel: p.selectionLabel || ((p.selections || []).map(s => {
-        const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
-        const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
-        return `${u}: ${su}`;
-      }).join(' + ')),
-      unitPrice: p.price,
-      price2: (p.price2 !== undefined && p.price2 !== null) ? p.price2 : null
-    }));
-
-    return res.json({ ok: true, prices: out, serviceRequiresPrinter, printers });
-  } catch (err) {
-    console.error('apiGetPricesForService error', err);
-    return res.status(500).json({ error: 'Error fetching prices' });
-  }
-};
-
 // API: create order
 // expects body: { items: [{ serviceId, priceRuleId, pages (optional), fb (optional boolean), printerId (optional) } , ...] }
 // Server-authoritative pricing: when items[].fb is true and the price rule has price2, use price2.

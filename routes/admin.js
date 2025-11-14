@@ -22,6 +22,10 @@ router.delete('/units/:unitId/subunits/:subunitId', subUnitController.remove);
 router.put('/units/:unitId/subunits/:subunitId', subUnitController.update);
 
 // Services
+// price lookup for a selection set
+router.post('/services/:id/price-for-selection', serviceController.getPriceForSelection);
+// return price rules for a chosen service
+router.get('/services/:serviceId/prices', serviceController.apiGetPricesForService);
 router.get('/services', serviceController.list);
 router.get('/services/:id', serviceController.get);
 router.post('/services', serviceController.create);
