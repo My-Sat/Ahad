@@ -452,7 +452,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
-  // create order — POST /api/orders
 // Helper: show the "no customer" modal and return 'proceed' or 'back'
 function showNoCustomerModal() {
   return new Promise((resolve) => {
@@ -524,7 +523,7 @@ async function placeOrderFlow() {
       })),
       customerId: (document.getElementById('orderCustomerId') && document.getElementById('orderCustomerId').value) ? document.getElementById('orderCustomerId').value : null
     };
-    const res = await fetch('/orders/list', {
+    const res = await fetch('/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
       body: JSON.stringify(payload)

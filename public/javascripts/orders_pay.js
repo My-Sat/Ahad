@@ -458,7 +458,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const tbody = debtorsTable.querySelector('tbody');
     if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">Loading...</td></tr>`;
     try {
-      const res = await fetch('/debtors', { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+      const res = await fetch('/orders/debtors', { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
       if (!res.ok) {
         const j = await res.json().catch(()=>null);
         const msg = (j && j.error) ? j.error : `Failed to fetch debtors (${res.status})`;
@@ -605,7 +605,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!from || !to) return renderOrdersListError('Invalid date range');
       table.querySelector('tbody').innerHTML = `<tr><td class="text-muted" colspan="5">Loading...</td></tr>`;
       try {
-        const url = `/orders?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+        const url = `/orders/list?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
         const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
         if (!res.ok) {
           const j = await res.json().catch(()=>null);
@@ -644,7 +644,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : '';
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><a href="/admin/orders/view/${encodeURIComponent(o.orderId || o._id || '')}" class="orders-explorer-link">${oid}</a></td>
+          <td><a href="/orders/view/${encodeURIComponent(o.orderId || o._id || '')}" class="orders-explorer-link">${oid}</a></td>
           <td class="text-end">GH₵ ${Number(o.total || 0).toFixed(2)}</td>
           <td>${escapeHtml(o.status || '')}</td>
           <td>${escapeHtml(created)}</td>
