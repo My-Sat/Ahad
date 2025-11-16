@@ -19,7 +19,7 @@ html(lang="en")
     header.bg-white.shadow-sm
       .container-fluid.p-2.d-flex.align-items-center.justify-content-between
         // Left: logo (link) + plain title to the right (not a link)
-        .brand-wrap
+        .brand-wrap.d-flex.align-items-center.gap-2
           a(href='/' aria-label='Go to Ahad Printing Service home' class='d-inline-block')
             img.site-logo(src='/images/AHAD LOGO.png' alt='AHAD — Admin dashboard logo' width='64' height='64')
           .brand.d-flex.flex-column.justify-content-center
@@ -27,81 +27,151 @@ html(lang="en")
 
         // Right: Large-screen pills nav + mobile utilities (nav moved to right)
         .d-flex.align-items-center.gap-2
-          nav#topTabs.nav.d-none.d-md-block
-            ul.nav.nav-pills.mb-0.rounded-pill.shadow-sm(style='overflow:visible')
-              li.nav-item
-                a.nav-link.d-flex.align-items-center(href='/admin/services', data-ajax='true', role='tab', id='tab-services')
-                  i.bi.bi-folder2-open.me-2(aria-hidden='true')
-                  | Services
-                  span.badge.bg-primary.ms-2#badge-services
-              li.nav-item
-                a.nav-link.d-flex.align-items-center(href='/admin/printers', data-ajax='true', role='tab', id='tab-printers')
-                  i.bi.bi-printer.me-2(aria-hidden='true')
-                  | Printers
-                  span.badge.bg-secondary.ms-2#badge-printers
-              li.nav-item
-                a.nav-link.d-flex.align-items-center(href='/admin/stock', data-ajax='true', role='tab', id='tab-stock')
-                  i.bi.bi-box-seam.me-2(aria-hidden='true')
-                  | Stock
-                  span.badge.bg-success.ms-2#badge-stock
-              li.nav-item
-                a.nav-link.d-flex.align-items-center(href='/admin/users', data-ajax='true', role='tab', id='tab-users')
-                  i.bi.bi-people.me-2(aria-hidden='true')
-                  | Users
-                  span.badge.bg-info.ms-2#badge-users
-              li.nav-item
-                a.nav-link.d-flex.align-items-center(href='/admin/messaging', data-ajax='true', role='tab', id='tab-messaging')
-                  i.bi.bi-chat-dots.me-2(aria-hidden='true')
-                  | Messaging
-                  span.badge.bg-warning.ms-2#badge-messaging
+          //- Only render desktop navigation & user menu when a user is logged in
+          if currentUser
+            - const role = (currentUser.role || '').toString().toLowerCase();
 
-              // Orders dropdown (NEW)
-              li.nav-item.dropdown
-                // dropdown toggle is also the tab element (id used by JS to mark active)
-                a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-orders', role='button', data-bs-toggle='dropdown', aria-expanded='false')
-                  i.bi.bi-basket2.me-2(aria-hidden='true')
-                  | Orders
-                  span.badge.bg-dark.ms-2#badge-orders
-                ul.dropdown-menu
+            // Desktop nav
+            nav#topTabs.nav.d-none.d-md-block
+              ul.nav.nav-pills.mb-0.rounded-pill.shadow-sm(style='overflow:visible')
+                if role === 'admin'
+                  li.nav-item
+                    a.nav-link.d-flex.align-items-center(href='/admin/services', data-ajax='true', role='tab', id='tab-services')
+                      i.bi.bi-folder2-open.me-2(aria-hidden='true')
+                      | Services
+                      span.badge.bg-primary.ms-2#badge-services
+
+                  li.nav-item
+                    a.nav-link.d-flex.align-items-center(href='/admin/printers', data-ajax='true', role='tab', id='tab-printers')
+                      i.bi.bi-printer.me-2(aria-hidden='true')
+                      | Printers
+                      span.badge.bg-secondary.ms-2#badge-printers
+
+                  li.nav-item
+                    a.nav-link.d-flex.align-items-center(href='/admin/stock', data-ajax='true', role='tab', id='tab-stock')
+                      i.bi.bi-box-seam.me-2(aria-hidden='true')
+                      | Stock
+                      span.badge.bg-success.ms-2#badge-stock
+
+                  li.nav-item
+                    a.nav-link.d-flex.align-items-center(href='/admin/users', data-ajax='true', role='tab', id='tab-users')
+                      i.bi.bi-people.me-2(aria-hidden='true')
+                      | Users
+                      span.badge.bg-info.ms-2#badge-users
+
+                  li.nav-item
+                    a.nav-link.d-flex.align-items-center(href='/admin/messaging', data-ajax='true', role='tab', id='tab-messaging')
+                      i.bi.bi-chat-dots.me-2(aria-hidden='true')
+                      | Messaging
+                      span.badge.bg-warning.ms-2#badge-messaging
+
+                  // Orders dropdown for admin (both entries)
+                  li.nav-item.dropdown
+                    a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-orders', role='button', data-bs-toggle='dropdown', aria-expanded='false')
+                      i.bi.bi-basket2.me-2(aria-hidden='true')
+                      | Orders
+                      span.badge.bg-dark.ms-2#badge-orders
+                    ul.dropdown-menu
+                      li
+                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Orders
+                      li
+                        a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
+
+                  li.nav-item
+                    a.nav-link.d-flex.align-items-center(href='#' data-ajax='true' role='tab' id='tab-reports')
+                      i.bi.bi-graph-up.me-2(aria-hidden='true')
+                      | Reports
+
+                else if role === 'cashier'
+                  // Cashier: only Orders -> Payment
+                  li.nav-item.dropdown
+                    a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-orders', role='button', data-bs-toggle='dropdown', aria-expanded='false')
+                      i.bi.bi-basket2.me-2(aria-hidden='true')
+                      | Orders
+                    ul.dropdown-menu
+                      li
+                        a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
+
+                else if role === 'clerk'
+                  // Clerk: only Orders -> Orders (front desk)
+                  li.nav-item.dropdown
+                    a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-orders', role='button', data-bs-toggle='dropdown', aria-expanded='false')
+                      i.bi.bi-basket2.me-2(aria-hidden='true')
+                      | Orders
+                    ul.dropdown-menu
+                      li
+                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Orders
+
+            // Desktop user menu (show name + logout)
+            .d-none.d-md-flex.align-items-center.gap-2
+              .dropdown
+                a.btn.btn-outline-secondary.dropdown-toggle(href='#' role='button' id='userMenu' data-bs-toggle='dropdown' aria-expanded='false')
+                  i.bi.bi-person-circle.me-1
+                  | #{currentUser.name || currentUser.username}
+                ul.dropdown-menu.dropdown-menu-end(aria-labelledby='userMenu')
                   li
-                    a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Orders
-                  li
-                    a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
+                    a.dropdown-item(href='/logout') 
+                      i.bi.bi-box-arrow-right.me-2
+                      | Logout
 
-              li.nav-item
-                // Reports is a placeholder (unimplemented) like Messaging/Users
-                a.nav-link.d-flex.align-items-center(href='#' data-ajax='true' role='tab' id='tab-reports')
-                  i.bi.bi-graph-up.me-2(aria-hidden='true')
-                  | Reports
-
-          // Mobile / small-screen compact menu (keeps same links/ids but for small screens)
+          // Mobile / small-screen compact menu (keeps same links/ids but role-filtered)
           .d-md-none
             div.dropdown
               button.btn.btn-outline-secondary.btn-sm.dropdown-toggle(type='button', data-bs-toggle='dropdown', aria-expanded='false')
                 i.bi.bi-list aria-hidden="true"
               ul.dropdown-menu
-                li
-                  a.dropdown-item(href='/admin/services', data-ajax='true', id='tab-services-sm') Services
-                li
-                  a.dropdown-item(href='/admin/printers', data-ajax='true', id='tab-printers-sm') Printers
-                li
-                  a.dropdown-item(href='/admin/stock', data-ajax='true', id='tab-stock-sm') Stock
-                li
-                  a.dropdown-item(href='/admin/users', data-ajax='true', id='tab-users-sm') Users
-                li
-                  a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging-sm') Messaging
-                li
-                  // Mobile Reports placeholder (unimplemented)
-                  a.dropdown-item(href='#' data-ajax='true' id='tab-reports-sm') Reports
-                li
-                  a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — New
-                li
-                  a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Orders — Pay
+                if currentUser
+                  - const roleSm = (currentUser.role || '').toString().toLowerCase();
+                  if roleSm === 'admin'
+                    li
+                      a.dropdown-item(href='/admin/services', data-ajax='true', id='tab-services-sm') Services
+                    li
+                      a.dropdown-item(href='/admin/printers', data-ajax='true', id='tab-printers-sm') Printers
+                    li
+                      a.dropdown-item(href='/admin/stock', data-ajax='true', id='tab-stock-sm') Stock
+                    li
+                      a.dropdown-item(href='/admin/users', data-ajax='true', id='tab-users-sm') Users
+                    li
+                      a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging-sm') Messaging
+                    li
+                      a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — New
+                    li
+                      a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Orders — Pay
+                    li
+                      a.dropdown-item(href='#' data-ajax='true' id='tab-reports-sm') Reports
+                    li
+                      hr.dropdown-divider
+                    li
+                      a.dropdown-item(href='/logout')
+                        i.bi.bi-box-arrow-right.me-2
+                        | Logout
 
+                  else if roleSm === 'cashier'
+                    li
+                      a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Payment
+                    li
+                      hr.dropdown-divider
+                    li
+                      a.dropdown-item(href='/logout')
+                        i.bi.bi-box-arrow-right.me-2
+                        | Logout
+
+                  else if roleSm === 'clerk'
+                    li
+                      a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — New
+                    li
+                      hr.dropdown-divider
+                    li
+                      a.dropdown-item(href='/logout')
+                        i.bi.bi-box-arrow-right.me-2
+                        | Logout
+
+                else
+                  li
+                    a.dropdown-item(href='/login') Sign in
 
     // ... (rest of layout.pug unchanged) ...
 
-    // (the rest of your layout remains exactly as before)
     main.container.py-4#main-content
       block content
 

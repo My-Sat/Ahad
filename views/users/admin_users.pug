@@ -1,0 +1,157 @@
+extends ../layout
+
+block content
+  .container
+    .d-flex.justify-content-between.align-items-center.mb-3
+      h1.mb-0 Users
+      button.btn.btn-primary#btnNewUser(type='button', data-bs-toggle='modal', data-bs-target='#modalNewUser')
+        i.bi.bi-person-plus.me-2
+        | New user
+
+    // ---------------- FLASH AREA (fixed & robust) ----------------
+    if flash
+      if typeof flash === 'object'
+        each msgs, type in flash
+          each m in msgs
+            div(class='alert alert-' + type)= m
+      else
+        each m in flash
+          div.alert.alert-info= m
+
+    // ---------------- USERS TABLE ----------------
+    table.table.table-hover.table-striped.mt-3
+      thead
+        tr
+          th Name
+          th Username
+          th Role
+          th Permissions
+          th.text-end Actions
+      tbody
+        each user in users
+          tr
+            td= user.name || '-'
+            td= user.username
+            td.text-capitalize= user.role
+            td
+              if user.permissions && user.permissions.length
+                each p in user.permissions
+                  span.badge.bg-secondary.me-1= p
+              else
+                span.text-muted None
+
+            td.text-end
+              button.btn.btn-sm.btn-outline-secondary.me-2(onclick=`openPermissionsModal('${user._id}')`)
+                i.bi.bi-shield-lock-fill.me-1
+                | Permissions
+
+              // DELETE via POST + method override
+              form.d-inline(action=`/admin/users/${user._id}?_method=DELETE` method='POST')
+                button.btn.btn-sm.btn-outline-danger(type='submit')
+                  i.bi.bi-trash.me-1
+                  | Delete
+
+  // ---------------- NEW USER MODAL ----------------
+  .modal.fade#modalNewUser(tabindex='-1' aria-hidden='true')
+    .modal-dialog
+      .modal-content
+        .modal-header
+          h5.modal-title Create user
+          button.btn-close(type='button', data-bs-dismiss='modal' aria-label='Close')
+
+        form(action='/admin/users' method='POST')
+          .modal-body
+            .mb-3
+              label.form-label Username
+              input.form-control(type='text' name='username' required)
+
+            .mb-3
+              label.form-label Name
+              input.form-control(type='text' name='name')
+
+            .mb-3
+              label.form-label Role
+              select.form-select(name='role' required)
+                option(value='clerk' selected) Clerk
+                option(value='cashier') Cashier
+                option(value='admin') Admin
+
+            .mb-3
+              label.form-label Password
+              input.form-control(type='password' name='password' required)
+
+            .mb-3
+              label.form-label Email
+              input.form-control(type='email' name='email')
+
+            .mb-3
+              label.form-label Phone
+              input.form-control(type='text' name='phone')
+
+          .modal-footer
+            button.btn.btn-secondary(type='button' data-bs-dismiss='modal') Close
+            button.btn.btn-primary(type='submit') Create
+
+  // ---------------- PERMISSIONS MODAL ----------------
+  .modal.fade#modalPermissions(tabindex='-1' aria-hidden='true')
+    .modal-dialog
+      .modal-content
+        .modal-header
+          h5.modal-title Manage permissions
+          button.btn-close(type='button', data-bs-dismiss='modal' aria-label='Close')
+
+        .modal-body
+          form#permissionsForm
+            input(type='hidden' name='userId' id='permUserId')
+
+            p.mb-2 Select routes this user should be allowed to access:
+
+            // Known permission routes
+            .form-check
+              input.form-check-input(type='checkbox' id='perm_customer' value='/customers' name='permissions')
+              label.form-check-label(for='perm_customer') Customer registration page
+
+            .form-check
+              input.form-check-input(type='checkbox' id='perm_orders_pay' value='/orders/pay' name='permissions')
+              label.form-check-label(for='perm_orders_pay') Orders Payment page
+
+            .form-check
+              input.form-check-input(type='checkbox' id='perm_create_order' value='/orders/new' name='permissions')
+              label.form-check-label(for='perm_create_order') View Order page
+
+            .form-check
+              input.form-check-input(type='checkbox' id='perm_view_order_details' value='/orders/view/:orderId' name='permissions')
+              label.form-check-label(for='perm_view_order_details') View order details
+
+            .form-check
+              input.form-check-input(type='checkbox' id='perm_fetch_order_byID' value='/orders/:orderId' name='permissions')
+              label.form-check-label(for='perm_fetch_order_byID') Fetch order by ID at payment page
+
+            .form-check
+              input.form-check-input(type='checkbox' id='perm_view_order_list' value='/orders/list' name='permissions')
+              label.form-check-label(for='perm_view_order_list') View order list
+
+            .form-check
+              input.form-check-input(type='checkbox' id='perm_pay_order' value='/orders/:orderId/pay' name='permissions')
+              label.form-check-label(for='perm_pay_order') Pay order
+
+
+            .form-check
+              input.form-check-input(type='checkbox' id='perm_fetch_customer' value='/lookup' name='permissions')
+              label.form-check-label(for='perm_fetch_customer') Fetch existing customer at registration / front desk
+
+            .form-check
+              input.form-check-input(type='checkbox' id='perm_orders_debtors' value='/orders/debtors' name='permissions')
+              label.form-check-label(for='perm_orders_debtors') Debtors page
+
+
+            .form-check
+              input.form-check-input(type='checkbox' id='perm_admin_services' value='/admin/services' name='permissions')
+              label.form-check-label(for='perm_admin_services') Admin permissions (Admin services — use with care)
+
+        .modal-footer
+          button.btn.btn-secondary(type='button' data-bs-dismiss='modal') Close
+          button.btn.btn-primary#savePermissionsBtn(type='button') Save
+
+block scripts
+  script(src='/javascripts/users_admin.js')

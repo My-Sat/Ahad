@@ -9,65 +9,78 @@ const priceController = require('../controllers/price');
 const materialsController = require('../controllers/materials');
 router.get('/', (req, res) => res.redirect('/admin/services'));
 const printersController = require('../controllers/printers');
+const usersController = require('../controllers/users');
+const { ensureAdmin } = require('../middlewares/auth');
+
+
 // Units
-router.post('/units', unitController.create);
-router.put('/units/:id', unitController.update);
-router.delete('/units/:id', unitController.remove);
+router.post('/units', ensureAdmin, unitController.create);
+router.put('/units/:id', ensureAdmin, unitController.update);
+router.delete('/units/:id', ensureAdmin, unitController.remove);
 
 // Sub-units
-router.post('/units/:unitId/subunits', subUnitController.create);
+router.post('/units/:unitId/subunits', ensureAdmin, subUnitController.create);
 // DELETE subunit route (needed for method-override delete forms)
-router.delete('/units/:unitId/subunits/:subunitId', subUnitController.remove);
+router.delete('/units/:unitId/subunits/:subunitId', ensureAdmin, subUnitController.remove);
 // NEW: PUT route to update a sub-unit
-router.put('/units/:unitId/subunits/:subunitId', subUnitController.update);
+router.put('/units/:unitId/subunits/:subunitId', ensureAdmin, subUnitController.update);
 
 // Services
 // price lookup for a selection set
-router.post('/services/:id/price-for-selection', serviceController.getPriceForSelection);
+router.post('/services/:id/price-for-selection', ensureAdmin, serviceController.getPriceForSelection);
 // return price rules for a chosen service
 router.get('/services/:serviceId/prices', serviceController.apiGetPricesForService);
 router.get('/services', serviceController.list);
 router.get('/services/:id', serviceController.get);
-router.post('/services', serviceController.create);
-router.put('/services/:id', serviceController.update);
-router.delete('/services/:id', serviceController.remove);
+router.post('/services', ensureAdmin, serviceController.create);
+router.put('/services/:id', ensureAdmin, serviceController.update);
+router.delete('/services/:id', ensureAdmin, serviceController.remove);
 
 // Add component to service (unit + chosen subUnits)
-router.post('/services/:id/components', serviceController.addComponent);
+router.post('/services/:id/components', ensureAdmin, serviceController.addComponent);
 
 // Assign prices from service detail page
-router.post('/services/:id/prices', serviceController.assignPrice);
+router.post('/services/:id/prices', ensureAdmin, serviceController.assignPrice);
 
 // Update a price rule (AJAX-friendly)
-router.put('/services/:id/prices/:priceId', priceController.updatePrice);
+router.put('/services/:id/prices/:priceId', ensureAdmin, priceController.updatePrice);
 
 // Prices listing/deletion (optional)
-router.get('/services/:id/prices', priceController.listForService);
-router.delete('/services/:id/prices/:priceId', priceController.removePrice);
+router.get('/services/:id/prices', ensureAdmin, priceController.listForService);
+router.delete('/services/:id/prices/:priceId', ensureAdmin, priceController.removePrice);
 
 // Materials
-router.get('/materials', materialsController.list);
-router.post('/materials', materialsController.create);
-router.delete('/materials/:id', materialsController.remove);
+router.get('/materials', ensureAdmin, materialsController.list);
+router.post('/materials', ensureAdmin, materialsController.create);
+router.delete('/materials/:id', ensureAdmin, materialsController.remove);
 // Set stocked value
-router.post('/materials/:id/stock', materialsController.setStock);
+router.post('/materials/:id/stock', ensureAdmin, materialsController.setStock);
 
 // Stock page
-router.get('/stock', materialsController.stock);
+router.get('/stock', ensureAdmin, materialsController.stock);
 
 // Simple API to adjust stock for a material (AJAX)
-router.post('/materials/:id/stock', materialsController.setStock);
+router.post('/materials/:id/stock', ensureAdmin, materialsController.setStock);
 
 // Printers
-router.get('/printers', printersController.list);
-router.get('/printers/:id/stats', printersController.stats);
-router.post('/printers', printersController.create);
-router.put('/printers/:id', printersController.update);
-router.delete('/printers/:id', printersController.remove);
-router.get('/printers/:id/usage', printersController.usage);      // GET usage log (AJAX)
-router.post('/printers/:id/adjust', printersController.adjustCount); // POST adjust/set total (AJAX)
+router.get('/printers', ensureAdmin, printersController.list);
+router.get('/printers/:id/stats', ensureAdmin, printersController.stats);
+router.post('/printers', ensureAdmin, printersController.create);
+router.put('/printers/:id', ensureAdmin, printersController.update);
+router.delete('/printers/:id', ensureAdmin, printersController.remove);
+router.get('/printers/:id/usage', ensureAdmin, printersController.usage);      // GET usage log (AJAX)
+router.post('/printers/:id/adjust', ensureAdmin, printersController.adjustCount); // POST adjust/set total (AJAX)
+
+// Users management (ADMIN only)
+router.get('/users', ensureAdmin, usersController.list);        // list view (HTML)
+router.get('/users/new', ensureAdmin, usersController.newForm); // new user form (modal or page)
+router.post('/users', ensureAdmin, usersController.create);     // create user
+router.put('/users/:id', ensureAdmin, usersController.update);  // update user (role, name)
+router.delete('/users/:id', ensureAdmin, usersController.remove); // remove user
+router.get('/users/:id', ensureAdmin, usersController.getJson);
 
 
+router.post('/users/:id/permissions', ensureAdmin, usersController.setPermissions);
 
 // also expose simple API endpoint for client-side listing if needed
 router.get('/api/printers', printersController.listAll);

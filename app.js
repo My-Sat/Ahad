@@ -3,15 +3,17 @@ var createError = require('http-errors');
 var express = require('express');
 const mongoose = require('mongoose');
 const methodOverride = require('method-override');
-
 var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
-
-// adapt these to your actual route filenames
 const adminRoutes = require('./routes/admin'); 
 const ordersRoutes = require('./routes/orders');
 const customersRoutes = require('./routes/customers');
+const { ensureAuthenticated } = require('./middlewares/auth');
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
+const authRoutes = require('./routes/auth'); // new file below
+const { loadUser } = require('./middlewares/auth');
 
 var app = express();
 
@@ -32,10 +34,6 @@ app.use(cookieParser());
 // method override for HTML forms e.g. ?_method=DELETE
 app.use(methodOverride('_method'));
 
-// static assets (single declaration)
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/public', express.static(path.join(__dirname, 'public'))); 
-
 // connect to mongo (change URI as needed)
 // prefer to set MONGO_URI in env or .env file
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/pos_db';
@@ -51,12 +49,45 @@ mongoose.connect(MONGO_URI)
     // process.exit(1);
   });
 
-// routes
-app.use('/admin', adminRoutes);
-app.use('/orders', ordersRoutes);
-app.use('/customers', customersRoutes);
+  // static assets (single declaration)
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/public', express.static(path.join(__dirname, 'public'))); 
 
-app.get('/admin/services', (req, res) => res.send('POS Service Section running. Visit /admin/services'));
+// SESSION config
+// Use connect-mongo for production (persists sessions to MongoDB)
+const SESSION_SECRET = process.env.SESSION_SECRET || 'replace_this_with_strong_secret';
+app.use(session({
+  name: 'sid',
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({ mongoUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/pos_db' }),
+  cookie: {
+    maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production' // require HTTPS in prod
+  }
+}));
+
+// load user from session into req.user and res.locals (must run after session)
+app.use(loadUser);
+
+// expose currentUser to templates
+app.use(function (req, res, next) {
+  res.locals.currentUser = req.user || null;
+  next();
+});
+
+//ROUTES
+
+// auth routes (public)
+app.use('/', authRoutes);
+
+
+// Protect admin, orders, customers by requiring authentication
+app.use('/admin', ensureAuthenticated, adminRoutes);
+app.use('/orders', ensureAuthenticated, ordersRoutes);
+app.use('/customers', ensureAuthenticated, customersRoutes);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

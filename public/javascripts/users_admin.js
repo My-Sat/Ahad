@@ -1,0 +1,44 @@
+// public/javascripts/users_admin.js
+async function openPermissionsModal(userId) {
+  // fetch user's current permissions
+  const res = await fetch(`/admin/users/${userId}`, { headers: { 'Accept': 'application/json' }});
+  if (!res.ok) {
+    alert('Failed to load user info');
+    return;
+  }
+  const user = await res.json();
+
+  // set hidden user id
+  document.getElementById('permUserId').value = user._id;
+
+  // clear checkboxes
+  document.querySelectorAll('#modalPermissions .form-check-input').forEach(cb => cb.checked = false);
+
+  (user.permissions || []).forEach(p => {
+    const cb = document.querySelector(`#modalPermissions .form-check-input[value="${p}"]`);
+    if (cb) cb.checked = true;
+  });
+
+  // show modal
+  const modalEl = document.getElementById('modalPermissions');
+  const bsModal = new bootstrap.Modal(modalEl);
+  bsModal.show();
+}
+
+document.getElementById('savePermissionsBtn')?.addEventListener('click', async () => {
+  const userId = document.getElementById('permUserId').value;
+  const checked = Array.from(document.querySelectorAll('#modalPermissions .form-check-input:checked')).map(i => i.value);
+
+  const res = await fetch(`/admin/users/${userId}/permissions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ permissions: checked })
+  });
+
+  if (res.ok) {
+    location.reload();
+  } else {
+    const err = await res.json().catch(()=>({ error: 'Failed' }));
+    alert(err.error || 'Failed to save');
+  }
+});
