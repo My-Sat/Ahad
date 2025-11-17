@@ -54,18 +54,24 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/public', express.static(path.join(__dirname, 'public'))); 
 
 // SESSION config
-// Use connect-mongo for production (persists sessions to MongoDB)
+// trust proxy (important when behind TLS-terminating proxies like Render)
+app.set('trust proxy', 1);
+
+// SESSION config
 const SESSION_SECRET = process.env.SESSION_SECRET || 'replace_this_with_strong_secret';
+const mongoUrl = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/pos_db';
+
 app.use(session({
   name: 'sid',
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({ mongoUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/pos_db' }),
+  store: MongoStore.create({ mongoUrl }),
   cookie: {
     maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production' // require HTTPS in prod
+    secure: process.env.NODE_ENV === 'production', // true in production
+    sameSite: 'lax' // works for login redirects while being reasonably strict
   }
 }));
 
