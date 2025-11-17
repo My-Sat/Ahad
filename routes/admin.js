@@ -30,8 +30,8 @@ router.put('/units/:unitId/subunits/:subunitId', ensureAdmin, subUnitController.
 router.post('/services/:id/price-for-selection', ensureAdmin, serviceController.getPriceForSelection);
 // return price rules for a chosen service
 router.get('/services/:serviceId/prices', serviceController.apiGetPricesForService);
-router.get('/services', serviceController.list);
-router.get('/services/:id', serviceController.get);
+router.get('/services', ensureAdmin, serviceController.list);
+router.get('/services/:id', ensureAdmin, serviceController.get);
 router.post('/services', ensureAdmin, serviceController.create);
 router.put('/services/:id', ensureAdmin, serviceController.update);
 router.delete('/services/:id', ensureAdmin, serviceController.remove);
