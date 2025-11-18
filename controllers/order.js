@@ -151,7 +151,11 @@ for (const it of items) {
   }
 
   const pages = Number(it.pages) || 1;
-  const subtotal = Number((unitPrice * pages).toFixed(2));
+  // determine effective quantity for pricing: if FB was used for this line, effective = ceil(pages/2)
+  const effectiveQtyForPrice = (usedFB) ? Math.ceil(pages / 2) : pages;
+
+// subtotal uses the effective quantity (server authoritative)
+  const subtotal = Number((unitPrice * effectiveQtyForPrice).toFixed(2));
 
   // build human-friendly selection label
   const selectionLabel = pr.selectionLabel || ((pr.selections || []).map(s => {
@@ -201,16 +205,17 @@ for (const it of items) {
     }
   }
 
+  // store pages as original pages so other parts (material matching, printer usage) still use original pages
   builtItems.push({
     service: it.serviceId,
     printer: printerId, // may be null
     selections: selectionsForOrder,
     selectionLabel,
     unitPrice,
-    pages,
-    subtotal,
+    pages,                // original pages per paper (kept for materials/printer logic)
+    subtotal,             // computed using effectiveQtyForPrice
     spoiled: Number(it.spoiled) || 0,
-    printerType // NEW: 'monochrome' | 'colour' | null
+    printerType
   });
 
   total += subtotal;

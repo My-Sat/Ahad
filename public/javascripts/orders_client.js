@@ -304,25 +304,35 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // add item to cart
-  function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, pages, fb, printerId, spoiled }) {
-    pages = Number(pages) || 1;
-    spoiled = Math.max(0, Math.floor(Number(spoiled) || 0));
-    const subtotal = Number((Number(unitPrice) * pages).toFixed(2));
-    cart.push({
-      serviceId,
-      serviceName,
-      priceRuleId,
-      selectionLabel: label,
-      unitPrice: Number(unitPrice),
-      pages,
-      subtotal,
-      fb: !!fb,
-      printerId: printerId || null,
-      spoiled
-    });
-    renderCart();
-  }
+// add item to cart
+function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, pages, fb, printerId, spoiled }) {
+  // pages = original pages input by user (pages per paper)
+  const origPages = Number(pages) || 1;
+  spoiled = Math.max(0, Math.floor(Number(spoiled) || 0));
+
+  // Effective quantity used for price calculation:
+  // if F/B, physical qty = ceil(origPages / 2), else it's origPages
+  const effectiveQty = fb ? Math.ceil(origPages / 2) : origPages;
+
+  const subtotal = Number((Number(unitPrice) * effectiveQty).toFixed(2));
+
+  // store both original pages and the effective pages (to display effective qty but
+  // send original pages to server)
+  cart.push({
+    serviceId,
+    serviceName,
+    priceRuleId,
+    selectionLabel: label,
+    unitPrice: Number(unitPrice),
+    pages: effectiveQty,         // what we show in the cart (effective qty)
+    pagesOriginal: origPages,    // original pages input — will be sent to server
+    subtotal,
+    fb: !!fb,
+    printerId: printerId || null,
+    spoiled
+  });
+  renderCart();
+}
 
   function renderCart() {
     cartTbody.innerHTML = '';
@@ -516,7 +526,8 @@ async function placeOrderFlow() {
       items: cart.map(it => ({
         serviceId: it.serviceId,
         priceRuleId: it.priceRuleId,
-        pages: it.pages,
+        // send the original pages value so server can apply its own logic (materials/printer)
+        pages: (typeof it.pagesOriginal !== 'undefined') ? Number(it.pagesOriginal) : Number(it.pages || 1),
         fb: !!it.fb,
         printerId: it.printerId || null,
         spoiled: (typeof it.spoiled === 'number') ? it.spoiled : 0
