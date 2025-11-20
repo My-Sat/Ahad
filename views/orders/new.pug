@@ -26,28 +26,34 @@ block content
               if customer
                 .mb-2
                   div.small.text-muted Selected customer:
-                  // name in orange, prefer businessName for artists
                   if customer.category === 'artist'
                     strong(style='color:#ff7a18;') #{customer.businessName || customer.phone}
                   else
                     strong(style='color:#ff7a18;') #{customer.firstName || customer.businessName || customer.phone}
-                  // phone shown as a proper <small> element
                   small.text-muted.ms-3 #{customer.phone}
-            // selection row
+
+            // selection row (services + books)
             .row.g-2.mb-3
-              .col-md-7
+              .col-md-5
                 label.form-label(for='serviceSelect') Service
                 select.form-select(id='serviceSelect')
                   option(value='') -- Select a service --
                   each s in services
                     option(value=s._id)= s.name
-              .col-md-5.d-flex.align-items-end
-                small.text-muted.ms-auto Select a service to load price rules
+              .col-md-4
+                label.form-label(for='booksDropdown') Books
+                // We'll populate this select's options via client JS
+                div.input-group
+                  select.form-select(id='booksDropdown')
+                    option(value='') -- Select a book --
+                  button.btn.btn-outline-secondary(type='button', id='addBookBtn') Add Book
+              .col-md-3.d-flex.align-items-end
+                small.text-muted.ms-auto Select a service or book to load price rules
 
-            // price rules list (populated via AJAX)
+            // price rules list (populated via AJAX or when a book is selected)
             .card.mt-3
               .card-body
-                h6.mb-2 Price rules for selected service
+                h6.mb-2 Price rules for selected service / book
                 p.text-muted.small Select a rule and enter number of pages/qty (if applicable) then click Apply to add to cart.
                 #pricesList
                   p.text-muted Select a service to load price rules.
@@ -78,7 +84,7 @@ block content
     .mt-3.text-muted.small
       | After placing the order you will receive an Order ID to use at payment.
 
-  // Orders Explorer Modal (rich UI, date filters, table)
+  // Orders Explorer Modal (rich UI, date filters, table) - unchanged...
   .modal.fade(id='ordersExplorerModal', tabindex='-1', aria-labelledby='ordersExplorerModalLabel', aria-hidden='true')
     .modal-dialog.modal-xl.modal-dialog-centered
       .modal-content
@@ -118,7 +124,6 @@ block content
 
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
-
 
 block append scripts
   script(src='/public/javascripts/orders_client.js')

@@ -1,0 +1,365 @@
+extends ../layout
+
+block content
+  .container
+    .row.justify-content-center
+      .col-12.col-lg-10
+        .card.shadow-sm
+          .card-body
+            .d-flex.justify-content-between.align-items-center.mb-3
+              h4.mb-0 Add & Cost Book
+              a.btn.btn-outline-secondary.btn-sm(href='/books') Back to Books
+
+            p.text-muted.small Create a named "Book" by selecting price rules and specifying quantities. The server will compute authoritative per-item pricing when saving.
+
+            // book name and actions
+            .row.g-2.mb-3
+              .col-md-8
+                label.form-label(for='bookName') Book name
+                input.form-control(type='text', id='bookName', placeholder='e.g. School Handbook', required)
+              .col-md-4.d-flex.align-items-end
+                button.btn.btn-primary#saveBook(type='button') Save Book
+
+            hr
+
+            .row.g-2.mb-3
+              .col-md-6
+                label.form-label(for='serviceSelect') Service (select to load price rules)
+                select.form-select#serviceSelect
+                  option(value='') -- Select a service --
+                  each s in services
+                    option(value=s._id)= s.name
+              .col-md-6.d-flex.align-items-end
+                small.text-muted.ms-auto Select a service to show its price rules; configure items and click "Add" to include in the book.
+
+            // price rules list (loaded via AJAX)
+            .card
+              .card-body
+                h6.mb-2 Price rules for selected service
+                p.text-muted.small Select a rule and configure Qty/Pages, F/B, printer (if required) then click Add to include in the book.
+                #pricesList
+                  p.text-muted Select a service to load price rules.
+
+            // Book Items preview
+            .card.mt-3
+              .card-body
+                .d-flex.justify-content-between.align-items-center.mb-2
+                  h6.mb-0 Book items (preview)
+                  small.text-muted#bookUnitPrice GH₵ 0.00
+                table.table.table-sm.table-borderless#bookItemsTable
+                  thead
+                    tr
+                      th Selection
+                      th.text-center QTY
+                      th.text-end Unit
+                      th.text-end Subtotal
+                      th.text-center Actions
+                  tbody#bookItemsTbody
+                    tr
+                      td.text-muted(colspan='5') No items added yet.
+
+                p.text-muted.small.mt-2 After saving, this book will be available in the Orders page Books dropdown.
+
+block append scripts
+  // inline script to handle loading price rules and building book items
+  script.
+    (function(){
+      'use strict';
+      const serviceSelect = document.getElementById('serviceSelect');
+      const pricesList = document.getElementById('pricesList');
+      const bookItemsTbody = document.getElementById('bookItemsTbody');
+      const bookUnitPriceEl = document.getElementById('bookUnitPrice');
+      const saveBookBtn = document.getElementById('saveBook');
+      const bookNameInput = document.getElementById('bookName');
+
+      let printers = [];
+      let serviceRequiresPrinter = false;
+      let prices = [];
+      let bookItems = []; // { priceRuleId, selectionLabel, unitPrice, pagesOriginal, fb, printerId, spoiled, subtotal }
+
+      function escapeHtml(s) { if (s === undefined || s === null) return ''; return String(s).replace(/[&<>"'`=\/]/g, function (c){ return '&#'+c.charCodeAt(0)+';'; }); }
+      function formatMoney(n) { return (Number(n)||0).toFixed(2); }
+
+      function subUnitsOnlyFromLabel(selectionLabel) {
+        if (!selectionLabel) return '';
+        const parts = selectionLabel.split(/\s*\+\s*/);
+        const subs = parts.map(part => {
+          const idx = part.indexOf(':');
+          if (idx >= 0) return part.slice(idx+1).trim();
+          return part.trim();
+        }).filter(Boolean);
+        return subs.join(', ');
+      }
+
+      function renderPrices() {
+        if (!prices || !prices.length) {
+          pricesList.innerHTML = '<p class="text-muted">No price rules found for selected service.</p>';
+          return;
+        }
+        const container = document.createElement('div');
+        container.className = 'list-group';
+        prices.forEach(p=>{
+          const row = document.createElement('div');
+          row.className = 'list-group-item d-flex align-items-center gap-3 flex-nowrap';
+
+          const left = document.createElement('div');
+          left.className = 'flex-grow-1 text-truncate';
+          left.innerHTML = '<strong class="d-inline-block text-truncate" style="max-width:420px;">'+escapeHtml(subUnitsOnlyFromLabel(p.selectionLabel||''))+'</strong>';
+
+          const mid = document.createElement('div');
+          mid.className = 'd-flex align-items-center gap-2 flex-nowrap';
+
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.min = '1';
+          input.className = 'form-control form-control-sm pages-input';
+          input.placeholder = serviceRequiresPrinter ? 'Pages' : 'Qty';
+          input.style.width = '90px';
+          mid.appendChild(input);
+
+          // F/B checkbox only when printer required
+          let fbInput = null;
+          if (serviceRequiresPrinter) {
+            const fbWrap = document.createElement('div');
+            fbWrap.className = 'form-check form-check-inline ms-1';
+            fbInput = document.createElement('input');
+            fbInput.type = 'checkbox';
+            fbInput.className = 'form-check-input fb-checkbox';
+            fbWrap.appendChild(fbInput);
+            const fbLabel = document.createElement('label');
+            fbLabel.className = 'form-check-label small';
+            fbLabel.textContent = 'F/B';
+            fbWrap.appendChild(fbLabel);
+            mid.appendChild(fbWrap);
+          }
+
+          // printer select if required
+          if (serviceRequiresPrinter) {
+            const printerWrap = document.createElement('div');
+            const sel = document.createElement('select');
+            sel.className = 'form-select form-select-sm printer-select';
+            sel.style.width = '220px';
+            const defaultOpt = document.createElement('option');
+            defaultOpt.value = '';
+            defaultOpt.textContent = '-- Select printer --';
+            sel.appendChild(defaultOpt);
+            if (printers && printers.length) {
+              printers.forEach(pr=>{
+                const o = document.createElement('option');
+                o.value = pr._id;
+                o.textContent = pr.name || pr._id;
+                sel.appendChild(o);
+              });
+            } else {
+              const o = document.createElement('option');
+              o.value = '';
+              o.textContent = 'No printers available';
+              sel.appendChild(o);
+              sel.disabled = true;
+            }
+            printerWrap.appendChild(sel);
+            mid.appendChild(printerWrap);
+
+            const spoiledWrap = document.createElement('div');
+            const spoiledInput = document.createElement('input');
+            spoiledInput.type = 'number';
+            spoiledInput.min = '0';
+            spoiledInput.step = '1';
+            spoiledInput.placeholder = 'Spoiled';
+            spoiledInput.className = 'form-control form-control-sm spoiled-input';
+            spoiledInput.style.width = '96px';
+            spoiledWrap.appendChild(spoiledInput);
+            mid.appendChild(spoiledWrap);
+          }
+
+          const right = document.createElement('div');
+          right.className = 'ms-auto';
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-sm btn-outline-primary add-book-item-btn';
+          btn.type = 'button';
+          btn.dataset.prId = p._id;
+          btn.textContent = 'Add';
+          right.appendChild(btn);
+
+          row.appendChild(left);
+          row.appendChild(mid);
+          row.appendChild(right);
+          container.appendChild(row);
+        });
+
+        pricesList.innerHTML = '';
+        pricesList.appendChild(container);
+      }
+
+      async function loadPricesForService(serviceId) {
+        if (!serviceId) {
+          prices = [];
+          serviceRequiresPrinter = false;
+          printers = [];
+          renderPrices();
+          return;
+        }
+        pricesList.innerHTML = '<div class="text-muted">Loading price rules…</div>';
+        try {
+          const res = await fetch('/admin/services/'+encodeURIComponent(serviceId) + '/prices', { headers: { 'X-Requested-With':'XMLHttpRequest' }});
+          if (!res.ok) {
+            const j = await res.json().catch(()=>null);
+            throw new Error((j && j.error) ? j.error : 'Failed to load price rules');
+          }
+          const j = await res.json();
+          prices = (j.prices||[]).map(x=>({ _id: x._id, selectionLabel: x.selectionLabel, unitPrice: Number(x.unitPrice), price2: (x.price2!==undefined && x.price2!==null)?Number(x.price2):null }));
+          serviceRequiresPrinter = !!j.serviceRequiresPrinter;
+          printers = (j.printers||[]).map(p=>({ _id: p._id, name: p.name }));
+          renderPrices();
+        } catch (err) {
+          console.error(err);
+          pricesList.innerHTML = '<p class="text-danger small">Error loading price rules.</p>';
+        }
+      }
+
+      // add book item
+      pricesList.addEventListener('click', function(ev){
+        const btn = ev.target.closest('.add-book-item-btn');
+        if (!btn) return;
+        const prId = btn.dataset.prId;
+        const row = btn.closest('.list-group-item');
+        const pagesInput = row ? row.querySelector('.pages-input') : null;
+        const pages = pagesInput && pagesInput.value ? Number(pagesInput.value) : 1;
+
+        const fbCheckbox = row ? row.querySelector('.fb-checkbox') : null;
+        const fbChecked = fbCheckbox ? fbCheckbox.checked : false;
+
+        let selectedPrinterId = null;
+        if (serviceRequiresPrinter) {
+          const printerSelect = row ? row.querySelector('.printer-select') : null;
+          selectedPrinterId = printerSelect ? (printerSelect.value || null) : null;
+          if (!selectedPrinterId) {
+            alert('Please select a printer for this item.');
+            return;
+          }
+        }
+
+        let spoiled = 0;
+        const spoiledInput = row ? row.querySelector('.spoiled-input') : null;
+        if (spoiledInput && spoiledInput.value !== undefined && spoiledInput.value !== null && String(spoiledInput.value).trim() !== '') {
+          const n = Number(spoiledInput.value);
+          spoiled = (isNaN(n) || n < 0) ? 0 : Math.floor(n);
+        }
+
+        const priceObj = prices.find(p=>String(p._id) === String(prId));
+        if (!priceObj) return alert('Price rule not found');
+
+        // compute effective quantity & subtotal client-side (same logic as server)
+        const origPages = Number(pages) || 1;
+        const effectiveQty = fbChecked ? Math.ceil(origPages/2) : origPages;
+        const chosenPrice = (fbChecked && priceObj.price2 !== null && priceObj.price2 !== undefined) ? Number(priceObj.price2) : Number(priceObj.unitPrice);
+        const subtotal = Number((chosenPrice * effectiveQty).toFixed(2));
+
+        const label = subUnitsOnlyFromLabel(priceObj.selectionLabel || '');
+        bookItems.push({
+          priceRuleId: prId,
+          selectionLabel: label,
+          unitPrice: chosenPrice,
+          pagesOriginal: origPages,
+          fb: !!fbChecked,
+          printerId: selectedPrinterId,
+          spoiled: spoiled,
+          subtotal: subtotal
+        });
+
+        renderBookItems();
+        // clear inputs
+        try { if (pagesInput) pagesInput.value = ''; if (fbCheckbox) fbCheckbox.checked = false; const printerSelect = row ? row.querySelector('.printer-select') : null; if (printerSelect) printerSelect.selectedIndex = 0; if (spoiledInput) spoiledInput.value = ''; } catch(e){}
+      });
+
+      function renderBookItems() {
+        bookItemsTbody.innerHTML = '';
+        if (!bookItems.length) {
+          bookItemsTbody.innerHTML = '<tr><td class="text-muted" colspan="5">No items added yet.</td></tr>';
+          bookUnitPriceEl.textContent = 'GH₵ 0.00';
+          return;
+        }
+        let total = 0;
+        bookItems.forEach((it, idx)=>{
+          total += Number(it.subtotal || 0);
+          const tr = document.createElement('tr');
+          tr.dataset.idx = idx;
+          tr.innerHTML = `
+            <td>
+              <div class="small text-muted">${escapeHtml(it.selectionLabel)}</div>
+            </td>
+            <td class="text-center">${escapeHtml(String(it.pagesOriginal || 1))}</td>
+            <td class="text-end">GH₵ ${formatMoney(it.unitPrice)}</td>
+            <td class="text-end">GH₵ ${formatMoney(it.subtotal)}</td>
+            <td class="text-center"><button class="btn btn-sm btn-outline-danger remove-book-item-btn" type="button">Remove</button></td>
+          `;
+          bookItemsTbody.appendChild(tr);
+        });
+        bookUnitPriceEl.textContent = 'GH₵ ' + formatMoney(total);
+      }
+
+      // remove item delegation
+      bookItemsTbody.addEventListener('click', function(ev){
+        const btn = ev.target.closest('.remove-book-item-btn');
+        if (!btn) return;
+        const tr = btn.closest('tr');
+        const idx = Number(tr.dataset.idx);
+        if (!isNaN(idx)) {
+          bookItems.splice(idx, 1);
+          renderBookItems();
+        }
+      });
+
+      // save book
+      saveBookBtn.addEventListener('click', async function(){
+        const name = (bookNameInput.value || '').trim();
+        if (!name) { alert('Enter a book name'); return; }
+        if (!bookItems.length) { alert('Add at least one item to the book'); return; }
+
+        const payload = {
+          name: name,
+          items: bookItems.map(it => ({
+            priceRuleId: it.priceRuleId,
+            pages: it.pagesOriginal,
+            fb: !!it.fb,
+            printerId: it.printerId || null,
+            spoiled: it.spoiled || 0
+          }))
+        };
+
+        saveBookBtn.disabled = true;
+        saveBookBtn.textContent = 'Saving...';
+        try {
+          const res = await fetch('/books', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify(payload)
+          });
+          const j = await res.json().catch(()=>null);
+          if (!res.ok) {
+            alert((j && j.error) ? j.error : 'Failed to save book');
+            return;
+          }
+          // success - redirect to /books or refresh parent page
+          window.location.href = '/books';
+        } catch (err) {
+          console.error('save book err', err);
+          alert('Failed to save book (network error)');
+        } finally {
+          saveBookBtn.disabled = false;
+          saveBookBtn.textContent = 'Save Book';
+        }
+      });
+
+      // auto-load prices when service changes
+      if (serviceSelect) {
+        serviceSelect.addEventListener('change', function(){
+          const sid = this.value;
+          loadPricesForService(sid);
+        });
+      }
+
+      // initial empty render
+      renderBookItems();
+
+    })();

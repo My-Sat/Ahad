@@ -9,6 +9,7 @@ var logger = require('morgan');
 const adminRoutes = require('./routes/admin'); 
 const ordersRoutes = require('./routes/orders');
 const customersRoutes = require('./routes/customers');
+const books = require('./routes/books');
 const { ensureAuthenticated } = require('./middlewares/auth');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
@@ -94,6 +95,8 @@ app.use('/', authRoutes);
 app.use('/admin', ensureAuthenticated, adminRoutes);
 app.use('/orders', ensureAuthenticated, ordersRoutes);
 app.use('/customers', ensureAuthenticated, customersRoutes);
+app.use('/books', books);
+
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
