@@ -180,25 +180,29 @@ document.addEventListener('DOMContentLoaded', function () {
       input.type = 'number';
       input.min = '1';
       input.className = 'form-control form-control-sm pages-input';
-      input.placeholder = 'Qty';
+      // placeholder depends on whether the current service requires a printer
+      input.placeholder = serviceRequiresPrinter ? 'Pages' : 'Qty';
       input.style.width = '90px';
       mid.appendChild(input);
 
-      // F/B checkbox
-      const fbWrap = document.createElement('div');
-      fbWrap.className = 'form-check form-check-inline ms-1';
-      const fbInput = document.createElement('input');
-      fbInput.type = 'checkbox';
-      fbInput.className = 'form-check-input fb-checkbox';
-      fbInput.id = `fb-${p._id}`;
-      fbInput.setAttribute('data-prid', p._id);
-      const fbLabel = document.createElement('label');
-      fbLabel.className = 'form-check-label small';
-      fbLabel.htmlFor = fbInput.id;
-      fbLabel.textContent = 'F/B';
-      fbWrap.appendChild(fbInput);
-      fbWrap.appendChild(fbLabel);
-      mid.appendChild(fbWrap);
+      // F/B checkbox — only show when service requires a printer
+      let fbInput = null;
+      if (serviceRequiresPrinter) {
+        const fbWrap = document.createElement('div');
+        fbWrap.className = 'form-check form-check-inline ms-1';
+        fbInput = document.createElement('input');
+        fbInput.type = 'checkbox';
+        fbInput.className = 'form-check-input fb-checkbox';
+        fbInput.id = `fb-${p._id}`;
+        fbInput.setAttribute('data-prid', p._id);
+        const fbLabel = document.createElement('label');
+        fbLabel.className = 'form-check-label small';
+        fbLabel.htmlFor = fbInput.id;
+        fbLabel.textContent = 'F/B';
+        fbWrap.appendChild(fbInput);
+        fbWrap.appendChild(fbLabel);
+        mid.appendChild(fbWrap);
+      }
 
       // printer select (if service requires)
       if (serviceRequiresPrinter) {
@@ -304,35 +308,35 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-// add item to cart
-function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, pages, fb, printerId, spoiled }) {
-  // pages = original pages input by user (pages per paper)
-  const origPages = Number(pages) || 1;
-  spoiled = Math.max(0, Math.floor(Number(spoiled) || 0));
+ // add item to cart
+ function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, pages, fb, printerId, spoiled }) {
+   // pages = original pages input by user (pages per paper)
+   const origPages = Number(pages) || 1;
+   spoiled = Math.max(0, Math.floor(Number(spoiled) || 0));
 
-  // Effective quantity used for price calculation:
-  // if F/B, physical qty = ceil(origPages / 2), else it's origPages
-  const effectiveQty = fb ? Math.ceil(origPages / 2) : origPages;
+   // Effective quantity used for price calculation:
+   // if F/B, physical qty = ceil(origPages / 2), else it's origPages
+   const effectiveQty = fb ? Math.ceil(origPages / 2) : origPages;
 
-  const subtotal = Number((Number(unitPrice) * effectiveQty).toFixed(2));
+   const subtotal = Number((Number(unitPrice) * effectiveQty).toFixed(2));
 
-  // store both original pages and the effective pages (to display effective qty but
-  // send original pages to server)
-  cart.push({
-    serviceId,
-    serviceName,
-    priceRuleId,
-    selectionLabel: label,
-    unitPrice: Number(unitPrice),
-    pages: effectiveQty,         // what we show in the cart (effective qty)
-    pagesOriginal: origPages,    // original pages input — will be sent to server
-    subtotal,
-    fb: !!fb,
-    printerId: printerId || null,
-    spoiled
-  });
-  renderCart();
-}
+   // store both original pages and the effective pages (to display effective qty but
+   // send original pages to server)
+   cart.push({
+     serviceId,
+     serviceName,
+     priceRuleId,
+     selectionLabel: label,
+     unitPrice: Number(unitPrice),
+     pages: effectiveQty,         // what we show in the cart (effective qty)
+     pagesOriginal: origPages,    // original pages input — will be sent to server
+     subtotal,
+     fb: !!fb,
+     printerId: printerId || null,
+     spoiled
+   });
+   renderCart();
+ }
 
   function renderCart() {
     cartTbody.innerHTML = '';
@@ -392,7 +396,7 @@ function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, page
     const pagesInput = row ? row.querySelector('.pages-input') : null;
     const pages = pagesInput && pagesInput.value ? Number(pagesInput.value) : 1;
 
-    // check F/B checkbox in same row
+    // check F/B checkbox in same row (may be null if service doesn't require printer)
     const fbCheckbox = row ? row.querySelector('.fb-checkbox') : null;
     const fbChecked = fbCheckbox ? fbCheckbox.checked : false;
 
@@ -416,13 +420,13 @@ function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, page
       spoiled = (isNaN(n) || n < 0) ? 0 : Math.floor(n);
     }
 
-// choose unitPrice: price2 if F/B checked and price2 available, else price
+ // choose unitPrice: price2 if F/B checked and price2 available, else price
     let chosenPrice = Number(priceObj.unitPrice);
     if (fbChecked && priceObj.price2 !== null && priceObj.price2 !== undefined) {
       chosenPrice = Number(priceObj.price2);
     }
 
-// label to show in cart should be the subunits-only label
+ // label to show in cart should be the subunits-only label
     let label = subUnitsOnlyFromLabel(priceObj.selectionLabel || '');
     // ensure we only append (F/B) once — do not duplicate if label already contains it
     if (fbChecked && (priceObj.price2 !== null && priceObj.price2 !== undefined)) {
@@ -462,13 +466,13 @@ function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, page
     }
   });
 
-// Helper: show the "no customer" modal and return 'proceed' or 'back'
-function showNoCustomerModal() {
-  return new Promise((resolve) => {
-    // create modal HTML if not present
-    let modalEl = document.getElementById('noCustomerModal');
-    if (!modalEl) {
-      const html = `
+ // Helper: show the "no customer" modal and return 'proceed' or 'back'
+ function showNoCustomerModal() {
+   return new Promise((resolve) => {
+     // create modal HTML if not present
+     let modalEl = document.getElementById('noCustomerModal');
+     if (!modalEl) {
+       const html = `
 <div class="modal fade" id="noCustomerModal" tabindex="-1" aria-labelledby="noCustomerModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -486,109 +490,109 @@ function showNoCustomerModal() {
     </div>
   </div>
 </div>`;
-      const container = document.createElement('div');
-      container.innerHTML = html;
-      document.body.appendChild(container.firstElementChild);
-      modalEl = document.getElementById('noCustomerModal');
-    }
+       const container = document.createElement('div');
+       container.innerHTML = html;
+       document.body.appendChild(container.firstElementChild);
+       modalEl = document.getElementById('noCustomerModal');
+     }
 
-    const btnProceed = modalEl.querySelector('button[data-action="proceed"]');
-    const btnBack = modalEl.querySelector('button[data-action="back"]');
-    const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+     const btnProceed = modalEl.querySelector('button[data-action="proceed"]');
+     const btnBack = modalEl.querySelector('button[data-action="back"]');
+     const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
 
-    function cleanup() {
-      try {
-        btnProceed.removeEventListener('click', onProceed);
-        btnBack.removeEventListener('click', onBack);
-        modalEl.removeEventListener('hidden.bs.modal', onHidden);
-      } catch (e) {}
-    }
-    function onProceed() { cleanup(); inst.hide(); resolve('proceed'); }
-    function onBack() { cleanup(); inst.hide(); resolve('back'); }
-    function onHidden() { cleanup(); resolve(null); }
+     function cleanup() {
+       try {
+         btnProceed.removeEventListener('click', onProceed);
+         btnBack.removeEventListener('click', onBack);
+         modalEl.removeEventListener('hidden.bs.modal', onHidden);
+       } catch (e) {}
+     }
+     function onProceed() { cleanup(); inst.hide(); resolve('proceed'); }
+     function onBack() { cleanup(); inst.hide(); resolve('back'); }
+     function onHidden() { cleanup(); resolve(null); }
 
-    btnProceed.addEventListener('click', onProceed);
-    btnBack.addEventListener('click', onBack);
-    modalEl.addEventListener('hidden.bs.modal', onHidden);
+     btnProceed.addEventListener('click', onProceed);
+     btnBack.addEventListener('click', onBack);
+     modalEl.addEventListener('hidden.bs.modal', onHidden);
 
-    inst.show();
-  });
-}
+     inst.show();
+   });
+ }
 
-// Extracted order placement logic so we can re-use it from modal
-async function placeOrderFlow() {
-  if (!cart.length) return;
-  orderNowBtn.disabled = true;
-  const originalText = orderNowBtn.textContent;
-  orderNowBtn.textContent = 'Placing...';
-  try {
-    const payload = {
-      items: cart.map(it => ({
-        serviceId: it.serviceId,
-        priceRuleId: it.priceRuleId,
-        // send the original pages value so server can apply its own logic (materials/printer)
-        pages: (typeof it.pagesOriginal !== 'undefined') ? Number(it.pagesOriginal) : Number(it.pages || 1),
-        fb: !!it.fb,
-        printerId: it.printerId || null,
-        spoiled: (typeof it.spoiled === 'number') ? it.spoiled : 0
-      })),
-      customerId: (document.getElementById('orderCustomerId') && document.getElementById('orderCustomerId').value) ? document.getElementById('orderCustomerId').value : null
-    };
-    const res = await fetch('/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-      body: JSON.stringify(payload)
-    });
-    const j = await res.json().catch(() => null);
-    if (!res.ok) {
-      alert((j && j.error) ? j.error : 'Order creation failed');
-      return;
-    }
+ // Extracted order placement logic so we can re-use it from modal
+ async function placeOrderFlow() {
+   if (!cart.length) return;
+   orderNowBtn.disabled = true;
+   const originalText = orderNowBtn.textContent;
+   orderNowBtn.textContent = 'Placing...';
+   try {
+     const payload = {
+       items: cart.map(it => ({
+         serviceId: it.serviceId,
+         priceRuleId: it.priceRuleId,
+         // send the original pages value so server can apply its own logic (materials/printer)
+         pages: (typeof it.pagesOriginal !== 'undefined') ? Number(it.pagesOriginal) : Number(it.pages || 1),
+         fb: !!it.fb,
+         printerId: it.printerId || null,
+         spoiled: (typeof it.spoiled === 'number') ? it.spoiled : 0
+       })),
+       customerId: (document.getElementById('orderCustomerId') && document.getElementById('orderCustomerId').value) ? document.getElementById('orderCustomerId').value : null
+     };
+     const res = await fetch('/orders', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+       body: JSON.stringify(payload)
+     });
+     const j = await res.json().catch(() => null);
+     if (!res.ok) {
+       alert((j && j.error) ? j.error : 'Order creation failed');
+       return;
+     }
 
-    // Show modal (instead of window.alert) with order details and copy/print actions
-    showOrderSuccessModal(j.orderId, j.total);
-    if (typeof showGlobalToast === 'function') showGlobalToast(`Order created: ${j.orderId}`, 3200);
+     // Show modal (instead of window.alert) with order details and copy/print actions
+     showOrderSuccessModal(j.orderId, j.total);
+     if (typeof showGlobalToast === 'function') showGlobalToast(`Order created: ${j.orderId}`, 3200);
 
-    cart = [];
-    renderCart();
-  } catch (err) {
-    console.error('create order err', err);
-    alert('Failed to create order');
-  } finally {
-    orderNowBtn.disabled = false;
-    orderNowBtn.textContent = originalText;
-  }
-}
+     cart = [];
+     renderCart();
+   } catch (err) {
+     console.error('create order err', err);
+     alert('Failed to create order');
+   } finally {
+     orderNowBtn.disabled = false;
+     orderNowBtn.textContent = originalText;
+   }
+ }
 
-// New click handler that checks for customer, shows modal if none, then proceeds/back accordingly
-orderNowBtn.addEventListener('click', async function () {
-  if (!cart.length) return;
+ // New click handler that checks for customer, shows modal if none, then proceeds/back accordingly
+ orderNowBtn.addEventListener('click', async function () {
+   if (!cart.length) return;
 
-  // determine if a customer is attached
-  const customerEl = document.getElementById('orderCustomerId');
-  const hasCustomer = !!(customerEl && customerEl.value && customerEl.value.trim());
+   // determine if a customer is attached
+   const customerEl = document.getElementById('orderCustomerId');
+   const hasCustomer = !!(customerEl && customerEl.value && customerEl.value.trim());
 
-  if (!hasCustomer) {
-    // show modal offering proceed or go back
-    const choice = await showNoCustomerModal();
-    if (choice === 'back') {
-      // navigate to customers page to register/select a customer
-      // change this path if your customers page is at a different route
-      window.location.href = '/customers';
-      return;
-    } else if (choice === 'proceed') {
-      // proceed with the existing flow
-      await placeOrderFlow();
-      return;
-    } else {
-      // modal dismissed or closed -> do nothing
-      return;
-    }
-  }
+   if (!hasCustomer) {
+     // show modal offering proceed or go back
+     const choice = await showNoCustomerModal();
+     if (choice === 'back') {
+       // navigate to customers page to register/select a customer
+       // change this path if your customers page is at a different route
+       window.location.href = '/customers';
+       return;
+     } else if (choice === 'proceed') {
+       // proceed with the existing flow
+       await placeOrderFlow();
+       return;
+     } else {
+       // modal dismissed or closed -> do nothing
+       return;
+     }
+   }
 
-  // if customer present, proceed directly
-  await placeOrderFlow();
-});
+   // if customer present, proceed directly
+   await placeOrderFlow();
+ });
 
   // Auto-load prices when service changes
   if (serviceSelect) {
@@ -849,20 +853,21 @@ orderNowBtn.addEventListener('click', async function () {
           const isFb = (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
           const cleanLabel = isFb ? selLabel.replace(/\s*\(F\/B\)\s*$/i, '').trim() : selLabel;
 
-          // prefer server-stored effectiveQty (the quantity used for pricing). fall back to computed ceil(pages/2) for F/B
+          // compute display quantity (effective): if F/B then ceil(rawPages / 2), otherwise rawPages
           const rawPages = (typeof it.pages !== 'undefined' && it.pages !== null) ? Number(it.pages) : 1;
           const displayQty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (isFb ? Math.ceil(rawPages / 2) : rawPages);
           const qty = String(displayQty);
 
           const unitPrice = (typeof it.unitPrice === 'number' || !isNaN(Number(it.unitPrice))) ? formatMoney(it.unitPrice) : (it.unitPrice || '');
 
-          // Prefer server subtotal if present; otherwise compute from displayQty
+          // Prefer the server-provided subtotal. If missing, fall back to displayQty * unitPrice.
           let subtotal;
           if (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))) {
             subtotal = formatMoney(it.subtotal);
           } else {
             subtotal = formatMoney(Number(unitPrice) * displayQty);
           }
+
           // Use printer name if server provided it, otherwise dash
           const printerStr = it.printer ? escapeHtml(String(it.printer)) : '-';
 
