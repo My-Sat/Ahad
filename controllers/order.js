@@ -157,19 +157,19 @@ for (const it of items) {
 // subtotal uses the effective quantity (server authoritative)
   const subtotal = Number((unitPrice * effectiveQtyForPrice).toFixed(2));
 
-  // build human-friendly selection label
-  const selectionLabel = pr.selectionLabel || ((pr.selections || []).map(s => {
-    const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
-    const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
-    return `${u}: ${su}`;
-  }).join(' + ')) + (usedFB ? ' (F/B)' : '');
+// Build human-friendly selection label (append F/B suffix always when usedFB)
+const baseLabel = pr.selectionLabel || ((pr.selections || []).map(s => {
+  const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
+  const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
+  return `${u}: ${su}`;
+}).join(' + '));
+const selectionLabel = baseLabel + (usedFB ? ' (F/B)' : '');
 
-  // store selections as unit/subUnit objectIds (not populated objects)
-  const selectionsForOrder = (pr.selections || []).map(s => ({
-    unit: s.unit && s.unit._id ? s.unit._id : s.unit,
-    subUnit: s.subUnit && s.subUnit._id ? s.subUnit._id : s.subUnit
-  }));
-
+// store selections as unit/subUnit objectIds (not populated objects)
+const selectionsForOrder = (pr.selections || []).map(s => ({
+  unit: s.unit && s.unit._id ? s.unit._id : s.unit,
+  subUnit: s.subUnit && s.subUnit._id ? s.subUnit._id : s.subUnit
+}));
   // Determine printer-type for this price rule (inspect populated subUnit names)
   let printerType = null;
   try {
@@ -206,18 +206,19 @@ for (const it of items) {
   }
 
   // store pages as original pages so other parts (material matching, printer usage) still use original pages
-  builtItems.push({
-    service: it.serviceId,
-    printer: printerId, // may be null
-    selections: selectionsForOrder,
-    selectionLabel,
-    unitPrice,
-    pages,                // original pages per paper (kept for materials/printer logic)
-    subtotal,             // computed using effectiveQtyForPrice
-    spoiled: Number(it.spoiled) || 0,
-    printerType
-  });
-
+builtItems.push({
+  service: it.serviceId,
+  printer: printerId, // may be null
+  selections: selectionsForOrder,
+  selectionLabel,
+  unitPrice,
+  pages,               // raw pages entered by user (kept for material/printer logic)
+  effectiveQty: effectiveQtyForPrice, // server-authoritative quantity used for pricing (e.g. ceil(pages/2) when F/B)
+  subtotal,            // computed using effectiveQty (server authoritative)
+  spoiled: Number(it.spoiled) || 0,
+  fb: !!(it.fb || usedFB),  // store original intent (client flag) OR our usedFB calc
+  printerType // NEW: 'monochrome' | 'colour' | null
+});
   total += subtotal;
 }
     total = Number(total.toFixed(2));
@@ -274,13 +275,12 @@ try {
           if (materialMatchesItem(m.selections, itemSelections)) {
             // Determine final count using pages & fb detection:
             let pages = Number(it.pages) || 1;
-            const isFb = String(it.selectionLabel || '').includes('(F/B)');
-            let baseCount = 1;
+            const isFb = !!it.fb; // rely on stored flag, not text parsing
+            let baseCount;
             if (!pages || pages <= 0) {
               baseCount = 1;
             } else {
-              if (isFb) baseCount = Math.ceil(pages / 2);
-              else baseCount = pages;
+              baseCount = isFb ? Math.ceil(pages / 2) : pages;
             }
 
             // ensure spoiled is integer >= 0

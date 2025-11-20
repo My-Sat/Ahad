@@ -37,9 +37,13 @@ block content
                       if it.spoiled
                         span.text-danger.ms-2 Spoiled: #{it.spoiled}
                     .text-end(style='min-width:180px;')
-                      div QTY: #{it.pages || 1}
+                      - const rawPages = Number(it.pages || 1);
+                      - const displayQty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (it.fb ? Math.ceil(rawPages / 2) : rawPages);
+                      div QTY: #{displayQty}
                       div Unit: GH₵ #{(it.unitPrice||0).toFixed(2)}
+                      // use the server-stored subtotal (do not recompute from raw pages)
                       div Subtotal: GH₵ #{(it.subtotal||0).toFixed(2)}
+
                       if it.printerName
                         div.small.text-muted Printer: #{it.printerName}
 

@@ -200,9 +200,15 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!selLabel) selLabel = '(no label)';
         const isFb = (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
         const fbBadge = isFb ? ' <span class="badge bg-secondary ms-2">F/B</span>' : '';
-        const qty = Number(it.pages || 1);
+        // prefer server-stored effectiveQty if available
+        const rawPages = Number(it.pages || 1);
+        const displayQty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (isFb ? Math.ceil(rawPages / 2) : rawPages);
+        const qty = Number(displayQty);
+
         const unit = Number(it.unitPrice || 0);
-        const subtotal = Number(it.subtotal || (qty * unit));
+
+        // prefer server-subtotal; otherwise compute from displayQty
+        const subtotal = Number((typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))) ? Number(it.subtotal) : (qty * unit));
 
         itemsHtml += `
           <div class="list-group-item d-flex align-items-center justify-content-between" style="padding:0.5rem 0.75rem;">

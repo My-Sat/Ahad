@@ -849,9 +849,20 @@ orderNowBtn.addEventListener('click', async function () {
           const isFb = (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
           const cleanLabel = isFb ? selLabel.replace(/\s*\(F\/B\)\s*$/i, '').trim() : selLabel;
 
-          const qty = (typeof it.pages !== 'undefined' && it.pages !== null) ? String(it.pages) : '1';
+          // prefer server-stored effectiveQty (the quantity used for pricing). fall back to computed ceil(pages/2) for F/B
+          const rawPages = (typeof it.pages !== 'undefined' && it.pages !== null) ? Number(it.pages) : 1;
+          const displayQty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (isFb ? Math.ceil(rawPages / 2) : rawPages);
+          const qty = String(displayQty);
+
           const unitPrice = (typeof it.unitPrice === 'number' || !isNaN(Number(it.unitPrice))) ? formatMoney(it.unitPrice) : (it.unitPrice || '');
-          const subtotal = (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))) ? formatMoney(it.subtotal) : (it.subtotal || '');
+
+          // Prefer server subtotal if present; otherwise compute from displayQty
+          let subtotal;
+          if (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))) {
+            subtotal = formatMoney(it.subtotal);
+          } else {
+            subtotal = formatMoney(Number(unitPrice) * displayQty);
+          }
           // Use printer name if server provided it, otherwise dash
           const printerStr = it.printer ? escapeHtml(String(it.printer)) : '-';
 

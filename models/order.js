@@ -17,9 +17,11 @@ const OrderItemSchema = new mongoose.Schema({
   selectionLabel: { type: String, required: true },
   // price per unit (the unit price you assigned for that selection)
   unitPrice: { type: Number, required: true },
-  // optional multiplier (e.g., number of pages)
+  // optional multiplier (raw user input, e.g., number of pages)
   pages: { type: Number, default: 1 },
-  // computed line subtotal (unitPrice * pages)
+  // the effective quantity used for pricing (e.g. ceil(pages/2) for F/B). Stored so clients can show exactly what server used.
+  effectiveQty: { type: Number, default: 1 },
+  // computed line subtotal (unitPrice * effectiveQty)
   subtotal: { type: Number, required: true },
   // optional flags stored per-item (backwards compat)
   fb: { type: Boolean, default: false },
