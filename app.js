@@ -95,7 +95,7 @@ app.use('/', authRoutes);
 app.use('/admin', ensureAuthenticated, adminRoutes);
 app.use('/orders', ensureAuthenticated, ordersRoutes);
 app.use('/customers', ensureAuthenticated, customersRoutes);
-app.use('/books', books);
+app.use('/books',ensureAuthenticated, books);
 
 
 // catch 404 and forward to error handler

@@ -8,7 +8,7 @@ block content
           .card-body
             .d-flex.justify-content-between.align-items-center.mb-3
               h4.mb-0 Add & Cost Book
-              a.btn.btn-outline-secondary.btn-sm(href='/books') Back to Books
+              a.btn.btn-outline-secondary.btn-sm(href='/books') Books Page
 
             p.text-muted.small Create a named "Book" by selecting price rules and specifying quantities. The server will compute authoritative per-item pricing when saving.
 
@@ -75,7 +75,7 @@ block append scripts
       let printers = [];
       let serviceRequiresPrinter = false;
       let prices = [];
-      let bookItems = []; // { priceRuleId, selectionLabel, unitPrice, pagesOriginal, fb, printerId, spoiled, subtotal }
+      let bookItems = []; // { priceRuleId, selectionLabel, unitPrice, pagesOriginal, pagesEffective, fb, printerId, spoiled, subtotal }
 
       function escapeHtml(s) { if (s === undefined || s === null) return ''; return String(s).replace(/[&<>"'`=\/]/g, function (c){ return '&#'+c.charCodeAt(0)+';'; }); }
       function formatMoney(n) { return (Number(n)||0).toFixed(2); }
@@ -89,6 +89,53 @@ block append scripts
           return part.trim();
         }).filter(Boolean);
         return subs.join(', ');
+      }
+
+      // ---------- Bootstrap inline alert modal (reusable) ----------
+    // replace the old ensureInlineAlertModal() with this function
+    function ensureInlineAlertModal() {
+    var modalEl = document.getElementById('booksInlineAlertModal');
+    if (modalEl) return modalEl;
+
+    var container = document.createElement('div');
+    container.innerHTML = ''
+        + '<div class="modal fade" id="booksInlineAlertModal" tabindex="-1" aria-labelledby="booksInlineAlertModalLabel" aria-hidden="true">'
+        + '  <div class="modal-dialog modal-dialog-centered">'
+        + '    <div class="modal-content">'
+        + '      <div class="modal-header">'
+        + '        <h5 class="modal-title" id="booksInlineAlertModalLabel">Notice</h5>'
+        + '        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>'
+        + '      </div>'
+        + '      <div class="modal-body" id="booksInlineAlertModalBody"></div>'
+        + '      <div class="modal-footer">'
+        + '        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">OK</button>'
+        + '      </div>'
+        + '    </div>'
+        + '  </div>'
+        + '</div>';
+
+    // append the modal's root node into the document
+    document.body.appendChild(container.firstElementChild);
+
+    modalEl = document.getElementById('booksInlineAlertModal');
+    return modalEl;
+    }
+
+      // show message in modal (non-blocking)
+      function showInlineAlert(message, title) {
+        const modalEl = ensureInlineAlertModal();
+        const titleEl = modalEl.querySelector('#booksInlineAlertModalLabel');
+        const bodyEl = modalEl.querySelector('#booksInlineAlertModalBody');
+        if (titleEl) titleEl.textContent = title || 'Notice';
+        if (bodyEl) bodyEl.innerHTML = escapeHtml(String(message || ''));
+        const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        inst.show();
+      }
+
+      // compute effective qty used for pricing/display (same logic as server)
+      function computeEffectiveQty(origPages, fb) {
+        const p = Number(origPages) || 1;
+        return fb ? Math.ceil(p / 2) : p;
       }
 
       function renderPrices() {
@@ -234,7 +281,8 @@ block append scripts
           const printerSelect = row ? row.querySelector('.printer-select') : null;
           selectedPrinterId = printerSelect ? (printerSelect.value || null) : null;
           if (!selectedPrinterId) {
-            alert('Please select a printer for this item.');
+            // use Bootstrap modal instead of alert
+            showInlineAlert('Please select a printer for this item.', 'Printer required');
             return;
           }
         }
@@ -247,7 +295,7 @@ block append scripts
         }
 
         const priceObj = prices.find(p=>String(p._id) === String(prId));
-        if (!priceObj) return alert('Price rule not found');
+        if (!priceObj) return showInlineAlert('Price rule not found', 'Error');
 
         // compute effective quantity & subtotal client-side (same logic as server)
         const origPages = Number(pages) || 1;
@@ -256,11 +304,13 @@ block append scripts
         const subtotal = Number((chosenPrice * effectiveQty).toFixed(2));
 
         const label = subUnitsOnlyFromLabel(priceObj.selectionLabel || '');
+        // store pagesEffective alongside pagesOriginal so preview can use it
         bookItems.push({
           priceRuleId: prId,
           selectionLabel: label,
           unitPrice: chosenPrice,
           pagesOriginal: origPages,
+          pagesEffective: effectiveQty,
           fb: !!fbChecked,
           printerId: selectedPrinterId,
           spoiled: spoiled,
@@ -284,11 +334,17 @@ block append scripts
           total += Number(it.subtotal || 0);
           const tr = document.createElement('tr');
           tr.dataset.idx = idx;
+
+          // display the effective pages as the main QTY; if different, show original in parentheses
+          const displayQty = (typeof it.pagesEffective !== 'undefined' && it.pagesEffective !== null) ? Number(it.pagesEffective) : Number(it.pagesOriginal || 1);
+          const orig = Number(it.pagesOriginal || 1);
+          const qtyHtml = (orig !== displayQty) ? `${escapeHtml(String(displayQty))} <small class="text-muted">(orig ${escapeHtml(String(orig))})</small>` : `${escapeHtml(String(displayQty))}`;
+
           tr.innerHTML = `
             <td>
               <div class="small text-muted">${escapeHtml(it.selectionLabel)}</div>
             </td>
-            <td class="text-center">${escapeHtml(String(it.pagesOriginal || 1))}</td>
+            <td class="text-center">${qtyHtml}</td>
             <td class="text-end">GH₵ ${formatMoney(it.unitPrice)}</td>
             <td class="text-end">GH₵ ${formatMoney(it.subtotal)}</td>
             <td class="text-center"><button class="btn btn-sm btn-outline-danger remove-book-item-btn" type="button">Remove</button></td>
@@ -313,7 +369,11 @@ block append scripts
       // save book
       saveBookBtn.addEventListener('click', async function(){
         const name = (bookNameInput.value || '').trim();
-        if (!name) { alert('Enter a book name'); return; }
+        if (!name) {
+          // use modal instead of alert
+          showInlineAlert('Enter a book name', 'Book name required');
+          return;
+        }
         if (!bookItems.length) { alert('Add at least one item to the book'); return; }
 
         const payload = {

@@ -41,14 +41,13 @@ block content
                   each s in services
                     option(value=s._id)= s.name
               .col-md-4
-                label.form-label(for='booksDropdown') Books
+                label.form-label(for='booksDropdown') Books Printing
                 // We'll populate this select's options via client JS
                 div.input-group
                   select.form-select(id='booksDropdown')
                     option(value='') -- Select a book --
                   button.btn.btn-outline-secondary(type='button', id='addBookBtn') Add Book
               .col-md-3.d-flex.align-items-end
-                small.text-muted.ms-auto Select a service or book to load price rules
 
             // price rules list (populated via AJAX or when a book is selected)
             .card.mt-3

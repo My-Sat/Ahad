@@ -13,8 +13,7 @@ block content
                   i.bi.bi-plus-lg.me-1
                   | Create book
                 a.btn.btn-outline-secondary.btn-sm(href='/orders/new')
-                  i.bi.bi-arrow-left.me-1
-                  | Back to Orders
+                  | Orders Page
             p.text-muted.small.mb-3 Use this page to review and delete created books.
 
             .table-responsive
@@ -26,15 +25,19 @@ block content
                     th.text-center Created
                     th.text-center Actions
                 tbody
-                  // initial server render (progressive enhancement will replace contents)
                   if books && books.length
                     each b in books
-                      tr(data-id=b._id)
+                      tr.book-row(data-id=b._id)
                         td #{b.name}
                         td.text-end GH₵ #{(b.unitPrice || 0).toFixed(2)}
                         td.text-center #{b.createdAt ? (new Date(b.createdAt)).toLocaleString() : ''}
                         td.text-center
+                          button.btn.btn-sm.btn-outline-secondary.preview-book-btn(type='button' data-id=b._id) Preview
                           button.btn.btn-sm.btn-outline-danger.delete-book-btn(type='button', data-id=b._id) Delete
+                      // placeholder for expanded preview (inserted by client)
+                      tr.book-preview-row(data-id=b._id style='display:none')
+                        td(colspan='4')
+                          .book-preview-container
                   else
                     tr
                       td.text-muted(colspan='4') No books created yet.
