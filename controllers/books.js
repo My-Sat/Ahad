@@ -232,3 +232,21 @@ exports.delete = async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Error deleting book' });
   }
 };
+
+
+/**
+ * GET /books  -> render the books management page (list & delete)
+ */
+exports.listPage = async (req, res) => {
+  try {
+    // lightweight list for rendering (server-rendered table)
+    const rows = await Book.find({}, { name: 1, unitPrice: 1, createdAt: 1 }).sort({ createdAt: -1 }).lean();
+    return res.render('books/index', {
+      title: 'Books',
+      books: rows
+    });
+  } catch (err) {
+    console.error('books.listPage error', err);
+    return res.status(500).send('Error loading books page');
+  }
+};

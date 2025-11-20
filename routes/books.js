@@ -3,6 +3,9 @@ const express = require('express');
 const router = express.Router();
 const booksController = require('../controllers/books');
 
+// render list page
+router.get('/', booksController.listPage);
+
 // list (AJAX)
 router.get('/list', booksController.list);
 
