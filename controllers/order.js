@@ -45,6 +45,17 @@ exports.viewOrderPage = async (req, res) => {
     const orderDoc = await Order.findOne({ orderId }).lean();
     if (!orderDoc) return res.status(404).send('Order not found');
 
+    // Manually populate customer (mirroring apiGetOrderById and newOrderPage prefill logic)
+    let customer = null;
+    if (orderDoc.customer) {
+      try {
+        const Customer = require('../models/customer');
+        customer = await Customer.findById(orderDoc.customer).select('_id firstName businessName phone category').lean();
+      } catch (e) {
+        console.error('Failed to populate customer for order view', e);
+      }
+    }
+
     // Populate printer names for items that reference a printer (non-blocking; keep behavior consistent)
     try {
       const printerIds = Array.from(new Set((orderDoc.items || []).filter(it => it.printer).map(it => String(it.printer))));
@@ -83,7 +94,8 @@ exports.viewOrderPage = async (req, res) => {
     return res.render('orders/view', {
       order: orderDoc,
       paidSoFar,
-      outstanding
+      outstanding,
+      customer  // pass separately to mirror new.pug logic
     });
   } catch (err) {
     console.error('viewOrderPage error', err);

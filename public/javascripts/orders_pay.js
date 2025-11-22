@@ -246,7 +246,25 @@ document.addEventListener('DOMContentLoaded', function () {
       outstanding = Number((Number(order.total || 0) - paid).toFixed(2));
     }
 
+    // --- NEW: compute customer display text similar to views/orders/view.pug ---
+    let customerDisplay = '';
+    if (order.customer) {
+      // order.customer may be an object (from apiGetOrderById) or a simple string
+      if (typeof order.customer === 'string') {
+        customerDisplay = order.customer;
+      } else {
+        const c = order.customer;
+        if (c.category === 'artist') {
+          customerDisplay = c.businessName || c.phone || '';
+        } else {
+          customerDisplay = c.firstName || c.businessName || c.phone || '';
+        }
+      }
+    }
+    // -----------------------------------------------------------------------
+
     orderInfo.innerHTML = `
+      ${ customerDisplay ? `<p><strong>Customer:</strong> ${escapeHtml(customerDisplay)}</p>` : '' }
       <p><strong>Order ID:</strong> ${escapeHtml(order.orderId)}</p>
       <p><strong>Status:</strong> ${statusLabel}</p>
       ${itemsHtml}

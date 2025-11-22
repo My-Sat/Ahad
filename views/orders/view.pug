@@ -12,6 +12,10 @@ block content
 
             // Order meta
             .mb-3
+              if customer
+                p.mb-1
+                  strong Customer:
+                  |  #{customer.category === 'artist' ? (customer.businessName || customer.phone) : (customer.firstName || customer.businessName || customer.phone)}
               p.mb-1
                 strong Order ID:
                 |  #{order.orderId}
@@ -21,7 +25,7 @@ block content
               p.mb-1
                 strong Created:
                 |  #{order.createdAt ? new Date(order.createdAt).toLocaleString() : ''}
-
+                
             // Items
             h6.mb-2 Items
             if order.items && order.items.length
