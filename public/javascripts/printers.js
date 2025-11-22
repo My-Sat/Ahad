@@ -501,7 +501,7 @@ function createPrinterRow(pr) {
       if (pdRecentLoading) pdRecentLoading.textContent = '';
       if (pdRecentList) {
         pdRecentList.innerHTML = '';
-        const recent = (data.latestUsages || []).slice(0, 10);
+        const recent = (data.latestUsages || []);
         if (!recent.length) {
           pdRecentList.innerHTML = '<div class="small text-muted">No recent usage entries</div>';
         } else {
