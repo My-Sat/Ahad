@@ -91,13 +91,26 @@ exports.viewOrderPage = async (req, res) => {
     const outstanding = Number((total - paidSoFar).toFixed(2));
 
     // render server-side page
+let handler = null;
+    if (orderDoc.handledBy) {
+      try {
+        const User = require('../models/user');
+        const h = await User.findById(orderDoc.handledBy).select('_id name username').lean();
+        if (h) handler = h;
+      } catch (e) {
+        console.error('Failed to populate handler for order view', e);
+      }
+    }
+
+    // render server-side page
     return res.render('orders/view', {
       order: orderDoc,
       paidSoFar,
       outstanding,
-      customer  // pass separately to mirror new.pug logic
+      customer,  // pass separately to mirror new.pug logic
+      handler    // <-- pass handler to template
     });
-  } catch (err) {
+    } catch (err) {
     console.error('viewOrderPage error', err);
     return res.status(500).send('Error loading order');
   }
@@ -246,6 +259,16 @@ builtItems.push({
       order.customer = new mongoose.Types.ObjectId(customerId);
     }
 
+    // NEW: attach the currently logged-in user as the handler of this order (if available)
+    try {
+      if (req.user && req.user._id) {
+        order.handledBy = new mongoose.Types.ObjectId(req.user._id);
+      }
+    } catch (e) {
+      // don't fail order creation if attaching fails for some reason
+      console.error('Failed to attach handler to order', e);
+    }
+
     await order.save();
 
     // If the order has a customer attached, re-evaluate their 'regular' status.
@@ -379,6 +402,7 @@ try {
 };
 
 // API: fetch order by orderId (returns order summary)
+// API: fetch order by orderId (returns order summary)
 exports.apiGetOrderById = async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -408,7 +432,8 @@ exports.apiGetOrderById = async (req, res) => {
       console.error('Failed to populate printer names for order items', pErr);
     }
 
-        let customerInfo = null;
+    // Populate customer (if present)
+    let customerInfo = null;
     if (order.customer) {
       try {
         const Customer = require('../models/customer');
@@ -417,6 +442,42 @@ exports.apiGetOrderById = async (req, res) => {
           customerInfo = c;
         }
       } catch (e) { console.error('Failed to populate customer', e); }
+    }
+
+    // --- Populate payments.recordedBy user objects if present ---
+    try {
+      if (order.payments && Array.isArray(order.payments) && order.payments.length) {
+        const recIds = Array.from(new Set(order.payments
+          .filter(p => p && p.recordedBy)
+          .map(p => String(p.recordedBy))
+          .filter(Boolean)));
+        if (recIds.length) {
+          const User = require('../models/user');
+          const users = await User.find({ _id: { $in: recIds } }).select('_id name username').lean();
+          const umap = {};
+          users.forEach(u => { umap[String(u._id)] = u; });
+          order.payments = (order.payments || []).map(p => {
+            if (p && p.recordedBy) {
+              const id = String(p.recordedBy);
+              const u = umap[id];
+              return Object.assign({}, p, {
+                recordedBy: u || p.recordedBy,
+                recordedByName: (p.recordedByName || (u && (u.name || u.username)) || '')
+              });
+            }
+            // ensure recordedByName exists even if no recordedBy id
+            return Object.assign({}, p, { recordedByName: (p.recordedByName || '') });
+          });
+        } else {
+          // ensure every payment has recordedByName at least as an empty string for consistency
+          order.payments = (order.payments || []).map(p => Object.assign({}, p, { recordedByName: (p && p.recordedByName) ? p.recordedByName : '' }));
+        }
+      } else {
+        order.payments = order.payments || [];
+      }
+    } catch (payPopErr) {
+      console.error('Failed to populate payment.recordedBy', payPopErr);
+      order.payments = order.payments || [];
     }
 
     // Compute payments summary (backwards-compatible: may be undefined)
@@ -432,22 +493,35 @@ exports.apiGetOrderById = async (req, res) => {
     const total = Number((order.total || 0));
     const outstanding = Number((total - paidSoFar).toFixed(2));
 
+    // Populate handler info if present
+    let handlerInfo = null;
+    if (order.handledBy) {
+      try {
+        const User = require('../models/user');
+        const h = await User.findById(order.handledBy).select('_id name username').lean();
+        if (h) handlerInfo = h;
+      } catch (e) {
+        console.error('Failed to populate handler for apiGetOrderById', e);
+      }
+    }
+
     // return minimal data plus payments summary
     return res.json({
-  ok: true,
-  order: {
-    orderId: order.orderId,
-    total: order.total,
-    status: order.status,
-    items: order.items,
-    createdAt: order.createdAt,
-    paidAt: order.paidAt,
-    paidSoFar,
-    outstanding,
-    payments: order.payments || [],
-    customer: customerInfo
-  }
-});
+      ok: true,
+      order: {
+        orderId: order.orderId,
+        total: order.total,
+        status: order.status,
+        items: order.items,
+        createdAt: order.createdAt,
+        paidAt: order.paidAt,
+        paidSoFar,
+        outstanding,
+        payments: order.payments || [],
+        customer: customerInfo,
+        handledBy: handlerInfo   // <-- include handler info for clients that want to display
+      }
+    });
   } catch (err) {
     console.error('apiGetOrderById error', err);
     return res.status(500).json({ error: 'Error fetching order' });
@@ -516,13 +590,25 @@ exports.apiPayOrder = async (req, res) => {
     }
 
     // Create payment record and push
-    const payment = {
-      method: ['cash','momo','cheque','other'].includes(method) ? method : 'other',
-      amount: Number(toRecordAmount),
-      meta,
-      note: body.note || (isPart ? 'part-payment' : 'full-payment'),
-      createdAt: new Date()
-    };
+const payment = {
+  method: ['cash','momo','cheque','other'].includes(method) ? method : 'other',
+  amount: Number(toRecordAmount),
+  meta,
+  note: body.note || (isPart ? 'part-payment' : 'full-payment'),
+  createdAt: new Date(),
+  // NEW: attach who recorded this payment (if available on req.user)
+  recordedBy: null,
+  recordedByName: ''
+};
+
+try {
+  if (req.user && req.user._id) {
+    payment.recordedBy = new mongoose.Types.ObjectId(req.user._id);
+    payment.recordedByName = (req.user.name || req.user.username || '').toString();
+  }
+} catch (e) {
+  console.error('Failed to attach recordedBy to payment', e);
+}
 
     order.payments = order.payments || [];
     order.payments.push(payment);

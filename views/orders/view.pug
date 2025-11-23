@@ -12,6 +12,10 @@ block content
 
             // Order meta
             .mb-3
+              if handler
+                p.mb-1
+                  strong Handled by:
+                  |  #{handler.name || handler.username || handler._id}
               if customer
                 p.mb-1
                   strong Customer:
@@ -99,25 +103,36 @@ block content
                         td.text-end GH₵ #{amount}
                         td
                             if method === 'momo'
-                            if meta.momoNumber
+                              if meta.momoNumber
                                 div.mb-1
-                                small.text-muted Number:
-                                span.ms-2 #{meta.momoNumber}
-                            if meta.momoTxId
+                                  small.text-muted Number:
+                                  span.ms-2 #{meta.momoNumber}
+                              if meta.momoTxId
                                 div
-                                small.text-muted TxID:
-                                span.ms-2 #{meta.momoTxId}
+                                  small.text-muted TxID:
+                                  span.ms-2 #{meta.momoTxId}
                             else if method === 'cheque'
-                            if meta.chequeNumber
+                              if meta.chequeNumber
                                 div
-                                small.text-muted Cheque:
-                                span.ms-2 #{meta.chequeNumber}
-                            else
-                            // nothing special for other methods
-
+                                  small.text-muted Cheque:
+                                  span.ms-2 #{meta.chequeNumber}
                             // print any extra meta keys (only those not shown above)
                             if Object.keys(extraMeta).length
-                            div.mt-1
+                              div.mt-1
+                                each val, key in extraMeta
+                                  div
+                                    small.text-muted #{key}:
+                                    span.ms-2 #{val}
+
+                            // NEW: show who recorded this payment (if available)
+                            if p.recordedBy && (typeof p.recordedBy === 'object') && (p.recordedBy.name || p.recordedBy.username)
+                              div.mt-2
+                                small.text-muted Recorded by:
+                                span.ms-2 #{p.recordedBy.name || p.recordedBy.username}
+                            else if p.recordedByName
+                              div.mt-2
+                                small.text-muted Recorded by:
+                                span.ms-2 #{p.recordedByName}
 
                         td #{p.note || ''}
             else

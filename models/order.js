@@ -35,6 +35,8 @@ const PaymentSchema = new mongoose.Schema({
   // store optional metadata: momoNumber, momoTxId, chequeNumber, any free-form note
   meta: { type: mongoose.Schema.Types.Mixed, default: {} },
   note: { type: String, default: '' },
+   recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  recordedByName: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }
 }, { _id: true });
 
@@ -47,6 +49,7 @@ const OrderSchema = new mongoose.Schema({
   paidAt: { type: Date, default: null },
   //optional customer reference
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', default: null },
+  handledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   //record payment events (supports part payments)
   payments: { type: [PaymentSchema], default: [] }
 });

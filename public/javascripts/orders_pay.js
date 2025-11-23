@@ -163,7 +163,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // -------------------------
   // Render a single order's details into the #orderInfo element.
   // Shows only sub-unit names (comma separated). Single-line selection (no wrapping).
   // Hides Pay button if order.status === 'paid'
@@ -233,6 +232,36 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const statusLabel = order.status ? escapeHtml(order.status) : 'unknown';
 
+        // build payments HTML (if any) to show payment history and cashier names
+    let paymentsHtml = '';
+    if (order.payments && order.payments.length) {
+      paymentsHtml += `<div class="mt-3"><h6 class="mb-2">Payment History</h6><div class="list-group">`;
+      order.payments.forEach(pay => {
+        const dt = pay.createdAt ? new Date(pay.createdAt).toLocaleString() : '';
+        const method = (pay.method || 'unknown').toUpperCase();
+        const amount = Number(pay.amount || 0).toFixed(2);
+        // determine recorded by display
+        let recorder = '';
+        if (pay.recordedBy && typeof pay.recordedBy === 'object') {
+          recorder = pay.recordedBy.name || pay.recordedBy.username || '';
+        } else if (pay.recordedByName) {
+          recorder = pay.recordedByName;
+        }
+        paymentsHtml += `
+          <div class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <div><strong>${escapeHtml(method)}</strong> — ${escapeHtml(dt)}</div>
+              <div class="small text-muted">GH₵ ${escapeHtml(amount)}</div>
+              ${ recorder ? `<div class="small text-muted">Recorded by: ${escapeHtml(recorder)}</div>` : '' }
+            </div>
+            <div class="text-end small text-muted">${escapeHtml(pay.note || '')}</div>
+          </div>
+        `;
+      });
+      paymentsHtml += `</div></div>`;
+    }
+
+
     // compute outstanding: prefer server-supplied, otherwise compute from payments
     let outstanding = null;
     if (typeof order.outstanding !== 'undefined' && order.outstanding !== null) {
@@ -263,7 +292,20 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     // -----------------------------------------------------------------------
 
+    // --- NEW: compute handler display (Handled By) if present ---
+    let handlerDisplay = '';
+    if (order.handledBy) {
+      if (typeof order.handledBy === 'string') {
+        handlerDisplay = order.handledBy;
+      } else {
+        const h = order.handledBy;
+        handlerDisplay = (h.name || h.username || h._id) || '';
+      }
+    }
+    // ------------------------------------------------------------
+
     orderInfo.innerHTML = `
+      ${ handlerDisplay ? `<p><strong>Handled by:</strong> ${escapeHtml(handlerDisplay)}</p>` : '' }
       ${ customerDisplay ? `<p><strong>Customer:</strong> ${escapeHtml(customerDisplay)}</p>` : '' }
       <p><strong>Order ID:</strong> ${escapeHtml(order.orderId)}</p>
       <p><strong>Status:</strong> ${statusLabel}</p>
