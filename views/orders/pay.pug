@@ -3,7 +3,7 @@ extends ../layout
 block content
   .container
     .row.justify-content-center
-      .col-12.col-md-6
+      .col-md-12
         .card.shadow-sm
           .card-body
             // My cashier summary (visible to cashier when logged in)
@@ -25,21 +25,22 @@ block content
             .d-flex.justify-content-between.align-items-center.mb-3
               h4.mb-0 Pay Order
               .d-flex.gap-2
-              // Orders (existing style) kept for parity with job order page
-              button.btn.btn-outline-secondary.btn-sm#openOrdersExplorerBtn(type='button', title='View orders') 
-                i.bi.bi-list-check.me-1
-                | Orders
-              // Debtors button (new)
-              button.btn.btn-outline-secondary.btn-sm#openDebtorsBtn(type='button', title='Debtors')
-                i.bi.bi-list-check.me-1
-                | Debtors
-              // Cashiers / Collections (new)
-              button.btn.btn-outline-secondary.btn-sm#openCashiersBtn(type='button', title='Cashiers')
-                i.bi.bi-people.me-1
-                | Cashiers
-              button.btn.btn-outline-secondary.btn-sm#openAccountantBtn(type='button', title='Accountant ledger')
-                i.bi.bi-journal-check.me-1
-                | Accountant
+                // Orders (existing style) kept for parity with job order page
+                button.btn.btn-outline-secondary.btn-sm#openOrdersExplorerBtn(type='button', title='View orders') 
+                  i.bi.bi-list-check.me-1
+                  | Orders
+                // Debtors button (new)
+                button.btn.btn-outline-secondary.btn-sm#openDebtorsBtn(type='button', title='Debtors')
+                  i.bi.bi-list-check.me-1
+                  | Debtors
+                // Cashiers / Collections (new) & Accountant — show only to admins
+                if currentUser && currentUser.role && currentUser.role.toLowerCase() === 'admin'
+                  button.btn.btn-outline-secondary.btn-sm#openCashiersBtn(type='button', title='Cashiers')
+                    i.bi.bi-people.me-1
+                    | Cashiers
+                  button.btn.btn-outline-secondary.btn-sm#openAccountantBtn(type='button', title='Accountant ledger')
+                    i.bi.bi-journal-check.me-1
+                    | Accountant
 
 
 
