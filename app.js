@@ -10,6 +10,8 @@ const adminRoutes = require('./routes/admin');
 const ordersRoutes = require('./routes/orders');
 const customersRoutes = require('./routes/customers');
 const books = require('./routes/books');
+const cashiersRoutes = require('./routes/cashiers');
+const accountantRoutes = require('./routes/accountant');
 const { ensureAuthenticated } = require('./middlewares/auth');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
@@ -96,7 +98,9 @@ app.use('/admin', ensureAuthenticated, adminRoutes);
 app.use('/orders', ensureAuthenticated, ordersRoutes);
 app.use('/customers', ensureAuthenticated, customersRoutes);
 app.use('/books',ensureAuthenticated, books);
-
+app.use('/cashiers', ensureAuthenticated, cashiersRoutes);
+// Ledger view for accountants (optionally restrict to finance role/permission)
+app.use('/accountant', ensureAuthenticated, accountantRoutes);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

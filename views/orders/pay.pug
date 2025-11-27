@@ -6,17 +6,42 @@ block content
       .col-12.col-md-6
         .card.shadow-sm
           .card-body
+            // My cashier summary (visible to cashier when logged in)
+            .mb-3#myCashierStatusContainer(style='display:none;')
+              .card.border-1
+                .card-body.p-2
+                  .d-flex.justify-content-between.align-items-center
+                    .me-3
+                      div.small.text-muted Cashier summary (today)
+                      div#myCashierName.small
+                    .text-end
+                      div.small.text-muted Today's cash:
+                      strong#myCashToday.text-success GH₵ 0.00
+                    .text-end.ms-3
+                      div.small.text-muted Previous balance:
+                      strong#myPrevBalance.text-danger GH₵ 0.00
+
+
             .d-flex.justify-content-between.align-items-center.mb-3
               h4.mb-0 Pay Order
               .d-flex.gap-2
-                // Orders (existing style) kept for parity with job order page
-                button.btn.btn-outline-secondary.btn-sm#openOrdersExplorerBtn(type='button', title='View orders') 
-                  i.bi.bi-list-check.me-1
-                  | Orders
-                // Debtors button (new)
-                button.btn.btn-outline-secondary.btn-sm#openDebtorsBtn(type='button', title='Debtors')
-                  i.bi.bi-list-check.me-1
-                  | Debtors
+              // Orders (existing style) kept for parity with job order page
+              button.btn.btn-outline-secondary.btn-sm#openOrdersExplorerBtn(type='button', title='View orders') 
+                i.bi.bi-list-check.me-1
+                | Orders
+              // Debtors button (new)
+              button.btn.btn-outline-secondary.btn-sm#openDebtorsBtn(type='button', title='Debtors')
+                i.bi.bi-list-check.me-1
+                | Debtors
+              // Cashiers / Collections (new)
+              button.btn.btn-outline-secondary.btn-sm#openCashiersBtn(type='button', title='Cashiers')
+                i.bi.bi-people.me-1
+                | Cashiers
+              button.btn.btn-outline-secondary.btn-sm#openAccountantBtn(type='button', title='Accountant ledger')
+                i.bi.bi-journal-check.me-1
+                | Accountant
+
+
 
             p.text-muted Enter the Order ID to fetch the amount due and mark it as paid.
 
@@ -66,6 +91,51 @@ block content
 
                 .d-flex.justify-content-end.mt-3
                   button.btn.btn-success#payNowBtn(type='button', disabled) Pay Now
+  // Cashiers modal (accountant view)
+  .modal.fade(id='cashiersModal', tabindex='-1', aria-labelledby='cashiersModalLabel', aria-hidden='true')
+    .modal-dialog.modal-lg.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id='cashiersModalLabel') Cashiers — Daily collections
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          p.text-muted.small#cashiersStatusLoading Loading...
+          .table-responsive
+            table.table.table-sm.table-hover#cashiersTable
+              thead
+                tr
+                  th Cashier
+                  th.text-end Today's Cash
+                  th.text-end Already Collected
+                  th.text-end Uncollected Today
+                  th.text-end Previous Balance
+                  th.text-center Actions
+              tbody
+                tr
+                  td.text-muted(colspan='6') Loading...
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
+  // Accountant ledger modal
+  .modal.fade(id='accountantModal', tabindex='-1', aria-labelledby='accountantModalLabel', aria-hidden='true')
+    .modal-dialog.modal-lg.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id='accountantModalLabel') Accountant — Daily ledger
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          p.text-muted.small#accountantLedgerDate Loading...
+          .table-responsive
+            table.table.table-sm.table-hover#accountantLedgerTable
+              thead
+                tr
+                  th Accountant
+                  th.text-end Total collected (GH₵)
+                  th.text-center Actions
+              tbody
+                tr
+                  td.text-muted(colspan='3') Loading...
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
   // Debtors modal (lists part-payment transactions; client fetches /debtors)
   .modal.fade(id='debtorsModal', tabindex='-1', aria-labelledby='debtorsModalLabel', aria-hidden='true')
@@ -91,6 +161,7 @@ block content
                   td.text-muted(colspan='6') Loading...
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
+
   // Orders Explorer Modal (same UX as new.pug)
   .modal.fade(id='ordersExplorerModal', tabindex='-1', aria-labelledby='ordersExplorerModalLabel', aria-hidden='true')
     .modal-dialog.modal-xl.modal-dialog-centered

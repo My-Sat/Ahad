@@ -8,6 +8,13 @@ document.addEventListener('DOMContentLoaded', function () {
   const orderInfo = document.getElementById('orderInfo');
   const payNowBtn = document.getElementById('payNowBtn');
 
+  const openCashiersBtn = document.getElementById('openCashiersBtn');
+const cashiersModalEl = document.getElementById('cashiersModal');
+const cashiersModal = (window.bootstrap && cashiersModalEl) ? new bootstrap.Modal(cashiersModalEl) : null;
+const cashiersTable = document.getElementById('cashiersTable');
+const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
+
+
   // new UI elements
   const paymentControls = document.getElementById('paymentControls');
   const paymentMethodSel = document.getElementById('paymentMethod');
@@ -511,6 +518,280 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
   }
+
+  // fetch & render cashiers list for given date (YYYY-MM-DD)
+async function fetchCashiersStatus(dateIso) {
+  if (!cashiersTable || !cashiersStatusLoading) return;
+  cashiersStatusLoading.textContent = 'Loading...';
+  const tbody = cashiersTable.querySelector('tbody');
+  tbody.innerHTML = '<tr><td class="text-muted" colspan="6">Loading...</td></tr>';
+  try {
+    const url = '/cashiers/status' + (dateIso ? ('?date=' + encodeURIComponent(dateIso)) : '');
+    const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+    if (!res.ok) {
+      const j = await res.json().catch(()=>null);
+      const msg = (j && j.error) ? j.error : `Failed to fetch cashiers (${res.status})`;
+      tbody.innerHTML = `<tr><td class="text-muted" colspan="6">${escapeHtml(msg)}</td></tr>`;
+      cashiersStatusLoading.textContent = '--';
+      return;
+    }
+    const j = await res.json().catch(()=>null);
+    if (!j || !Array.isArray(j.cashiers)) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="6">Invalid response</td></tr>';
+      cashiersStatusLoading.textContent = '--';
+      return;
+    }
+    const rows = j.cashiers;
+    cashiersStatusLoading.textContent = `Date: ${new Date(j.date).toLocaleDateString()}`;
+    tbody.innerHTML = rows.map(r => {
+  return `<tr data-cashier-id="${escapeHtml(r.cashierId)}">
+  <td>${escapeHtml(r.name)}</td>
+  <!-- Today's Cash (green) shows uncollectedToday (amount the accountant should collect) -->
+  <td class="text-end text-success">GH₵ ${Number(r.uncollectedToday || 0).toFixed(2)}</td>
+  <td class="text-end">GH₵ ${Number(r.alreadyCollectedToday || 0).toFixed(2)}</td>
+  <td class="text-end">GH₵ ${Number(r.uncollectedToday || 0).toFixed(2)}</td>
+  <!-- Previous Balance (red) -->
+  <td class="text-end text-danger">GH₵ ${Number(r.previousBalance || 0).toFixed(2)}</td>
+  <td class="text-center"><button class="btn btn-sm btn-primary cashier-receive-btn" type="button" data-cashier-id="${escapeHtml(r.cashierId)}" data-cashier-name="${escapeHtml(r.name)}">Receive</button></td>
+</tr>`;
+
+}).join('');
+  } catch (err) {
+    console.error('fetchCashiersStatus err', err);
+    const tbody = cashiersTable.querySelector('tbody');
+    tbody.innerHTML = '<tr><td class="text-muted" colspan="6">Network error while fetching cashiers.</td></tr>';
+    cashiersStatusLoading.textContent = '--';
+  }
+}
+
+  // -------------------------
+  // Cashier self-status UI (for logged-in cashiers)
+  // - fetches /cashiers/my-status and updates #myCashierStatusContainer
+  // - automatically refreshed after accepting a payment (we call it after fetchOrderById/pay)
+  // -------------------------
+  const myCashierStatusContainer = document.getElementById('myCashierStatusContainer');
+  const myCashTodayEl = document.getElementById('myCashToday');
+  const myPrevBalanceEl = document.getElementById('myPrevBalance');
+  const myCashierNameEl = document.getElementById('myCashierName');
+
+  async function fetchMyCashierStatus() {
+    if (!myCashierStatusContainer) return;
+    try {
+      const res = await fetch('/cashiers/my-status', { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+      if (!res.ok) {
+        // if not a cashier or not authenticated, hide the widget
+        myCashierStatusContainer.style.display = 'none';
+        return null;
+      }
+      const j = await res.json().catch(()=>null);
+      if (!j || !j.ok) { myCashierStatusContainer.style.display = 'none'; return null; }
+
+      // show and populate
+      myCashierStatusContainer.style.display = '';
+      if (myCashierNameEl && (j.name || j.cashierId)) myCashierNameEl.textContent = j.name || ('Cashier: ' + (j.cashierId || ''));
+      // Show the currently uncollected cash (will be 0.00 after collection)
+      if (myCashTodayEl) myCashTodayEl.textContent = Number(j.uncollectedToday || 0).toFixed(2);
+      if (myPrevBalanceEl) myPrevBalanceEl.textContent = Number(j.previousBalance || 0).toFixed(2);
+      return j;
+    } catch (err) {
+      console.error('fetchMyCashierStatus err', err);
+      try { myCashierStatusContainer.style.display = 'none'; } catch (e) {}
+      return null;
+    }
+  }
+
+  // call this on page load (after initial render)
+  (function initMyCashierStatus() {
+    // don't crash if endpoint doesn't exist
+    try {
+      fetchMyCashierStatus();
+      // Optional: poll every 30s to reflect incoming payments by other tabs/users
+      // const pollInterval = setInterval(fetchMyCashierStatus, 30000);
+      // store poll handle if you want to clear later
+    } catch (e) {}
+  })();
+
+  // ensure we refresh cashier status after successful payment
+  // wrap existing fetchOrderById() resolution and payNowBtn flow to call fetchMyCashierStatus()
+  // You already call fetchOrderById after pay; additionally, call fetchMyCashierStatus here:
+  // Add this line after successful payment recording (inside payNowBtn click try block, after await fetchOrderById(...))
+  // For robustness, we call it whenever payments are recorded:
+  async function _refreshAfterPayment() {
+    try { await fetchMyCashierStatus(); } catch (e) {}
+  }
+
+  // Hook into existing payment success flow:
+  // After the code that calls fetchOrderById(currentOrderId) (which you already do after a successful pay),
+  // add: _refreshAfterPayment();
+  // If you prefer I can patch the exact location for you — but placing the following small observer helps:
+  (function hookPaymentRefresh() {
+    // We monkey-patch fetchOrderById to call original and then refresh cashier status
+    if (typeof fetchOrderById === 'function') {
+      const _origFetchOrder = fetchOrderById;
+      fetchOrderById = async function (id) {
+        const res = await _origFetchOrder(id);
+        try { await _refreshAfterPayment(); } catch (e) {}
+        return res;
+      };
+    }
+  })();
+
+  // accountant modal wiring
+const openAccountantBtn = document.getElementById('openAccountantBtn');
+const accountantModalEl = document.getElementById('accountantModal');
+const accountantModal = (window.bootstrap && accountantModalEl) ? new bootstrap.Modal(accountantModalEl) : null;
+const accountantLedgerTable = document.getElementById('accountantLedgerTable');
+const accountantLedgerDate = document.getElementById('accountantLedgerDate');
+
+async function fetchAccountantLedger(dateIso) {
+  if (!accountantLedgerTable || !accountantLedgerDate) return;
+  accountantLedgerDate.textContent = 'Loading...';
+  const tbody = accountantLedgerTable.querySelector('tbody');
+  tbody.innerHTML = '<tr><td class="text-muted" colspan="3">Loading...</td></tr>';
+  try {
+    const url = '/accountant/ledger' + (dateIso ? ('?date=' + encodeURIComponent(dateIso)) : '');
+    const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+    if (!res.ok) {
+      const j = await res.json().catch(()=>null);
+      tbody.innerHTML = `<tr><td class="text-muted" colspan="3">${escapeHtml((j && j.error) ? j.error : 'Failed to load ledger')}</td></tr>`;
+      accountantLedgerDate.textContent = '--';
+      return;
+    }
+    const j = await res.json().catch(()=>null);
+    if (!j || !Array.isArray(j.ledger)) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="3">No data</td></tr>';
+      accountantLedgerDate.textContent = '--';
+      return;
+    }
+    accountantLedgerDate.textContent = `Date: ${new Date(j.date).toLocaleDateString()}`;
+    tbody.innerHTML = j.ledger.map(r => `<tr>
+      <td>${escapeHtml(r.name || '')}</td>
+      <td class="text-end">GH₵ ${Number(r.totalCollected || 0).toFixed(2)}</td>
+      <td class="text-center"></td>
+    </tr>`).join('');
+  } catch (err) {
+    console.error('fetchAccountantLedger err', err);
+    accountantLedgerTable.querySelector('tbody').innerHTML = '<tr><td class="text-muted" colspan="3">Network error</td></tr>';
+    accountantLedgerDate.textContent = '--';
+  }
+}
+
+if (openAccountantBtn) {
+  openAccountantBtn.addEventListener('click', function () {
+    if (accountantModal) accountantModal.show();
+    fetchAccountantLedger();
+  });
+}
+
+
+
+// show receive modal for a cashier
+function showReceiveModal(cashierId, cashierName) {
+  // build modal if not exist
+  let modalEl = document.getElementById('cashierReceiveModal');
+  if (!modalEl) {
+    const html = `
+<div class="modal fade" id="cashierReceiveModal" tabindex="-1" aria-labelledby="cashierReceiveModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="cashierReceiveModalLabel">Receive cash from cashier</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2"><strong id="cashierReceiveName"></strong></div>
+        <div class="mb-2 small text-muted">Enter the physical cash amount received from this cashier for today (GH₵)</div>
+        <div class="mb-3">
+          <label class="form-label small mb-1">Amount</label>
+          <input type="number" min="0" step="0.01" class="form-control form-control-sm" id="cashierReceiveAmount" />
+        </div>
+        <div class="mb-2">
+          <label class="form-label small mb-1">Note (optional)</label>
+          <input class="form-control form-control-sm" id="cashierReceiveNote" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal" type="button">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="confirmCashierReceiveBtn" type="button">Receive payment</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container.firstElementChild);
+    modalEl = document.getElementById('cashierReceiveModal');
+  }
+
+  const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+  const nameEl = modalEl.querySelector('#cashierReceiveName');
+  const amtEl = modalEl.querySelector('#cashierReceiveAmount');
+  const noteEl = modalEl.querySelector('#cashierReceiveNote');
+  const confirmBtn = modalEl.querySelector('#confirmCashierReceiveBtn');
+
+  if (nameEl) nameEl.textContent = cashierName || cashierId;
+  if (amtEl) amtEl.value = '';
+  if (noteEl) noteEl.value = '';
+
+  async function onConfirm() {
+    const amount = Number(amtEl.value || 0);
+    if (isNaN(amount) || amount < 0) {
+      showAlertModal('Enter a valid amount');
+      return;
+    }
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Processing...';
+    try {
+      const payload = { amount: amount, note: (noteEl.value || '') };
+      const res = await fetch(`/cashiers/${encodeURIComponent(cashierId)}/collect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify(payload)
+      });
+      const j = await res.json().catch(()=>null);
+      if (!res.ok) {
+        showAlertModal((j && j.error) ? j.error : 'Collection failed');
+      } else {
+        showAlertModal('Collection recorded', 'Success');
+        // refresh list
+        fetchCashiersStatus();
+      }
+    } catch (err) {
+      console.error('collect err', err);
+      showAlertModal('Network error while recording collection');
+    } finally {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Receive payment';
+      try { inst.hide(); } catch (e) {}
+    }
+  }
+
+  if (!confirmBtn._bound) {
+    confirmBtn._bound = true;
+    confirmBtn.addEventListener('click', onConfirm);
+  }
+
+  inst.show();
+}
+
+// bind openCashiersBtn
+if (openCashiersBtn) {
+  openCashiersBtn.addEventListener('click', function () {
+    if (cashiersModal) cashiersModal.show();
+    fetchCashiersStatus();
+  });
+}
+
+// delegate receive click
+if (cashiersTable) {
+  cashiersTable.addEventListener('click', function (ev) {
+    const btn = ev.target.closest('.cashier-receive-btn');
+    if (!btn) return;
+    const id = btn.dataset.cashierId;
+    const name = btn.dataset.cashierName || '';
+    if (id) showReceiveModal(id, name);
+  });
+}
 
   // -------------------------
   // Debtors modal: fetch list of debtors/part payments
