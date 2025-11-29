@@ -37,7 +37,7 @@ block content
                 if currentUser && currentUser.role && currentUser.role.toLowerCase() === 'admin'
                   button.btn.btn-outline-secondary.btn-sm#openCashiersBtn(type='button', title='Cashiers')
                     i.bi.bi-people.me-1
-                    | Cashiers
+                    | Receive Payments
                   button.btn.btn-outline-secondary.btn-sm#openAccountantBtn(type='button', title='Accountant ledger')
                     i.bi.bi-journal-check.me-1
                     | Accountant
@@ -106,9 +106,8 @@ block content
               thead
                 tr
                   th Cashier
-                  th.text-end Today's Cash
+                  th.text-end Today's Payments
                   th.text-end Already Collected
-                  th.text-end Uncollected Today
                   th.text-end Previous Balance
                   th.text-center Actions
               tbody

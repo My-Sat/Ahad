@@ -14,10 +14,11 @@ function dayRangeForIso(dateIso) {
 }
 
 /**
+/**
  * GET /cashiers/status?date=YYYY-MM-DD
- * returns list of cashiers with previousBalance and daily cash totals and already collected amounts
+ * returns list of cashiers with previousBalance and daily payments totals and already collected amounts
  */
- exports.getCashiers = async (req, res) => {
+exports.getCashiers = async (req, res) => {
   try {
     const dateIso = req.query.date || null;
     const { start, end } = dayRangeForIso(dateIso);
@@ -25,11 +26,11 @@ function dayRangeForIso(dateIso) {
     // load cashiers (role 'cashier' or 'clerk')
     const cashiers = await User.find({ role: { $in: ['cashier', 'clerk'] } }).select('_id name username').lean();
 
-    // compute payments aggregated by recordedBy for the day (only method='cash')
+    // compute payments aggregated by recordedBy for the day (include cash, momo, cheque)
     const paymentsByCashier = await Order.aggregate([
       { $unwind: '$payments' },
       { $match: {
-        'payments.method': 'cash',
+        'payments.method': { $in: ['cash', 'momo', 'cheque'] },
         'payments.createdAt': { $gte: start, $lte: end },
         'payments.recordedBy': { $exists: true, $ne: null }
       }},
@@ -61,13 +62,11 @@ function dayRangeForIso(dateIso) {
       // if dayClosed (any collection with dayClosed true exists), treat uncollected as 0 (day reset),
       // otherwise compute remaining
       const dayClosed = !!closedMap[id];
-      const uncollectedToday = dayClosed ? 0 : Number(Math.max(0, totalCashRecordedToday - alreadyCollectedToday).toFixed(2));
       return {
         cashierId: id,
         name: c.name || c.username || id,
         totalCashRecordedToday,
         alreadyCollectedToday,
-        uncollectedToday,
         previousBalance,
         dayClosed
       };
@@ -81,6 +80,7 @@ function dayRangeForIso(dateIso) {
 };
 
 /**
+/**
  * GET /cashiers/my-status
  * returns daily totals & previous balance for the logged-in cashier
  */
@@ -90,11 +90,11 @@ exports.my_status = async (req, res) => {
     const cashierId = String(req.user._id);
     const { start, end } = dayRangeForIso(req.query.date || null);
 
-    // total cash recorded for today by this cashier
+    // total payments (cash, momo, cheque) recorded for today by this cashier
     const paymentsAgg = await Order.aggregate([
       { $unwind: '$payments' },
       { $match: {
-        'payments.method': 'cash',
+        'payments.method': { $in: ['cash', 'momo', 'cheque'] },
         'payments.createdAt': { $gte: start, $lte: end },
         'payments.recordedBy': new mongoose.Types.ObjectId(cashierId)
       }},
@@ -154,17 +154,17 @@ exports.postCashiers = async (req, res) => {
     // compute today's totals (based on provided date or today)
     const { start, end } = dayRangeForIso(req.body.date || null);
 
-    // total cash recorded for day (payments.method='cash' and payments.recordedBy === cashierId)
-    const paymentsAgg = await Order.aggregate([
-      { $unwind: '$payments' },
-      { $match: {
-        'payments.method': 'cash',
-        'payments.createdAt': { $gte: start, $lte: end },
-        'payments.recordedBy': new mongoose.Types.ObjectId(cashierId)
-      }},
-      { $group: { _id: null, total: { $sum: '$payments.amount' } } }
-    ]);
-    const totalCashRecordedToday = Number(((paymentsAgg && paymentsAgg.length) ? (paymentsAgg[0].total || 0) : 0));
+// total payments for day (include cash, momo, cheque) recorded by the cashier
+const paymentsAgg = await Order.aggregate([
+  { $unwind: '$payments' },
+  { $match: {
+    'payments.method': { $in: ['cash', 'momo', 'cheque'] },
+    'payments.createdAt': { $gte: start, $lte: end },
+    'payments.recordedBy': new mongoose.Types.ObjectId(cashierId)
+  }},
+  { $group: { _id: null, total: { $sum: '$payments.amount' } } }
+]);
+const totalCashRecordedToday = Number(((paymentsAgg && paymentsAgg.length) ? (paymentsAgg[0].total || 0) : 0));
 
     // already collected today (sum of collections for cashier & date)
     const collectedAgg = await CashierCollection.aggregate([

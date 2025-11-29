@@ -520,46 +520,59 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
   }
 
   // fetch & render cashiers list for given date (YYYY-MM-DD)
+// fetch & render cashiers list for given date (YYYY-MM-DD)
 async function fetchCashiersStatus(dateIso) {
   if (!cashiersTable || !cashiersStatusLoading) return;
   cashiersStatusLoading.textContent = 'Loading...';
   const tbody = cashiersTable.querySelector('tbody');
-  tbody.innerHTML = '<tr><td class="text-muted" colspan="6">Loading...</td></tr>';
+  // 5 visible columns in the table (Cashier, Today's Cash, Already Collected, Previous Balance, Actions)
+  tbody.innerHTML = '<tr><td class="text-muted" colspan="5">Loading...</td></tr>';
   try {
     const url = '/cashiers/status' + (dateIso ? ('?date=' + encodeURIComponent(dateIso)) : '');
     const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
     if (!res.ok) {
       const j = await res.json().catch(()=>null);
       const msg = (j && j.error) ? j.error : `Failed to fetch cashiers (${res.status})`;
-      tbody.innerHTML = `<tr><td class="text-muted" colspan="6">${escapeHtml(msg)}</td></tr>`;
+      tbody.innerHTML = `<tr><td class="text-muted" colspan="5">${escapeHtml(msg)}</td></tr>`;
       cashiersStatusLoading.textContent = '--';
       return;
     }
+
     const j = await res.json().catch(()=>null);
     if (!j || !Array.isArray(j.cashiers)) {
-      tbody.innerHTML = '<tr><td class="text-muted" colspan="6">Invalid response</td></tr>';
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="5">Invalid response</td></tr>';
       cashiersStatusLoading.textContent = '--';
       return;
     }
+
     const rows = j.cashiers;
     cashiersStatusLoading.textContent = `Date: ${new Date(j.date).toLocaleDateString()}`;
-    tbody.innerHTML = rows.map(r => {
-  return `<tr data-cashier-id="${escapeHtml(r.cashierId)}">
-  <td>${escapeHtml(r.name)}</td>
-  <!-- Today's Cash (green) shows uncollectedToday (amount the accountant should collect) -->
-  <td class="text-end text-success">GH₵ ${Number(r.uncollectedToday || 0).toFixed(2)}</td>
-  <td class="text-end">GH₵ ${Number(r.alreadyCollectedToday || 0).toFixed(2)}</td>
-  <td class="text-end">GH₵ ${Number(r.uncollectedToday || 0).toFixed(2)}</td>
-  <!-- Previous Balance (red) -->
-  <td class="text-end text-danger">GH₵ ${Number(r.previousBalance || 0).toFixed(2)}</td>
-  <td class="text-center"><button class="btn btn-sm btn-primary cashier-receive-btn" type="button" data-cashier-id="${escapeHtml(r.cashierId)}" data-cashier-name="${escapeHtml(r.name)}">Receive</button></td>
-</tr>`;
 
-}).join('');
+    tbody.innerHTML = rows.map(r => {
+      const total = Number(r.totalCashRecordedToday || 0);
+      const already = Number(r.alreadyCollectedToday || 0);
+      // prefer server-supplied uncollectedToday if present; otherwise compute
+      const uncollected = (typeof r.uncollectedToday !== 'undefined' && r.uncollectedToday !== null)
+        ? Number(r.uncollectedToday || 0)
+        : Number(Math.max(0, total - already).toFixed(2));
+
+      const prevBal = Number(r.previousBalance || 0);
+
+      return `<tr data-cashier-id="${escapeHtml(r.cashierId)}">
+        <td>${escapeHtml(r.name)}</td>
+        <!-- Today's Cash (green) shows total payments recorded for the day (cash+momo+cheque) -->
+        <td class="text-end text-success">GH₵ ${Number(total).toFixed(2)}</td>
+        <td class="text-end">GH₵ ${Number(already).toFixed(2)}</td>
+        <!-- If you want the amount the accountant still needs to collect, show uncollected separately.
+             For now we compute it client-side and you can display it if desired. -->
+        <td class="text-end text-danger">GH₵ ${Number(prevBal).toFixed(2)}</td>
+        <td class="text-center"><button class="btn btn-sm btn-primary cashier-receive-btn" type="button" data-cashier-id="${escapeHtml(r.cashierId)}" data-cashier-name="${escapeHtml(r.name)}">Receive</button></td>
+      </tr>`;
+    }).join('');
   } catch (err) {
     console.error('fetchCashiersStatus err', err);
     const tbody = cashiersTable.querySelector('tbody');
-    tbody.innerHTML = '<tr><td class="text-muted" colspan="6">Network error while fetching cashiers.</td></tr>';
+    tbody.innerHTML = '<tr><td class="text-muted" colspan="5">Network error while fetching cashiers.</td></tr>';
     cashiersStatusLoading.textContent = '--';
   }
 }
@@ -574,31 +587,45 @@ async function fetchCashiersStatus(dateIso) {
   const myPrevBalanceEl = document.getElementById('myPrevBalance');
   const myCashierNameEl = document.getElementById('myCashierName');
 
-  async function fetchMyCashierStatus() {
-    if (!myCashierStatusContainer) return;
-    try {
-      const res = await fetch('/cashiers/my-status', { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
-      if (!res.ok) {
-        // if not a cashier or not authenticated, hide the widget
-        myCashierStatusContainer.style.display = 'none';
-        return null;
-      }
-      const j = await res.json().catch(()=>null);
-      if (!j || !j.ok) { myCashierStatusContainer.style.display = 'none'; return null; }
-
-      // show and populate
-      myCashierStatusContainer.style.display = '';
-      if (myCashierNameEl && (j.name || j.cashierId)) myCashierNameEl.textContent = j.name || ('Cashier: ' + (j.cashierId || ''));
-      // Show the currently uncollected cash (will be 0.00 after collection)
-      if (myCashTodayEl) myCashTodayEl.textContent = Number(j.uncollectedToday || 0).toFixed(2);
-      if (myPrevBalanceEl) myPrevBalanceEl.textContent = Number(j.previousBalance || 0).toFixed(2);
-      return j;
-    } catch (err) {
-      console.error('fetchMyCashierStatus err', err);
-      try { myCashierStatusContainer.style.display = 'none'; } catch (e) {}
+// -------------------------
+// Cashier self-status UI (for logged-in cashiers)
+// - fetches /cashiers/my-status and updates #myCashierStatusContainer
+// - automatically refreshed after accepting a payment (we call it after fetchOrderById/pay)
+// -------------------------
+async function fetchMyCashierStatus() {
+  if (!myCashierStatusContainer) return;
+  try {
+    const res = await fetch('/cashiers/my-status', { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+    if (!res.ok) {
+      // if not a cashier or not authenticated, hide the widget
+      myCashierStatusContainer.style.display = 'none';
       return null;
     }
+    const j = await res.json().catch(()=>null);
+    if (!j || !j.ok) { myCashierStatusContainer.style.display = 'none'; return null; }
+
+    // show and populate
+    myCashierStatusContainer.style.display = '';
+
+    if (myCashierNameEl && (j.name || j.cashierId)) myCashierNameEl.textContent = j.name || ('Cashier: ' + (j.cashierId || ''));
+
+    // compute/choose uncollected: prefer server field, else compute from totals if provided
+    const total = Number(j.totalCashRecordedToday || 0);
+    const already = Number(j.alreadyCollectedToday || 0);
+    const uncollected = (typeof j.uncollectedToday !== 'undefined' && j.uncollectedToday !== null)
+      ? Number(j.uncollectedToday || 0)
+      : Number(Math.max(0, total - already).toFixed(2));
+
+    // Show the currently uncollected cash (will be 0.00 after collection)
+    if (myCashTodayEl) myCashTodayEl.textContent = Number(uncollected).toFixed(2);
+    if (myPrevBalanceEl) myPrevBalanceEl.textContent = Number(j.previousBalance || 0).toFixed(2);
+    return j;
+  } catch (err) {
+    console.error('fetchMyCashierStatus err', err);
+    try { myCashierStatusContainer.style.display = 'none'; } catch (e) {}
+    return null;
   }
+}
 
   // call this on page load (after initial render)
   (function initMyCashierStatus() {
