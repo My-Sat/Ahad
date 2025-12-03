@@ -2,17 +2,17 @@ extends ../layout
 
 block content
   .d-flex.justify-content-between.align-items-center.mb-4
-    h3.mb-0 Printers
+    h3.mb-0.text-white Printers
     a.btn.btn-secondary(href='/admin/services') Back to Services
 
-  .card
-    .card-body
-      p.text-muted.mb-3 Manage physical printers used for printing jobs. Add a printer, edit its name, or remove it.
+  .card.dark-surface
+    .card-body.dark-card-body
+      p.text-muted-light.mb-3 Manage physical printers used for printing jobs. Add a printer, edit its name, or remove it.
 
       // Add Printer inline form (Bootstrap validation) — still works without JS
       form#add-printer-form.needs-validation(method='post', action='/admin/printers', class='row g-2 align-items-center mb-3', novalidate)
         .col
-          input.form-control(type='text', name='name', id='addPrinterName', placeholder='Printer name (e.g., Epson-1)', required)
+          input.form-control.form-control-dark(type='text', name='name', id='addPrinterName', placeholder='Printer name (e.g., Epson-1)', required)
           .invalid-feedback Please provide a printer name.
         .col-auto
           button.btn.btn-primary(type='submit', id='addPrinterBtn')
@@ -29,143 +29,144 @@ block content
 
       // Printers table — server rendered rows; client will wire details fetch & actions
       if printers && printers.length
-        table.table.table-sm.table-hover
-          thead
-            tr
-              th Name
-              th.text-center Total
-              th.text-center Actions
-          tbody#printersTbody
-            each pr in printers
-              // include data attributes for client to know breakdown counts (defaults 0)
-              - const mono = (typeof pr.monochromeCount !== 'undefined' && pr.monochromeCount !== null) ? pr.monochromeCount : 0;
-              - const colour = (typeof pr.colourCount !== 'undefined' && pr.colourCount !== null) ? pr.colourCount : 0;
-              tr(data-id=pr._id data-mono-count=mono data-colour-count=colour)
-                td
-                  .d-flex.align-items-center.justify-content-between
-                    .me-3(style='min-width:0;')
-                      strong.printer-name= pr.name
-                      if pr.location
-                        br
-                        small.text-muted #{pr.location}
-                td.text-center
-                  .printer-total-wrap.position-relative
-                    // fixed-size centered box so every row uses the same centering
-                    .printer-total-box.d-flex.align-items-center.justify-content-center
-                      span.total-label.small.text-muted.me-2 Total:
-                      span.total-value.text-end
-                        strong #{pr.totalCount || 0}
+        .table-responsive
+          table.table.table-sm.table-hover.table-dark.mb-0
+            thead
+              tr
+                th.text-white Name
+                th.text-center.text-muted-light Total
+                th.text-center.text-muted-light Actions
+            tbody#printersTbody
+              each pr in printers
+                // include data attributes for client to know breakdown counts (defaults 0)
+                - const mono = (typeof pr.monochromeCount !== 'undefined' && pr.monochromeCount !== null) ? pr.monochromeCount : 0;
+                - const colour = (typeof pr.colourCount !== 'undefined' && pr.colourCount !== null) ? pr.colourCount : 0;
+                tr(data-id=pr._id data-mono-count=mono data-colour-count=colour)
+                  td
+                    .d-flex.align-items-center.justify-content-between
+                      .me-3(style='min-width:0;')
+                        strong.printer-name.text-white= pr.name
+                        if pr.location
+                          br
+                          small.text-muted-light #{pr.location}
+                  td.text-center
+                    .printer-total-wrap.position-relative
+                      // fixed-size centered box so every row uses the same centering
+                      .printer-total-box.d-flex.align-items-center.justify-content-center
+                        span.total-label.small.text-muted-light.me-2 Total:
+                        span.total-value.text-end
+                          strong.text-white #{pr.totalCount || 0}
 
-                    // chevron-button (keeps existing collapse wiring) — absolute so it doesn't affect centering
+                      // chevron-button (keeps existing collapse wiring) — absolute so it doesn't affect centering
+                      if (mono || colour)
+                        button.btn.btn-sm.btn-link.expand-toggle.position-absolute.top-50.end-0.translate-middle-y(type='button', aria-expanded='false', aria-controls=`printer-totals-${pr._id}`, title='Show breakdown', data-bs-toggle='collapse', data-bs-target=`#printer-totals-${pr._id}`)
+                          i.bi.bi-chevron-down.text-white
+
+                    // breakdown collapse (kept as before)
                     if (mono || colour)
-                      button.btn.btn-sm.btn-link.expand-toggle.position-absolute.top-50.end-0.translate-middle-y(type='button', aria-expanded='false', aria-controls=`printer-totals-${pr._id}`, title='Show breakdown', data-bs-toggle='collapse', data-bs-target=`#printer-totals-${pr._id}`)
-                        i.bi.bi-chevron-down
+                      .collapse.mt-2(id=`printer-totals-${pr._id}`)
+                        .card.card-body.p-2.dark-surface
+                          if mono
+                            div.small.mb-1.mono-value.text-muted-light Monochrome: #{mono}
+                          if colour
+                            div.small.mb-0.colour-value.text-muted-light Colour: #{colour}
 
-                  // breakdown collapse (kept as before)
-                  if (mono || colour)
-                    .collapse.mt-2(id=`printer-totals-${pr._id}`)
-                      .card.card-body.p-2
-                        if mono
-                          div.small.mb-1.mono-value Monochrome: #{mono}
-                        if colour
-                          div.small.mb-0.colour-value Colour: #{colour}
-
-                td.text-center
-                  .btn-group
-                    button.btn.btn-sm.btn-light.dropdown-toggle(type='button', data-bs-toggle='dropdown', aria-expanded='false', title='Actions')
-                    ul.dropdown-menu.dropdown-menu-end
-                      li
-                        a.dropdown-item.role-action-details(href='#', data-printer-id=pr._id, data-printer-name=pr.name)
-                          i.bi.bi-eye.me-2
-                          | View
-                      li
-                        a.dropdown-item.role-action-edit(href='#', data-printer-id=pr._id, data-printer-name=pr.name)
-                          i.bi.bi-pencil.me-2
-                          | Edit
-                      li
-                        a.dropdown-item.role-action-delete(href='#', data-action=`/admin/printers/${pr._id}`, data-printer-name=pr.name)
-                          i.bi.bi-trash.me-2
-                          | Delete
-                      li
-                        a.dropdown-item.role-action-adjust(href='#', data-printer-id=pr._id, data-printer-name=pr.name)
-                          i.bi.bi-tools.me-2
-                          | Adjust count
+                  td.text-center
+                    .btn-group
+                      button.btn.btn-sm.btn-light.dropdown-toggle(type='button', data-bs-toggle='dropdown', aria-expanded='false', title='Actions')
+                      ul.dropdown-menu.dropdown-menu-end
+                        li
+                          a.dropdown-item.role-action-details(href='#', data-printer-id=pr._id, data-printer-name=pr.name)
+                            i.bi.bi-eye.me-2
+                            | View
+                        li
+                          a.dropdown-item.role-action-edit(href='#', data-printer-id=pr._id, data-printer-name=pr.name)
+                            i.bi.bi-pencil.me-2
+                            | Edit
+                        li
+                          a.dropdown-item.role-action-delete(href='#', data-action=`/admin/printers/${pr._id}`, data-printer-name=pr.name)
+                            i.bi.bi-trash.me-2
+                            | Delete
+                        li
+                          a.dropdown-item.role-action-adjust(href='#', data-printer-id=pr._id, data-printer-name=pr.name)
+                            i.bi.bi-tools.me-2
+                            | Adjust count
 
       else
-        p.text-muted.mb-0 No printers defined yet.
+        p.text-muted-light.mb-0 No printers defined yet.
 
-  // Edit Printer Modal (unchanged)
+  // Edit Printer Modal (dark-themed, otherwise unchanged)
   .modal.fade(id='editPrinterModal', tabindex='-1', aria-labelledby='editPrinterModalLabel', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
-      .modal-content
+      .modal-content.dark-surface
         .modal-header
-          h5.modal-title(id='editPrinterModalLabel') Edit Printer
+          h5.modal-title(id='editPrinterModalLabel').text-white Edit Printer
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
-        .modal-body
+        .modal-body.dark-card-body
           form#editPrinterForm
             input(type='hidden', id='editPrinterId', name='id')
             .mb-3
               label.form-label(for='editPrinterName') Printer Name
-              input.form-control(type='text', id='editPrinterName', name='name', required)
+              input.form-control.form-control-dark(type='text', id='editPrinterName', name='name', required)
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary(type='button', id='saveEditPrinterBtn') Save changes
 
-  // Delete confirm modal (unchanged)
+  // Delete confirm modal (dark-themed)
   .modal.fade(id='printersDeleteConfirm', tabindex='-1', aria-labelledby='printersDeleteConfirmLabel', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
-      .modal-content
+      .modal-content.dark-surface
         .modal-header
-          h5.modal-title(id='printersDeleteConfirmLabel') Confirm delete
+          h5.modal-title(id='printersDeleteConfirmLabel').text-white Confirm delete
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
-        .modal-body
-          p#printersDeleteMessage Are you sure you want to delete this printer?
+        .modal-body.dark-card-body
+          p#printersDeleteMessage.text-muted-light Are you sure you want to delete this printer?
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-danger(type='button', id='confirmDeletePrinterBtn') Yes, delete
 
-  // Adjust Printer Count Modal (now includes target select)
+  // Adjust Printer Count Modal (now includes target select) — dark themed
   .modal.fade(id='adjustPrinterModal', tabindex='-1', aria-labelledby='adjustPrinterModalLabel', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
-      .modal-content
+      .modal-content.dark-surface
         .modal-header
-          h5.modal-title(id='adjustPrinterModalLabel') Adjust printer count
+          h5.modal-title(id='adjustPrinterModalLabel').text-white Adjust printer count
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
-        .modal-body
+        .modal-body.dark-card-body
           form#adjustPrinterForm
             input(type='hidden', id='adjustPrinterId', name='id')
             .mb-2
               label.form-label(for='adjustPrinterTarget') Target
               // populated by client: Total, Monochrome, Colour (depending on printer)
-              select.form-select(id='adjustPrinterTarget')
+              select.form-select#adjustPrinterTarget
                 option(value='total') Total
                 option(value='monochrome') Monochrome
                 option(value='colour') Colour
             .mb-2
               label.form-label(for='adjustPrinterMode') Mode
-              select.form-select(id='adjustPrinterMode')
+              select.form-select#adjustPrinterMode
                 option(value='delta') Apply delta (e.g., +5 or -3)
                 option(value='set') Set absolute total
             .mb-2
               label.form-label(for='adjustPrinterValue') Value
-              input.form-control(type='number', id='adjustPrinterValue', name='value', required)
-              .form-text small Enter positive or negative number when using delta; for Set provide the absolute total.
+              input.form-control.form-control-dark(type='number', id='adjustPrinterValue', name='value', required)
+              .form-text.small.text-muted-light Enter positive or negative number when using delta; for Set provide the absolute total.
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary(type='button', id='doAdjustPrinterBtn') Apply
 
-  // Printer Details Modal (unchanged)
+  // Printer Details Modal (dark-themed)
   .modal.fade(id='printerDetailsModal', tabindex='-1', aria-labelledby='printerDetailsModalLabel', aria-hidden='true')
     .modal-dialog.modal-lg.modal-dialog-centered
-      .modal-content
+      .modal-content.dark-surface
         .modal-header
-          h5.modal-title(id='printerDetailsModalLabel') Printer details
+          h5.modal-title(id='printerDetailsModalLabel').text-white Printer details
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
-        .modal-body
+        .modal-body.dark-card-body
           // header summary
           .row.mb-3
             .col-12
-              p.small.text-muted#printerDetailsHeader Loading...
+              p.small.text-muted-light#printerDetailsHeader Loading...
 
           // filter controls + date pickers
           .row.mb-3
@@ -178,28 +179,28 @@ block content
                   button.btn.btn-outline-primary.btn-sm(data-filter='month' type='button') This month
                 // date pickers + refresh
                 .d-flex.align-items-center.gap-2
-                  input.form-control.form-control-sm(type='date' id='pd-range-start' placeholder='From')
-                  input.form-control.form-control-sm(type='date' id='pd-range-end' placeholder='To')
+                  input.form-control.form-control-sm.form-control-dark(type='date' id='pd-range-start' placeholder='From')
+                  input.form-control.form-control-sm.form-control-dark(type='date' id='pd-range-end' placeholder='To')
                   button.btn.btn-sm.btn-secondary(type='button' id='pd-range-refresh') Refresh
 
           // summary metrics row (Counts and Revenue) - single value per container (for active filter)
           .row.mb-3#printerDetailsSummary(style='display:none;')
             .col-md-6
-              .card.mb-2
+              .card.mb-2.dark-surface
                 .card-body
-                  h6.mb-1 Counts
-                  p.h2.mb-0#pd-count-value 0
+                  h6.mb-1.text-white Counts
+                  p.h2.mb-0#pd-count-value.text-white 0
             .col-md-6
-              .card.mb-2
+              .card.mb-2.dark-surface
                 .card-body
-                  h6.mb-1 Revenue (GH₵)
-                  p.h2.mb-0#pd-rev-value 0.00
+                  h6.mb-1.text-white Revenue (GH₵)
+                  p.h2.mb-0#pd-rev-value.text-white 0.00
 
           // recent incremental usage (top 10) — unchanged
           .row.mb-3
             .col-12
-              h6.mb-2 Recent usage
-              .small.text-muted#pd-recent-loading Loading...
+              h6.mb-2.text-white Recent usage
+              .small.text-muted-light#pd-recent-loading Loading...
               .list-group.small#pd-recent-list
 
         .modal-footer

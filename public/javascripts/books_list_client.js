@@ -55,13 +55,13 @@ document.addEventListener('DOMContentLoaded', function () {
       renderRows(j.books);
     } catch (err) {
       console.error('books list load err', err);
-      tbody.innerHTML = '<tr><td class="text-muted" colspan="4">Unable to load books.</td></tr>';
+      tbody.innerHTML = '<tr><td class="text-muted-light" colspan="4">Unable to load books.</td></tr>';
     }
   }
 
   function renderRows(rows) {
     if (!rows || !rows.length) {
-      tbody.innerHTML = '<tr><td class="text-muted" colspan="4">No books created yet.</td></tr>';
+      tbody.innerHTML = '<tr><td class="text-muted-light" colspan="4">No books created yet.</td></tr>';
       return;
     }
     tbody.innerHTML = '';
@@ -86,7 +86,8 @@ document.addEventListener('DOMContentLoaded', function () {
       pr.className = 'book-preview-row';
       pr.setAttribute('data-id', b._id);
       pr.style.display = 'none';
-      pr.innerHTML = `<td colspan="4"><div class="book-preview-container">${spinnerHtml()}</div></td>`;
+      // NOTE: include dark-card-body on the preview container so it matches the dark theme and isn't white
+      pr.innerHTML = `<td colspan="4"><div class="book-preview-container dark-card-body">${spinnerHtml()}</div></td>`;
       tbody.appendChild(pr);
     });
   }
@@ -157,6 +158,7 @@ document.addEventListener('DOMContentLoaded', function () {
             </table>
           </div>
         `;
+        // leave container element's classes intact (it already has dark-card-body)
         container.innerHTML = html;
         previewRow.setAttribute('data-loaded', '1');
       } catch (err) {
@@ -210,7 +212,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (row) row.remove();
         if (previewRow) previewRow.remove();
         if (!tbody.querySelector('tr')) {
-          tbody.innerHTML = '<tr><td class="text-muted" colspan="4">No books created yet.</td></tr>';
+          tbody.innerHTML = '<tr><td class="text-muted-light" colspan="4">No books created yet.</td></tr>';
         }
         if (typeof window.showGlobalToast === 'function') window.showGlobalToast('Book deleted', 1400);
       } catch (err) {

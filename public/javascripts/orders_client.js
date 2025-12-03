@@ -98,21 +98,21 @@ document.addEventListener('DOMContentLoaded', function () {
     return subs.join(', ');
   }
 
-  // Alerts modal (lazy)
+  // Alerts modal (lazy) - dark-surface friendly
   function showAlertModal(message, title = 'Notice') {
     let modalEl = document.getElementById('genericAlertModal');
     if (!modalEl) {
       const html = `
 <div class="modal fade" id="genericAlertModal" tabindex="-1" aria-labelledby="genericAlertModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+    <div class="modal-content dark-surface">
       <div class="modal-header">
         <h5 class="modal-title" id="genericAlertModalLabel"></h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body" id="genericAlertModalBody"></div>
+      <div class="modal-body dark-card-body" id="genericAlertModalBody"></div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">OK</button>
+        <button type="button" class="btn btn-outline-light-custom" data-bs-dismiss="modal">OK</button>
       </div>
     </div>
   </div>
@@ -134,26 +134,26 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // Order success modal (lazy)
+  // Order success modal (lazy) - dark-surface friendly
   function showOrderSuccessModal(orderId, total) {
     let modalEl = document.getElementById('orderSuccessModal');
     if (!modalEl) {
       const html = `
 <div class="modal fade" id="orderSuccessModal" tabindex="-1" aria-labelledby="orderSuccessModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+    <div class="modal-content dark-surface">
       <div class="modal-header">
         <h5 class="modal-title" id="orderSuccessModalLabel">Order created</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body dark-card-body">
         <p id="orderSuccessBody">Order created successfully.</p>
         <p class="small text-muted">Use the order ID at payment.</p>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline-secondary" type="button" id="copyOrderIdBtn" title="Copy order ID">Copy Order ID</button>
+        <button class="btn btn-outline-light-custom" type="button" id="copyOrderIdBtn" title="Copy order ID">Copy Order ID</button>
         <button class="btn btn-outline-primary" type="button" id="printOrderBtn" title="Print order">Print</button>
-        <button class="btn btn-secondary" data-bs-dismiss="modal" type="button">Close</button>
+        <button class="btn btn-outline-light-custom" data-bs-dismiss="modal" type="button">Close</button>
       </div>
     </div>
   </div>
@@ -350,7 +350,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const right = document.createElement('div');
       right.className = 'ms-auto';
       const btn = document.createElement('button');
-      btn.className = 'btn btn-sm btn-outline-primary apply-price-btn';
+      btn.className = 'btn btn-sm btn-primary apply-price-btn';
       btn.type = 'button';
       btn.dataset.prId = p._id;
       btn.textContent = bookMode ? 'Add Book Item' : 'Apply';
@@ -694,12 +694,12 @@ document.addEventListener('DOMContentLoaded', function () {
       const html = `
 <div class="modal fade" id="addBookModal" tabindex="-1" aria-labelledby="addBookModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-sm modal-dialog-centered">
-    <div class="modal-content">
+    <div class="modal-content dark-surface">
       <div class="modal-header">
         <h5 class="modal-title" id="addBookModalLabel">Add Book to Cart</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body dark-card-body">
         <div id="addBookModalBody">
           <div class="mb-2"><strong id="addBookName"></strong></div>
           <div class="mb-2 small text-muted">Unit Price: GH₵ <span id="addBookUnitPrice">0.00</span></div>
@@ -711,7 +711,7 @@ document.addEventListener('DOMContentLoaded', function () {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal" type="button">Cancel</button>
+        <button class="btn btn-outline-light-custom btn-sm" data-bs-dismiss="modal" type="button">Cancel</button>
         <button class="btn btn-primary btn-sm" id="confirmAddBookBtn" type="button">Add to Cart</button>
       </div>
     </div>
@@ -739,11 +739,9 @@ document.addEventListener('DOMContentLoaded', function () {
       if (priceEl) priceEl.textContent = formatMoney(bookMeta.unitPrice || 0);
       if (previewEl) previewEl.textContent = `This will add all price rules included in "${bookMeta.name}" multiplied by the quantity you enter. Each underlying rule will be posted to the server separately when placing the order.`;
     } else {
-      // fallback: minimal text while we attempt to fetch metadata lazily
       if (nameEl) nameEl.textContent = 'Loading...';
       if (priceEl) priceEl.textContent = '0.00';
       if (previewEl) previewEl.textContent = '';
-      // try to fetch book summary to display name/price (non-blocking)
       fetch(`/books/${encodeURIComponent(bookId)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.ok ? r.json().catch(()=>null) : null)
         .then(j => {
@@ -867,6 +865,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (!hasCustomer) {
       // show modal offering proceed or go back
+      // showNoCustomerModal replacement (dark-friendly)
       const choice = await (function showNoCustomerModal() {
         return new Promise((resolve) => {
           let modalEl = document.getElementById('noCustomerModal');
@@ -874,16 +873,16 @@ document.addEventListener('DOMContentLoaded', function () {
             const html = `
 <div class="modal fade" id="noCustomerModal" tabindex="-1" aria-labelledby="noCustomerModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+    <div class="modal-content dark-surface">
       <div class="modal-header">
         <h5 class="modal-title" id="noCustomerModalLabel">No customer attached</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body dark-card-body">
         <p>This order does not have a customer attached. You can proceed without a customer, or go back to the Customers page to register or select a customer first.</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-action="back">Back to Customers Page</button>
+        <button type="button" class="btn btn-outline-light-custom" data-action="back">Back to Customers Page</button>
         <button type="button" class="btn btn-primary" data-action="proceed">Proceed anyway</button>
       </div>
     </div>

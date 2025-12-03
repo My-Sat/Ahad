@@ -80,14 +80,14 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
       const html = `
 <div class="modal fade" id="ordersPayAlertModal" tabindex="-1" aria-labelledby="ordersPayAlertModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+    <div class="modal-content dark-surface">
       <div class="modal-header">
         <h5 class="modal-title" id="ordersPayAlertModalLabel"></h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body" id="ordersPayAlertModalBody"></div>
+      <div class="modal-body dark-card-body" id="ordersPayAlertModalBody"></div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+        <button type="button" class="btn btn-outline-light-custom" data-bs-dismiss="modal">OK</button>
       </div>
     </div>
   </div>
@@ -113,14 +113,14 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
         const html = `
 <div class="modal fade" id="ordersPayConfirmModal" tabindex="-1" aria-labelledby="ordersPayConfirmModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+    <div class="modal-content dark-surface">
       <div class="modal-header">
         <h5 class="modal-title" id="ordersPayConfirmModalLabel"></h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body" id="ordersPayConfirmModalBody"></div>
+      <div class="modal-body dark-card-body" id="ordersPayConfirmModalBody"></div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-action="cancel">Cancel</button>
+        <button type="button" class="btn btn-outline-light-custom" data-action="cancel">Cancel</button>
         <button type="button" class="btn btn-primary" data-action="confirm">Yes</button>
       </div>
     </div>
@@ -720,12 +720,12 @@ function showReceiveModal(cashierId, cashierName) {
     const html = `
 <div class="modal fade" id="cashierReceiveModal" tabindex="-1" aria-labelledby="cashierReceiveModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-sm modal-dialog-centered">
-    <div class="modal-content">
+    <div class="modal-content dark-surface">
       <div class="modal-header">
         <h5 class="modal-title" id="cashierReceiveModalLabel">Receive cash from cashier</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body dark-card-body">
         <div class="mb-2"><strong id="cashierReceiveName"></strong></div>
         <div class="mb-2 small text-muted">Enter the physical cash amount received from this cashier for today (GH₵)</div>
         <div class="mb-3">
@@ -738,7 +738,7 @@ function showReceiveModal(cashierId, cashierName) {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal" type="button">Cancel</button>
+        <button class="btn btn-outline-light-custom btn-sm" data-bs-dismiss="modal" type="button">Cancel</button>
         <button class="btn btn-primary btn-sm" id="confirmCashierReceiveBtn" type="button">Receive payment</button>
       </div>
     </div>

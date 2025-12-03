@@ -4,11 +4,11 @@ block content
   .container
     .row.justify-content-center.align-items-center(style="min-height:72vh;")
       .col-12.col-md-6.col-lg-4
-        .card.shadow-lg
-          .card-body.p-4
+        .card.shadow-lg.dark-surface
+          .card-body.p-4.dark-card-body
             .text-center.mb-3
               img(src='/images/AHAD LOGO.png', alt='Logo', style='max-height:56px;')
-              h3.mt-3.mb-0 Login
+              h3.mt-3.mb-0.text-white Login
 
             // error message (matches controller: renders { error: '...' })
             if error
@@ -18,17 +18,17 @@ block content
             form#loginForm.mt-3(method='post', action='/login', novalidate)
               input(type='hidden', name='next', value=(typeof next !== 'undefined' ? next : '/'))
               .mb-3
-                label.form-label(for='username') Username
-                input#username.form-control(type='text', name='username', placeholder='username', required, autofocus)
+                label.form-label.text-muted-light(for='username') Username
+                input#username.form-control.form-control-dark(type='text', name='username', placeholder='username', required, autofocus)
               .mb-3
-                label.form-label(for='password') Password
-                input#password.form-control(type='password', name='password', placeholder='password', required)
+                label.form-label.text-muted-light(for='password') Password
+                input#password.form-control.form-control-dark(type='password', name='password', placeholder='password', required)
               .d-flex.justify-content-between.align-items-center.mb-3
                 .form-check
                   input.form-check-input(type='checkbox', id='rememberMe', name='remember')
-                  label.form-check-label(for='rememberMe') Remember me
-                a(href='#', class='small') Forgot?
+                  label.form-check-label.text-muted-light(for='rememberMe') Remember me
+                a(href='#', class='small text-muted') Forgot?
               button.btn.btn-primary.w-100(type='submit') Sign in
 
             .text-center.mt-3
-              small.text-muted If you don't have an account ask your administrator.
+              small.text-muted-light If you don't have an account ask your administrator.

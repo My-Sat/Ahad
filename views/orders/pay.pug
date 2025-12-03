@@ -4,66 +4,66 @@ block content
   .container
     .row.justify-content-center
       .col-md-12
-        .card.shadow-sm
-          .card-body
+        .card.shadow-sm.dark-surface
+          .card-body.dark-card-body
             // My cashier summary (visible to cashier when logged in)
             .mb-3#myCashierStatusContainer(style='display:none;')
-              .card.border-1
-                .card-body.p-2
+              .card.border-1.dark-surface
+                .card-body.p-2.dark-card-body
                   .d-flex.justify-content-between.align-items-center
                     .me-3
-                      div.small.text-muted Cashier summary (today)
+                      div.small.text-muted-light Cashier summary (today)
                       div#myCashierName.small
                     .text-end
-                      div.small.text-muted Today's cash:
+                      div.small.text-muted-light Today's cash:
                       strong#myCashToday.text-success GH₵ 0.00
                     .text-end.ms-3
-                      div.small.text-muted Previous balance:
+                      div.small.text-muted-light Previous balance:
                       strong#myPrevBalance.text-danger GH₵ 0.00
 
 
             .d-flex.justify-content-between.align-items-center.mb-3
-              h4.mb-0 Pay Order
+              h4.mb-0.text-white Pay Order
               .d-flex.gap-2
                 // Orders (existing style) kept for parity with job order page
-                button.btn.btn-outline-secondary.btn-sm#openOrdersExplorerBtn(type='button', title='View orders') 
+                button.btn.btn-outline-light-custom.btn-sm#openOrdersExplorerBtn(type='button', title='View orders')
                   i.bi.bi-list-check.me-1
                   | Orders
                 // Debtors button (new)
-                button.btn.btn-outline-secondary.btn-sm#openDebtorsBtn(type='button', title='Debtors')
+                button.btn.btn-outline-light-custom.btn-sm#openDebtorsBtn(type='button', title='Debtors')
                   i.bi.bi-list-check.me-1
                   | Debtors
                 // Cashiers / Collections (new) & Accountant — show only to admins
                 if currentUser && currentUser.role && currentUser.role.toLowerCase() === 'admin'
-                  button.btn.btn-outline-secondary.btn-sm#openCashiersBtn(type='button', title='Cashiers')
+                  button.btn.btn-outline-light-custom.btn-sm#openCashiersBtn(type='button', title='Cashiers')
                     i.bi.bi-people.me-1
                     | Receive Payments
-                  button.btn.btn-outline-secondary.btn-sm#openAccountantBtn(type='button', title='Accountant ledger')
+                  button.btn.btn-outline-light-custom.btn-sm#openAccountantBtn(type='button', title='Accountant ledger')
                     i.bi.bi-journal-check.me-1
                     | Accountant
 
 
 
-            p.text-muted Enter the Order ID to fetch the amount due and mark it as paid.
+            p.text-muted-light Enter the Order ID to fetch the amount due and mark it as paid.
 
             form#fetchOrderForm(class='row g-2 mb-3', novalidate)
               .col
-                input.form-control(type='text', id='fetchOrderId', placeholder='Order ID', required)
+                input.form-control.form-control-dark(type='text', id='fetchOrderId', placeholder='Order ID', required)
               .col-auto
                 button.btn.btn-primary(type='submit', id='fetchOrderBtn') Fetch
 
             // result
-            .card.mt-3
-              .card-body
+            .card.mt-3.dark-surface
+              .card-body.dark-card-body
                 #orderInfo
-                  p.text-muted No order loaded.
+                  p.text-muted-light No order loaded.
 
                 // Payment controls (appear after order is fetched)
                 .mt-3#paymentControls(style='display:none;')
                   // Payment method selector
                   .mb-2
                     label.form-label.mb-1(for='paymentMethod') Payment method
-                    select.form-select.form-select-sm#paymentMethod
+                    select.form-select.form-select-sm.form-select-dark#paymentMethod
                       option(value='cash') Cash
                       option(value='momo') MoMo
                       option(value='cheque') Cheque
@@ -72,15 +72,15 @@ block content
                   .row.g-2.mb-2#paymentMomoFields(style='display:none;')
                     .col-6
                       label.form-label.mb-0(for='momoNumber') MoMo Number
-                      input.form-control.form-control-sm(type='text', id='momoNumber', placeholder='e.g. 054xxxxxxxx')
+                      input.form-control.form-control-sm.form-control-dark(type='text', id='momoNumber', placeholder='e.g. 054xxxxxxxx')
                     .col-6
                       label.form-label.mb-0(for='momoTxId') Transaction ID
-                      input.form-control.form-control-sm(type='text', id='momoTxId', placeholder='MoMo transaction id')
+                      input.form-control.form-control-sm.form-control-dark(type='text', id='momoTxId', placeholder='MoMo transaction id')
 
                   // Cheque field
                   .mb-2#paymentChequeField(style='display:none;')
                     label.form-label.mb-0(for='chequeNumber') Cheque number
-                    input.form-control.form-control-sm(type='text', id='chequeNumber', placeholder='Cheque number')
+                    input.form-control.form-control-sm.form-control-dark(type='text', id='chequeNumber', placeholder='Cheque number')
 
                   // Part payment toggle and amount
                   .form-check.mb-2
@@ -88,18 +88,18 @@ block content
                     label.form-check-label(for='partPaymentToggle') Part payment (manual amount)
                   .mb-2#partPaymentAmountWrapper(style='display:none;')
                     label.form-label.mb-0(for='partPaymentAmount') Enter amount to pay now (GH₵)
-                    input.form-control.form-control-sm(type='number', id='partPaymentAmount', min='0.01', step='0.01', placeholder='Amount')
+                    input.form-control.form-control-sm.form-control-dark(type='number', id='partPaymentAmount', min='0.01', step='0.01', placeholder='Amount')
 
                 .d-flex.justify-content-end.mt-3
                   button.btn.btn-success#payNowBtn(type='button', disabled) Pay Now
   // Cashiers modal (accountant view)
   .modal.fade(id='cashiersModal', tabindex='-1', aria-labelledby='cashiersModalLabel', aria-hidden='true')
     .modal-dialog.modal-lg.modal-dialog-centered
-      .modal-content
+      .modal-content.dark-surface
         .modal-header
           h5.modal-title(id='cashiersModalLabel') Cashiers — Daily collections
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
-        .modal-body
+        .modal-body.dark-card-body
           p.text-muted.small#cashiersStatusLoading Loading...
           .table-responsive
             table.table.table-sm.table-hover#cashiersTable
@@ -118,11 +118,11 @@ block content
   // Accountant ledger modal
   .modal.fade(id='accountantModal', tabindex='-1', aria-labelledby='accountantModalLabel', aria-hidden='true')
     .modal-dialog.modal-lg.modal-dialog-centered
-      .modal-content
+      .modal-content.dark-surface
         .modal-header
           h5.modal-title(id='accountantModalLabel') Accountant — Daily ledger
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
-        .modal-body
+        .modal-body.dark-card-body
           p.text-muted.small#accountantLedgerDate Loading...
           .table-responsive
             table.table.table-sm.table-hover#accountantLedgerTable
@@ -140,11 +140,11 @@ block content
   // Debtors modal (lists part-payment transactions; client fetches /debtors)
   .modal.fade(id='debtorsModal', tabindex='-1', aria-labelledby='debtorsModalLabel', aria-hidden='true')
     .modal-dialog.modal-lg.modal-dialog-centered
-      .modal-content
+      .modal-content.dark-surface
         .modal-header
           h5.modal-title(id='debtorsModalLabel') Debtors / Part-payments
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
-        .modal-body
+        .modal-body.dark-card-body
           p.text-muted.small#debtorsCount Loading...
           .table-responsive
             table.table.table-sm.table-hover#debtorsTable
@@ -165,26 +165,26 @@ block content
   // Orders Explorer Modal (same UX as new.pug)
   .modal.fade(id='ordersExplorerModal', tabindex='-1', aria-labelledby='ordersExplorerModalLabel', aria-hidden='true')
     .modal-dialog.modal-xl.modal-dialog-centered
-      .modal-content
+      .modal-content.dark-surface
         .modal-header
           h5.modal-title(id='ordersExplorerModalLabel') Orders Explorer
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
-        .modal-body
+        .modal-body.dark-card-body
           .row.g-2.mb-3.align-items-center
             .col-auto
-              label.form-label.mb-0 Small Date Range
+              label.form-label.mb-0 small.text-muted-light Small Date Range
             .col-auto
-              input.form-control(type='date', id='ordersFrom')
+              input.form-control.form-control-dark(type='date', id='ordersFrom')
             .col-auto
-              input.form-control(type='date', id='ordersTo')
+              input.form-control.form-control-dark(type='date', id='ordersTo')
             .col
               .btn-group
-                button.btn.btn-outline-secondary.btn-sm#ordersPresetToday(type='button') Today
-                button.btn.btn-outline-secondary.btn-sm#ordersPresetYesterday(type='button') Yesterday
-                button.btn.btn-outline-secondary.btn-sm#ordersPresetThisWeek(type='button') This Week
+                button.btn.btn-outline-light-custom.btn-sm#ordersPresetToday(type='button') Today
+                button.btn.btn-outline-light-custom.btn-sm#ordersPresetYesterday(type='button') Yesterday
+                button.btn.btn-outline-light-custom.btn-sm#ordersPresetThisWeek(type='button') This Week
               button.btn.btn-primary.btn-sm.ms-2#ordersFetchBtn(type='button') Refresh
             .col-auto.text-end
-              small.text-muted#ordersCount -- results
+              small.text-muted-light#ordersCount -- results
 
           // orders table
           .table-responsive

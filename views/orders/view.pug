@@ -4,10 +4,10 @@ block content
   .container
     .row.justify-content-center
       .col-12.col-md-10
-        .card.shadow-sm
-          .card-body
+        .card.shadow-sm.dark-surface
+          .card-body.dark-card-body
             .d-flex.justify-content-between.align-items-center.mb-3
-              h4.mb-0 Order Details
+              h4.mb-0.text-white Order Details
               .btn-group
 
             // Order meta
@@ -31,7 +31,7 @@ block content
                 |  #{order.createdAt ? new Date(order.createdAt).toLocaleString() : ''}
                 
             // Items
-            h6.mb-2 Items
+            h6.mb-2.text-white Items
             if order.items && order.items.length
               .list-group.mb-3
                 each it in order.items
@@ -53,28 +53,28 @@ block content
                       div Subtotal: GH₵ #{(it.subtotal||0).toFixed(2)}
 
                       if it.printerName
-                        div.small.text-muted Printer: #{it.printerName}
+                        div.small.text-muted-light Printer: #{it.printerName}
 
             else
-              p.text-muted No items listed.
+              p.text-muted-light No items listed.
 
             // Totals + payments summary
             .d-flex.justify-content-end.mb-2
               .me-3
-                div Total:
+                div.text-white Total:
                 strong GH₵ #{(order.total || 0).toFixed(2)}
               .me-3
-                div Paid so far:
+                div.text-white Paid so far:
                 strong GH₵ #{paidSoFar.toFixed(2)}
               .me-3
-                div Remaining:
+                div.text-white Remaining:
                 if outstanding > 0
                   strong.text-danger GH₵ #{outstanding.toFixed(2)}
                 else
                   strong.text-success GH₵ 0.00
 
             // Payment history
-            h6.mb-2 Payment History
+            h6.mb-2.text-white Payment History
             if order.payments && order.payments.length
               .table-responsive
                 table.table.table-sm.table-striped
@@ -105,38 +105,38 @@ block content
                             if method === 'momo'
                               if meta.momoNumber
                                 div.mb-1
-                                  small.text-muted Number:
+                                  small.text-muted-light Number:
                                   span.ms-2 #{meta.momoNumber}
                               if meta.momoTxId
                                 div
-                                  small.text-muted TxID:
+                                  small.text-muted-light TxID:
                                   span.ms-2 #{meta.momoTxId}
                             else if method === 'cheque'
                               if meta.chequeNumber
                                 div
-                                  small.text-muted Cheque:
+                                  small.text-muted-light Cheque:
                                   span.ms-2 #{meta.chequeNumber}
                             // print any extra meta keys (only those not shown above)
                             if Object.keys(extraMeta).length
                               div.mt-1
                                 each val, key in extraMeta
                                   div
-                                    small.text-muted #{key}:
+                                    small.text-muted-light #{key}:
                                     span.ms-2 #{val}
 
                             // NEW: show who recorded this payment (if available)
                             if p.recordedBy && (typeof p.recordedBy === 'object') && (p.recordedBy.name || p.recordedBy.username)
                               div.mt-2
-                                small.text-muted Recorded by:
+                                small.text-muted-light Recorded by:
                                 span.ms-2 #{p.recordedBy.name || p.recordedBy.username}
                             else if p.recordedByName
                               div.mt-2
-                                small.text-muted Recorded by:
+                                small.text-muted-light Recorded by:
                                 span.ms-2 #{p.recordedByName}
 
                         td #{p.note || ''}
             else
-              p.text-muted No payments recorded.
+              p.text-muted-light No payments recorded.
 
             // Actions (record payment -> jumps to /orders/pay with id)
             .d-flex.justify-content-end.mt-3

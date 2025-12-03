@@ -12,116 +12,119 @@ block content
           - // checkbox will be checked when service.requiresPrinter is truthy
           input.form-check-input(type='checkbox', id='requiresPrinter', name='requiresPrinter', checked=service && service.requiresPrinter)
           label.form-check-label(for='requiresPrinter') Requires printer
-        button.btn.btn-sm.btn-outline-primary(type='submit') Save
+        button.btn.btn-sm.btn.btn-secondary(type='submit') Save
 
     a.btn.btn-secondary(href='/admin/services') Back
 
   hr
 
-  //- Units accordion (unchanged)
-  #unitsAccordion.accordion.mb-4
-    if !service.components || service.components.length === 0
-      .alert.alert-info No components available. Add units and sub-units first.
-    else
-      each comp, idx in service.components
-        - const unit = comp.unit
-        - const panelId = `unitPanel-${idx}`
-        .accordion-item
-          h2.accordion-header(id=`heading-${panelId}`)
-            button.accordion-button.collapsed(type='button', data-bs-toggle='collapse', data-bs-target=`#collapse-${panelId}`, aria-expanded='false', aria-controls=`collapse-${panelId}`)
-              .d-flex.justify-content-between.w-100
-                span.unit-name #{unit && unit.name ? unit.name : 'Unit'}
-                small.text-muted.ms-2 #{ (comp.subUnits && comp.subUnits.length) ? comp.subUnits.length + ' sub-units' : '0 sub-units' }
+  //- Units accordion (now inside a dark surface container)
+  // wrapping the accordion in .content-card/.dark-card-body ensures our dark styles apply
+  .content-card
+    .dark-card-body
+      #unitsAccordion.accordion.mb-4
+        if !service.components || service.components.length === 0
+          .alert.alert-info No components available. Add units and sub-units first.
+        else
+          each comp, idx in service.components
+            - const unit = comp.unit
+            - const panelId = `unitPanel-${idx}`
+            .accordion-item
+              h2.accordion-header(id=`heading-${panelId}`)
+                button.accordion-button.collapsed(type='button', data-bs-toggle='collapse', data-bs-target=`#collapse-${panelId}`, aria-expanded='false', aria-controls=`collapse-${panelId}`)
+                  .d-flex.justify-content-between.w-100
+                    span.unit-name #{unit && unit.name ? unit.name : 'Unit'}
+                    small.text-muted.ms-2 #{ (comp.subUnits && comp.subUnits.length) ? comp.subUnits.length + ' sub-units' : '0 sub-units' }
 
-          .accordion-collapse.collapse(id=`collapse-${panelId}`)
-            .accordion-body
-              ul.list-group
-                each su in comp.subUnits
-                  - const subId = (typeof su === 'object') ? su._id : su
-                  - const subName = (typeof su === 'object') ? (su.name || subId) : subId
-                  li.list-group-item.d-flex.align-items-center
-                    label.form-check.mb-0.d-flex.align-items-center.w-100
-                      input.form-check-input.unit-sub-checkbox.me-2(type='checkbox', data-unit=unit._id, data-subunit=subId)
-                      span.flex-grow-1= subName
+              .accordion-collapse.collapse(id=`collapse-${panelId}`)
+                .accordion-body
+                  ul.list-group
+                    each su in comp.subUnits
+                      - const subId = (typeof su === 'object') ? su._id : su
+                      - const subName = (typeof su === 'object') ? (su.name || subId) : subId
+                      li.list-group-item.d-flex.align-items-center
+                        label.form-check.mb-0.d-flex.align-items-center.w-100
+                          input.form-check-input.unit-sub-checkbox.me-2(type='checkbox', data-unit=unit._id, data-subunit=subId)
+                          span.flex-grow-1= subName
 
-  //- Price assignment (unchanged)
-  form#assign-price(method='post', action=`/admin/services/${service._id}/prices`, class='mb-4 needs-validation', novalidate)
-    input(type='hidden', name='selections', id='selectionsInput')
-    .row.g-2.align-items-center
-      .col-auto
-        label.form-label(for='priceInput') Price (GH₵)
-      .col-md-4
-        .input-group
-          input.form-control(type='number', step='0.01', name='price', id='priceInput', required, placeholder='0.00')
-      .col-md-4
-        .input-group
-          input.form-control(type='number', step='0.01', name='price2', id='price2Input', placeholder='F/B price (optional)')
-          span.input-group-text.small F/B
-      .col-auto
-        button.btn.btn-success(type='submit', id='assignBtn')
-          span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', id='assignSpinner', style='display:none;')
-          | Assign Price
-      .col-auto
-        small.text-muted Select one sub-unit per relevant unit, then click Assign.
-
-  //- NOTE: material creation moved to Stock page
-  .alert.alert-info
-    a.btn.btn-sm.btn-outline-secondary.ms-2(href='/admin/stock') Manage Stock & Count Units
+  //- Price assignment (placed in a content-card so inputs/dropdowns follow dark styles)
+  .content-card.mt-3
+    .dark-card-body
+      form#assign-price(method='post', action=`/admin/services/${service._id}/prices`, class='mb-4 needs-validation', novalidate)
+        input(type='hidden', name='selections', id='selectionsInput')
+        .row.g-2.align-items-center
+          .col-auto
+            label.form-label(for='priceInput') Price (GH₵)
+          .col-md-4
+            .input-group
+              input.form-control(type='number', step='0.01', name='price', id='priceInput', required, placeholder='0.00')
+          .col-md-4
+            .input-group
+              input.form-control(type='number', step='0.01', name='price2', id='price2Input', placeholder='F/B price (optional)')
+              span.input-group-text.small F/B
+          .col-auto
+            button.btn.btn-secondary(type='submit', id='assignBtn')
+              span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', id='assignSpinner', style='display:none;')
+              | Assign Price
+          .col-auto
+            small.text-muted Select one sub-unit per relevant unit, then click Assign.
 
   hr
 
-  //- Prices section (unchanged)
-  #pricesSection
-    h5.mb-2 Existing Price Rules
-    if prices && prices.length
-      table.table.table-striped.table-hover.table-sm
-        thead
-          tr
-            th Selection(s)
-            th.text-end Price
-            th.text-end F/B
-            th.text-center Actions
-        tbody
-          each p in prices
-            tr(data-price-id=p._id)
-              td
-                if p.selectionLabel
-                  = p.selectionLabel
-                else if p.selections && p.selections.length
-                  - var len = p.selections.length
-                  each s, i in p.selections
-                    - var unitName = s.unit && s.unit.name ? s.unit.name : (s.unit ? String(s.unit) : '');
-                    - var subName = s.subUnit && s.subUnit.name ? s.subUnit.name : (s.subUnit ? String(s.subUnit) : '');
-                    span.me-1 #{unitName}: #{subName}
-                    if i != len - 1
-                      |  + 
-                else
-                  | (no label)
-              td.text-end= (typeof p.price === 'number') ? p.price.toFixed(2) : p.price
-              td.text-end
-                if p.price2 !== undefined && p.price2 !== null
-                  = (typeof p.price2 === 'number') ? p.price2.toFixed(2) : p.price2
-                else
-                  span.text-muted small N/A
-              td.text-center
-                .dropdown.d-inline-block
-                  button.btn.btn-sm.btn-light.dropdown-toggle(type='button', id=`priceMenuBtn-${p._id}`, data-bs-toggle='dropdown', aria-expanded='false', aria-haspopup='true', title='Actions')
-                    span.visually-hidden Actions
-                  ul.dropdown-menu.dropdown-menu-end(aria-labelledby=`priceMenuBtn-${p._id}`)
-                    li
-                      button.dropdown-item.edit-price-btn(
-                        type='button',
-                        data-price-id=p._id,
-                        data-price=(typeof p.price === 'number' ? p.price.toFixed(2) : p.price),
-                        data-price2=(typeof p.price2 === 'number' ? p.price2.toFixed(2) : (p.price2 ? p.price2 : '')),
-                        data-selection-label=(p.selectionLabel || '')
-                      )
-                        i.bi.bi-pencil.me-2
-                        | Edit
-                    li
-                      button.dropdown-item.open-delete-price(type='button', data-price-id=p._id)
-                        i.bi.bi-trash.me-2
-                        | Delete
+  //- Prices section (also inside content-card to style the table/thead/tbody)
+  .content-card.mt-3
+    .dark-card-body
+      #pricesSection
+        h5.mb-2 Existing Price Rules
+        if prices && prices.length
+          table.table.table-striped.table-hover.table-sm
+            thead
+              tr
+                th Selection(s)
+                th.text-end Price
+                th.text-end F/B
+                th.text-center Actions
+            tbody
+              each p in prices
+                tr(data-price-id=p._id)
+                  td
+                    if p.selectionLabel
+                      = p.selectionLabel
+                    else if p.selections && p.selections.length
+                      - var len = p.selections.length
+                      each s, i in p.selections
+                        - var unitName = s.unit && s.unit.name ? s.unit.name : (s.unit ? String(s.unit) : '');
+                        - var subName = s.subUnit && s.subUnit.name ? s.subUnit.name : (s.subUnit ? String(s.subUnit) : '');
+                        span.me-1 #{unitName}: #{subName}
+                        if i != len - 1
+                          |  + 
+                    else
+                      | (no label)
+                  td.text-end= (typeof p.price === 'number') ? p.price.toFixed(2) : p.price
+                  td.text-end
+                    if p.price2 !== undefined && p.price2 !== null
+                      = (typeof p.price2 === 'number') ? p.price2.toFixed(2) : p.price2
+                    else
+                      span.text-muted small N/A
+                  td.text-center
+                    .dropdown.d-inline-block
+                      button.btn.btn-sm.btn-light.dropdown-toggle(type='button', id=`priceMenuBtn-${p._id}`, data-bs-toggle='dropdown', aria-expanded='false', aria-haspopup='true', title='Actions')
+                        span.visually-hidden Actions
+                      ul.dropdown-menu.dropdown-menu-end(aria-labelledby=`priceMenuBtn-${p._id}`)
+                        li
+                          button.dropdown-item.edit-price-btn(
+                            type='button',
+                            data-price-id=p._id,
+                            data-price=(typeof p.price === 'number' ? p.price.toFixed(2) : p.price),
+                            data-price2=(typeof p.price2 === 'number' ? p.price2.toFixed(2) : (p.price2 ? p.price2 : '')),
+                            data-selection-label=(p.selectionLabel || '')
+                          )
+                            i.bi.bi-pencil.me-2
+                            | Edit
+                        li
+                          button.dropdown-item.open-delete-price(type='button', data-price-id=p._id)
+                            i.bi.bi-trash.me-2
+                            | Delete
 
   block append scripts
     script(src='/public/javascripts/service_detail.js')

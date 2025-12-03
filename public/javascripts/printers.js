@@ -58,112 +58,105 @@
     return String(s).replace(/["']/g, function (c) { return c === '"' ? '&quot;' : '&#39;'; });
   }
 
-function createPrinterRow(pr) {
-  const tr = document.createElement('tr');
-  tr.setAttribute('data-id', pr._id);
-  tr.setAttribute('data-mono-count', (typeof pr.monochromeCount !== 'undefined' && pr.monochromeCount !== null) ? pr.monochromeCount : 0);
-  tr.setAttribute('data-colour-count', (typeof pr.colourCount !== 'undefined' && pr.colourCount !== null) ? pr.colourCount : 0);
+  function createPrinterRow(pr) {
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-id', pr._id);
+    tr.setAttribute('data-mono-count', (typeof pr.monochromeCount !== 'undefined' && pr.monochromeCount !== null) ? pr.monochromeCount : 0);
+    tr.setAttribute('data-colour-count', (typeof pr.colourCount !== 'undefined' && pr.colourCount !== null) ? pr.colourCount : 0);
 
-  // Build breakdown lines if values exist (server may supply 0 explicitly)
-  const monoExists = (typeof pr.monochromeCount !== 'undefined' && pr.monochromeCount !== null);
-  const colourExists = (typeof pr.colourCount !== 'undefined' && pr.colourCount !== null);
+    // Build breakdown lines if values exist (server may supply 0 explicitly)
+    const monoExists = (typeof pr.monochromeCount !== 'undefined' && pr.monochromeCount !== null);
+    const colourExists = (typeof pr.colourCount !== 'undefined' && pr.colourCount !== null);
 
-  const monoHtml = monoExists
-    ? `<div class="small mb-1 mono-value">Monochrome: ${escapeHtml(String(pr.monochromeCount || 0))}</div>`
-    : '';
-  const colourHtml = colourExists
-    ? `<div class="small mb-0 colour-value">Colour: ${escapeHtml(String(pr.colourCount || 0))}</div>`
-    : '';
+    // collapse id (unique per printer)
+    const collapseId = `printer-totals-${pr._id}`;
 
-  // collapse id (unique per printer)
-  const collapseId = `printer-totals-${pr._id}`;
-
-  tr.innerHTML = `
-    <td>
-      <div class="d-flex align-items-center justify-content-between">
-        <div class="me-3" style="min-width:0;">
-          <strong class="printer-name">${escapeHtml(pr.name)}</strong>
-          ${pr.location ? '<br><small class="text-muted">' + escapeHtml(pr.location) + '</small>' : ''}
-        </div>
-      </div>
-    </td>
-    <td class="text-center">
-      <div class="printer-total-wrap position-relative">
-        <div class="printer-total-box d-flex align-items-center justify-content-center">
-          <span class="total-label small text-muted me-2">Total:</span>
-          <span class="total-value text-end"><strong>${pr.totalCount || 0}</strong></span>
-        </div>
-        ${ (pr.monochromeCount || pr.colourCount) ? `
-          <button class="btn btn-sm btn-link expand-toggle position-absolute top-50 end-0 translate-middle-y" type="button" aria-expanded="false" aria-controls="printer-totals-${pr._id}" title="Show breakdown" data-bs-toggle="collapse" data-bs-target="#printer-totals-${pr._id}">
-            <i class="bi bi-chevron-down"></i>
-          </button>
-        ` : '' }
-      </div>
-
-      ${ (pr.monochromeCount || pr.colourCount) ? `
-        <div class="collapse mt-2" id="printer-totals-${pr._id}">
-          <div class="card card-body p-2">
-            ${ pr.monochromeCount ? `<div class="small mb-1 mono-value">Monochrome: ${pr.monochromeCount}</div>` : '' }
-            ${ pr.colourCount ? `<div class="small mb-0 colour-value">Colour: ${pr.colourCount}</div>` : '' }
+    tr.innerHTML = `
+      <td>
+        <div class="d-flex align-items-center justify-content-between">
+          <div class="me-3" style="min-width:0;">
+            <strong class="printer-name text-white">${escapeHtml(pr.name)}</strong>
+            ${pr.location ? '<br><small class="text-muted-light">' + escapeHtml(pr.location) + '</small>' : ''}
           </div>
         </div>
-      ` : '' }
-    </td>
-    <td class="text-center">
-      <div class="btn-group">
-        <button class="btn btn-sm btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Actions">
-          <i class="bi bi-three-dots"></i>
-        </button>
-        <ul class="dropdown-menu dropdown-menu-end">
-          <li><a class="dropdown-item role-action-details" href="#" data-printer-id="${pr._id}" data-printer-name="${escapeHtmlAttr(pr.name)}"><i class="bi bi-eye me-2"></i>View</a></li>
-          <li><a class="dropdown-item role-action-edit" href="#" data-printer-id="${pr._id}" data-printer-name="${escapeHtmlAttr(pr.name)}"><i class="bi bi-pencil me-2"></i>Edit</a></li>
-          <li><a class="dropdown-item role-action-delete" href="#" data-action="/admin/printers/${pr._id}" data-printer-name="${escapeHtmlAttr(pr.name)}"><i class="bi bi-trash me-2"></i>Delete</a></li>
-          <li><a class="dropdown-item role-action-adjust" href="#" data-printer-id="${pr._id}" data-printer-name="${escapeHtmlAttr(pr.name)}"><i class="bi bi-tools me-2"></i>Adjust count</a></li>
-        </ul>
-      </div>
-    </td>
-  `;
+      </td>
+      <td class="text-center">
+        <div class="printer-total-wrap position-relative">
+          <div class="printer-total-box d-flex align-items-center justify-content-center">
+            <span class="total-label small text-muted-light me-2">Total:</span>
+            <span class="total-value text-end"><strong class="text-white">${pr.totalCount || 0}</strong></span>
+          </div>
+          ${ (monoExists || colourExists) ? `
+            <button class="btn btn-sm btn-link expand-toggle position-absolute top-50 end-0 translate-middle-y" type="button" aria-expanded="false" aria-controls="${collapseId}" title="Show breakdown" data-bs-toggle="collapse" data-bs-target="#${collapseId}">
+              <i class="bi bi-chevron-down text-white"></i>
+            </button>
+          ` : '' }
+        </div>
 
-  // If collapse exists, wire icon toggle behavior to keep UI in sync.
-  // This ensures the chevron flips when collapse opens/closes.
-  try {
-    const collapseEl = tr.querySelector(`#${collapseId}`);
-    const toggleBtn = tr.querySelector('.expand-toggle');
-    if (collapseEl && toggleBtn && window.bootstrap && window.bootstrap.Collapse) {
-      // When collapse shown -> change icon to up
-      collapseEl.addEventListener('shown.bs.collapse', function () {
-        const ico = toggleBtn.querySelector('i');
-        if (ico) {
-          ico.classList.remove('bi-chevron-down');
-          ico.classList.add('bi-chevron-up');
-        }
-        toggleBtn.setAttribute('aria-expanded', 'true');
-      });
-      // When collapse hidden -> change icon to down
-      collapseEl.addEventListener('hidden.bs.collapse', function () {
-        const ico = toggleBtn.querySelector('i');
-        if (ico) {
-          ico.classList.remove('bi-chevron-up');
-          ico.classList.add('bi-chevron-down');
-        }
-        toggleBtn.setAttribute('aria-expanded', 'false');
-      });
-      // Also allow the button itself to toggle the collapse via JS (keeps accessibility tidy)
-      toggleBtn.addEventListener('click', function (ev) {
-        ev.preventDefault();
-        // Use bootstrap Collapse API to toggle
-        let inst = bootstrap.Collapse.getInstance(collapseEl);
-        if (!inst) inst = new bootstrap.Collapse(collapseEl, { toggle: false });
-        inst.toggle();
-      });
+        ${ (monoExists || colourExists) ? `
+          <div class="collapse mt-2" id="${collapseId}">
+            <div class="card card-body p-2 dark-surface">
+              ${ monoExists ? `<div class="small mb-1 mono-value text-muted-light">Monochrome: ${escapeHtml(String(pr.monochromeCount || 0))}</div>` : '' }
+              ${ colourExists ? `<div class="small mb-0 colour-value text-muted-light">Colour: ${escapeHtml(String(pr.colourCount || 0))}</div>` : '' }
+            </div>
+          </div>
+        ` : '' }
+      </td>
+      <td class="text-center">
+        <div class="btn-group">
+          <button class="btn btn-sm btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Actions">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item role-action-details" href="#" data-printer-id="${pr._id}" data-printer-name="${escapeHtmlAttr(pr.name)}"><i class="bi bi-eye me-2"></i>View</a></li>
+            <li><a class="dropdown-item role-action-edit" href="#" data-printer-id="${pr._id}" data-printer-name="${escapeHtmlAttr(pr.name)}"><i class="bi bi-pencil me-2"></i>Edit</a></li>
+            <li><a class="dropdown-item role-action-delete" href="#" data-action="/admin/printers/${pr._id}" data-printer-name="${escapeHtmlAttr(pr.name)}"><i class="bi bi-trash me-2"></i>Delete</a></li>
+            <li><a class="dropdown-item role-action-adjust" href="#" data-printer-id="${pr._id}" data-printer-name="${escapeHtmlAttr(pr.name)}"><i class="bi bi-tools me-2"></i>Adjust count</a></li>
+          </ul>
+        </div>
+      </td>
+    `;
+
+    // If collapse exists, wire icon toggle behavior to keep UI in sync.
+    // This ensures the chevron flips when collapse opens/closes.
+    try {
+      const collapseEl = tr.querySelector(`#${collapseId}`);
+      const toggleBtn = tr.querySelector('.expand-toggle');
+      if (collapseEl && toggleBtn && window.bootstrap && window.bootstrap.Collapse) {
+        // When collapse shown -> change icon to up
+        collapseEl.addEventListener('shown.bs.collapse', function () {
+          const ico = toggleBtn.querySelector('i');
+          if (ico) {
+            ico.classList.remove('bi-chevron-down');
+            ico.classList.add('bi-chevron-up');
+          }
+          toggleBtn.setAttribute('aria-expanded', 'true');
+        });
+        // When collapse hidden -> change icon to down
+        collapseEl.addEventListener('hidden.bs.collapse', function () {
+          const ico = toggleBtn.querySelector('i');
+          if (ico) {
+            ico.classList.remove('bi-chevron-up');
+            ico.classList.add('bi-chevron-down');
+          }
+          toggleBtn.setAttribute('aria-expanded', 'false');
+        });
+        // Also allow the button itself to toggle the collapse via JS (keeps accessibility tidy)
+        toggleBtn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          // Use bootstrap Collapse API to toggle
+          let inst = bootstrap.Collapse.getInstance(collapseEl);
+          if (!inst) inst = new bootstrap.Collapse(collapseEl, { toggle: false });
+          inst.toggle();
+        });
+      }
+    } catch (e) {
+      // non-fatal: if wiring fails, collapse still works via data-bs attributes in markup
+      console.warn('Failed to wire collapse icon for printer row', e);
     }
-  } catch (e) {
-    // non-fatal: if wiring fails, collapse still works via data-bs attributes in markup
-    console.warn('Failed to wire collapse icon for printer row', e);
-  }
 
-  return tr;
-}
+    return tr;
+  }
 
   // ---------- Add printer (AJAX) ----------
   if (addForm) {
@@ -277,44 +270,44 @@ function createPrinterRow(pr) {
 
     // Adjust
     const adjLink = ev.target.closest ? ev.target.closest('.role-action-adjust') : null;
-  if (adjLink) {
-    ev.preventDefault();
-    const pid = adjLink.dataset.printerId;
-    const pname = adjLink.dataset.printerName || '';
-    if (!pid) return;
-    if (adjustIdEl) adjustIdEl.value = pid;
-    if (adjustModeEl) adjustModeEl.value = 'delta';
-    if (adjustValueEl) adjustValueEl.value = '';
+    if (adjLink) {
+      ev.preventDefault();
+      const pid = adjLink.dataset.printerId;
+      const pname = adjLink.dataset.printerName || '';
+      if (!pid) return;
+      if (adjustIdEl) adjustIdEl.value = pid;
+      if (adjustModeEl) adjustModeEl.value = 'delta';
+      if (adjustValueEl) adjustValueEl.value = '';
 
-    // Populate target select based on existing row data attributes
-    const targetSelect = document.getElementById('adjustPrinterTarget');
-    if (targetSelect) {
-      // clear options
-      targetSelect.innerHTML = '';
-      const row = document.querySelector(`tr[data-id="${pid}"]`);
-      const monoCount = row ? Number(row.getAttribute('data-mono-count') || 0) : 0;
-      const colourCount = row ? Number(row.getAttribute('data-colour-count') || 0) : 0;
-      // Prefer showing colored options if they exist
-      const opts = [];
-      opts.push({ v: 'total', t: 'Total' });
-      if (monoCount || row && row.dataset.monoCount !== undefined) opts.push({ v: 'monochrome', t: 'Monochrome' });
-      if (colourCount || row && row.dataset.colourCount !== undefined) opts.push({ v: 'colour', t: 'Colour' });
-      // append
-      opts.forEach(o => {
-        const op = document.createElement('option'); op.value = o.v; op.textContent = o.t; targetSelect.appendChild(op);
-      });
-      // default selection preference
-      if (opts.some(o=>o.v==='monochrome')) targetSelect.value = 'monochrome';
-      else if (opts.some(o=>o.v==='colour')) targetSelect.value = 'colour';
-      else targetSelect.value = 'total';
+      // Populate target select based on existing row data attributes
+      const targetSelect = document.getElementById('adjustPrinterTarget');
+      if (targetSelect) {
+        // clear options
+        targetSelect.innerHTML = '';
+        const row = document.querySelector(`tr[data-id="${pid}"]`);
+        const monoCount = row ? Number(row.getAttribute('data-mono-count') || 0) : 0;
+        const colourCount = row ? Number(row.getAttribute('data-colour-count') || 0) : 0;
+        // Prefer showing colored options if they exist
+        const opts = [];
+        opts.push({ v: 'total', t: 'Total' });
+        if (monoCount || (row && row.dataset.monoCount !== undefined)) opts.push({ v: 'monochrome', t: 'Monochrome' });
+        if (colourCount || (row && row.dataset.colourCount !== undefined)) opts.push({ v: 'colour', t: 'Colour' });
+        // append
+        opts.forEach(o => {
+          const op = document.createElement('option'); op.value = o.v; op.textContent = o.t; targetSelect.appendChild(op);
+        });
+        // default selection preference
+        if (opts.some(o=>o.v==='monochrome')) targetSelect.value = 'monochrome';
+        else if (opts.some(o=>o.v==='colour')) targetSelect.value = 'colour';
+        else targetSelect.value = 'total';
+      }
+
+      const adjustLabel = document.getElementById('adjustPrinterModalLabel');
+      if (adjustLabel) adjustLabel.textContent = `Adjust printer count — ${pname}`;
+      if (adjustModal) adjustModal.show();
+      return;
     }
-
-    const adjustLabel = document.getElementById('adjustPrinterModalLabel');
-    if (adjustLabel) adjustLabel.textContent = `Adjust printer count — ${pname}`;
-    if (adjustModal) adjustModal.show();
-    return;
-  }  
-});
+  });
 
   // ---------- Save Edit (AJAX PUT) ----------
   if (saveEditBtn) {
@@ -582,140 +575,142 @@ function createPrinterRow(pr) {
   }
 
   // ---------- Adjust printer (AJAX POST) ----------
-// doAdjustBtn handler (send 'target')
-if (doAdjustBtn) {
-  doAdjustBtn.addEventListener('click', async function () {
-    if (!adjustIdEl || !adjustModeEl || !adjustValueEl) return;
-    const pid = adjustIdEl.value;
-    const mode = adjustModeEl.value;
-    const targetSelect = document.getElementById('adjustPrinterTarget');
-    const target = targetSelect ? (targetSelect.value || 'total') : 'total';
-    const raw = adjustValueEl.value;
-    if (!raw || raw.trim() === '') { adjustValueEl.classList.add('is-invalid'); return; }
-    const v = Number(raw);
-    if (isNaN(v)) { adjustValueEl.classList.add('is-invalid'); return; }
+  // doAdjustBtn handler (send 'target')
+  if (doAdjustBtn) {
+    doAdjustBtn.addEventListener('click', async function () {
+      if (!adjustIdEl || !adjustModeEl || !adjustValueEl) return;
+      const pid = adjustIdEl.value;
+      const mode = adjustModeEl.value;
+      const targetSelect = document.getElementById('adjustPrinterTarget');
+      const target = targetSelect ? (targetSelect.value || 'total') : 'total';
+      const raw = adjustValueEl.value;
+      if (!raw || raw.trim() === '') { adjustValueEl.classList.add('is-invalid'); return; }
+      const v = Number(raw);
+      if (isNaN(v)) { adjustValueEl.classList.add('is-invalid'); return; }
 
-    // show spinner in button and disable
-    doAdjustBtn.disabled = true;
-    // create spinner element if not present
-    let spinner = doAdjustBtn.querySelector('.btn-spinner');
-    if (!spinner) {
-      spinner = document.createElement('span');
-      spinner.className = 'spinner-border spinner-border-sm btn-spinner me-2';
-      spinner.setAttribute('role', 'status');
-      spinner.setAttribute('aria-hidden', 'true');
-      doAdjustBtn.insertBefore(spinner, doAdjustBtn.firstChild);
-    }
-    // optionally change text to "Applying..."
-    const originalText = doAdjustBtn._origText || doAdjustBtn.textContent.trim();
-    doAdjustBtn._origText = originalText;
-    // keep icon space, set text content after spinner (so we don't remove spinner)
-    // ensure we don't clobber spinner by setting only text node after it:
-    // remove existing text nodes (except spinner) and append new text
-    Array.from(doAdjustBtn.childNodes).forEach(n => {
-      if (n.nodeType === Node.TEXT_NODE) n.remove();
-    });
-    doAdjustBtn.appendChild(document.createTextNode('Applying...'));
-
-    try {
-      const body = new URLSearchParams();
-      body.append('target', String(target));
-      if (mode === 'set') body.append('setTo', String(Math.floor(v)));
-      else body.append('delta', String(Math.floor(v)));
-
-      const res = await fetch(`/admin/printers/${encodeURIComponent(pid)}/adjust`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
-        body: body.toString()
-      });
-
-      if (!res.ok) {
-        const j = await res.json().catch(()=>null);
-        alert((j && j.error) ? j.error : 'Adjust failed');
-        return;
+      // show spinner in button and disable
+      doAdjustBtn.disabled = true;
+      // create spinner element if not present
+      let spinner = doAdjustBtn.querySelector('.btn-spinner');
+      if (!spinner) {
+        spinner = document.createElement('span');
+        spinner.className = 'spinner-border spinner-border-sm btn-spinner me-2';
+        spinner.setAttribute('role', 'status');
+        spinner.setAttribute('aria-hidden', 'true');
+        doAdjustBtn.insertBefore(spinner, doAdjustBtn.firstChild);
       }
-      const j = await res.json().catch(()=>null);
-      if (j && j.printer) {
-        const pidSelector = j.printer._id;
-        const row = document.querySelector(`tr[data-id="${pidSelector}"]`);
-        if (row) {
-          // update displayed total
-          const totalCell = row.querySelector('td:nth-child(2)');
-          if (totalCell) {
-            const strongEl = totalCell.querySelector('strong');
-            if (strongEl) strongEl.textContent = j.printer.totalCount || 0;
-          }
+      // optionally change text to "Applying..."
+      const originalText = doAdjustBtn._origText || doAdjustBtn.textContent.trim();
+      doAdjustBtn._origText = originalText;
+      // keep icon space, set text content after spinner (so we don't remove spinner)
+      // ensure we don't clobber spinner by setting only text node after it:
+      // remove existing text nodes (except spinner) and append new text
+      Array.from(doAdjustBtn.childNodes).forEach(n => {
+        if (n.nodeType === Node.TEXT_NODE) n.remove();
+      });
+      doAdjustBtn.appendChild(document.createTextNode('Applying...'));
 
-          // Update data attributes
-          if (typeof j.printer.monochromeCount !== 'undefined') {
-            row.setAttribute('data-mono-count', j.printer.monochromeCount || 0);
-          }
-          if (typeof j.printer.colourCount !== 'undefined') {
-            row.setAttribute('data-colour-count', j.printer.colourCount || 0);
-          }
+      try {
+        const body = new URLSearchParams();
+        body.append('target', String(target));
+        if (mode === 'set') body.append('setTo', String(Math.floor(v)));
+        else body.append('delta', String(Math.floor(v)));
 
-          // Update collapse markers (without creating duplicates)
-          const collapse = row.querySelector(`#printer-totals-${pidSelector}`);
-          const cardBody = collapse ? collapse.querySelector('.card-body') : null;
+        const res = await fetch(`/admin/printers/${encodeURIComponent(pid)}/adjust`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+          body: body.toString()
+        });
 
-          function upsertMarker(className, label, value) {
-            if (!cardBody) return;
-            // remove any plain-text duplicate lines that don't have the marker class but contain the label
-            const plainMatches = Array.from(cardBody.querySelectorAll('div')).filter(d => !d.classList.contains(className) && d.textContent.trim().startsWith(label));
-            plainMatches.forEach(d => d.remove());
+        if (!res.ok) {
+          const j = await res.json().catch(()=>null);
+          alert((j && j.error) ? j.error : 'Adjust failed');
+          return;
+        }
+        const j = await res.json().catch(()=>null);
+        if (j && j.printer) {
+          const pidSelector = j.printer._id;
+          const row = document.querySelector(`tr[data-id="${pidSelector}"]`);
+          if (row) {
+            // update displayed total
+            const totalCell = row.querySelector('td:nth-child(2)');
+            if (totalCell) {
+              const strongEl = totalCell.querySelector('strong');
+              if (strongEl) strongEl.textContent = j.printer.totalCount || 0;
+            }
 
-            let el = cardBody.querySelector(`.${className}`);
-            if (!el) {
-              // create and append (keep order: monochrome first, colour second)
-              el = document.createElement('div');
-              el.className = `small ${className === 'mono-value' ? 'mb-1' : 'mb-0'} ${className}`;
-              el.textContent = `${label}: ${value}`;
-              if (className === 'mono-value') cardBody.insertBefore(el, cardBody.firstChild);
-              else cardBody.appendChild(el);
-            } else {
-              el.textContent = `${label}: ${value}`;
+            // Update data attributes
+            if (typeof j.printer.monochromeCount !== 'undefined') {
+              row.setAttribute('data-mono-count', j.printer.monochromeCount || 0);
+            }
+            if (typeof j.printer.colourCount !== 'undefined') {
+              row.setAttribute('data-colour-count', j.printer.colourCount || 0);
+            }
+
+            // Update collapse markers (without creating duplicates)
+            const collapse = row.querySelector(`#printer-totals-${pidSelector}`);
+            const cardBody = collapse ? collapse.querySelector('.card-body') : null;
+
+            function upsertMarker(className, label, value) {
+              if (!cardBody) return;
+              // remove any plain-text duplicate lines that don't have the marker class but contain the label
+              const plainMatches = Array.from(cardBody.querySelectorAll('div')).filter(d => !d.classList.contains(className) && d.textContent.trim().startsWith(label));
+              plainMatches.forEach(d => d.remove());
+
+              let el = cardBody.querySelector(`.${className}`);
+              if (!el) {
+                // create and append (keep order: monochrome first, colour second)
+                el = document.createElement('div');
+                el.className = `small ${className === 'mono-value' ? 'mb-1' : 'mb-0'} ${className} text-muted-light`;
+                el.textContent = `${label}: ${value}`;
+                if (className === 'mono-value') cardBody.insertBefore(el, cardBody.firstChild);
+                else cardBody.appendChild(el);
+              } else {
+                el.textContent = `${label}: ${value}`;
+                // ensure correct text class for dark theme
+                if (!el.classList.contains('text-muted-light')) el.classList.add('text-muted-light');
+              }
+            }
+
+            if (typeof j.printer.monochromeCount !== 'undefined') {
+              upsertMarker('mono-value', 'Monochrome', j.printer.monochromeCount || 0);
+            }
+            if (typeof j.printer.colourCount !== 'undefined') {
+              upsertMarker('colour-value', 'Colour', j.printer.colourCount || 0);
             }
           }
-
-          if (typeof j.printer.monochromeCount !== 'undefined') {
-            upsertMarker('mono-value', 'Monochrome', j.printer.monochromeCount || 0);
-          }
-          if (typeof j.printer.colourCount !== 'undefined') {
-            upsertMarker('colour-value', 'Colour', j.printer.colourCount || 0);
-          }
         }
-      }
 
-      // refresh details modal if open (keep default to today)
-      if (detailsModalEl && (bootstrap.Modal.getInstance(detailsModalEl) || {}).isShown) {
-        const pidNow = detailsModalEl.getAttribute('data-current-printer') || null;
-        if (pidNow) openPrinterDetails(pidNow, null, { mode: 'today' });
+        // refresh details modal if open (keep default to today)
+        if (detailsModalEl && (bootstrap.Modal.getInstance(detailsModalEl) || {}).isShown) {
+          const pidNow = detailsModalEl.getAttribute('data-current-printer') || null;
+          if (pidNow) openPrinterDetails(pidNow, null, { mode: 'today' });
+        }
+        if (adjustModal) adjustModal.hide();
+        try { window.showGlobalToast && window.showGlobalToast('Printer count adjusted', 1600); } catch(_) {}
+      } catch (err) {
+        console.error('adjust printer err', err);
+        alert('Adjust failed (network error)');
+      } finally {
+        // remove spinner and restore button state/text
+        try {
+          const spinnerEl = doAdjustBtn.querySelector('.btn-spinner');
+          if (spinnerEl) spinnerEl.remove();
+          // restore original text (if any)
+          const orig = doAdjustBtn._origText || 'Apply';
+          // clear text nodes and append original text
+          Array.from(doAdjustBtn.childNodes).forEach(n => {
+            if (n.nodeType === Node.TEXT_NODE) n.remove();
+          });
+          doAdjustBtn.appendChild(document.createTextNode(orig));
+        } catch (e) {
+          // fallback: set textContent
+          doAdjustBtn.textContent = (doAdjustBtn._origText || 'Apply');
+        }
+        doAdjustBtn.disabled = false;
       }
-      if (adjustModal) adjustModal.hide();
-      try { window.showGlobalToast && window.showGlobalToast('Printer count adjusted', 1600); } catch(_) {}
-    } catch (err) {
-      console.error('adjust printer err', err);
-      alert('Adjust failed (network error)');
-    } finally {
-      // remove spinner and restore button state/text
-      try {
-        const spinnerEl = doAdjustBtn.querySelector('.btn-spinner');
-        if (spinnerEl) spinnerEl.remove();
-        // restore original text (if any)
-        const orig = doAdjustBtn._origText || 'Apply';
-        // clear text nodes and append original text
-        Array.from(doAdjustBtn.childNodes).forEach(n => {
-          if (n.nodeType === Node.TEXT_NODE) n.remove();
-        });
-        doAdjustBtn.appendChild(document.createTextNode(orig));
-      } catch (e) {
-        // fallback: set textContent
-        doAdjustBtn.textContent = (doAdjustBtn._origText || 'Apply');
-      }
-      doAdjustBtn.disabled = false;
-    }
-  });
-}
+    });
+  }
 
   // ---------- Filter buttons + date range refresh wiring ----------
   (function () {

@@ -235,12 +235,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
       tr.innerHTML = `
         <td>
-          <strong>${escapeHtml(mat.name)}</strong>
-          ${ labels ? `<br/><small class="text-muted">${escapeHtml(labels)}</small>` : '' }
+          <strong class="text-white">${escapeHtml(mat.name)}</strong>
+          ${ labels ? `<br/><small class="text-muted-light">${escapeHtml(labels)}</small>` : '' }
         </td>
         <td class="text-center stocked-cell">${stocked}</td>
         <td class="text-center used-cell">${used}</td>
-        <td class="text-center remaining-cell">${remaining < 0 ? `<span class="text-danger">${remaining}</span>` : `<span class="text-success">${remaining}</span>`}</td>
+        <td class="text-center remaining-cell">${remaining < 0 ? `<span class="text-danger">${remaining}</span>` : `<span>${remaining}</span>`}</td>
         <td class="text-center">
           <button class="btn btn-sm btn-outline-primary adjust-stock-btn" data-id="${mat._id}" data-stocked="${stocked}" type="button">Adjust</button>
           <button class="btn btn-sm btn-outline-danger ms-1 delete-material-btn" data-id="${mat._id}" type="button">Delete</button>
@@ -317,7 +317,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const remainingCell = tr.querySelector('.remaining-cell');
             if (remainingCell) {
               const rem = (typeof mat.remaining === 'number') ? mat.remaining : ((Number(stockedCell.textContent) || 0) - (Number(usedCell.textContent) || 0));
-              remainingCell.innerHTML = (rem < 0) ? `<span class="text-danger">${rem}</span>` : `<span class="text-success">${rem}</span>`;
+              remainingCell.innerHTML = (rem < 0) ? `<span class="text-danger">${rem}</span>` : `<span>${rem}</span>`;
             }
             const adjBtn = tr.querySelector('.adjust-stock-btn');
             if (adjBtn) adjBtn.dataset.stocked = (typeof mat.stock === 'number') ? mat.stock : adjBtn.dataset.stocked;

@@ -2,17 +2,17 @@ extends ../layout
 
 block content
   .d-flex.justify-content-between.align-items-center.mb-3
-    h2.mb-0 Stock Dashboard
+    h2.mb-0.text-white Stock Dashboard
     a.btn.btn-secondary(href='/admin/services') Back to services
 
   hr
 
-  p.text-muted.small.mb-3 Displaying stocked quantities, total used (aggregates) and remaining stock. Use the "Create count unit" form below to define a global tracked unit (one sub-unit per unit). Duplicate selection sets are disallowed.
+  p.text-muted-light.small.mb-3 Displaying stocked quantities, total used (aggregates) and remaining stock. Use the "Create count unit" form below to define a global tracked unit (one sub-unit per unit). Duplicate selection sets are disallowed.
 
   //- CREATE MATERIAL (GLOBAL COUNT UNIT) FORM
-  .card.mb-4
-    .card-body
-      h5.mb-3 Create count unit (global)
+  .card.mb-4.dark-surface
+    .card-body.dark-card-body
+      h5.mb-3.text-white Create count unit (global)
       form#create-count-unit(class='row g-3' novalidate)
         .col-12.col-md-5
           label.form-label(for='cuName') Name
@@ -21,16 +21,17 @@ block content
           label.form-label(for='cuStock') Stocked (initial)
           input.form-control(type='number', id='cuStock', value='0', min='0', step='1')
         .col-12
-          small.text-muted.mb-2 Select one sub-unit per unit to form the tracked selection set.
+          small.text-muted-light.mb-2 Select one sub-unit per unit to form the tracked selection set.
         // Units/subunits UI
         .col-12
-          .accordion#stockUnitsAccordion
+          // added dark-surface so accordion isn't bright/white
+          .accordion#stockUnitsAccordion.dark-surface
             each unit in units
               - const uid = unit._id
               .accordion-item
                 h2.accordion-header
                   button.accordion-button.collapsed(type='button', data-bs-toggle='collapse', data-bs-target=`#u-${uid}`, aria-expanded='false')
-                    | #{unit.name}
+                    span.text-white #{unit.name}
                 .accordion-collapse.collapse(id=`u-${uid}`)
                   .accordion-body
                     ul.list-group
@@ -47,17 +48,17 @@ block content
             | Create Count Unit
 
   //- STOCK TABLE
-  .card
-    .card-body
+  .card.dark-surface
+    .card-body.dark-card-body
       .table-responsive
         table.table.table-striped.table-hover.table-sm
           thead
             tr
-              th Material
-              th.text-center Stocked
-              th.text-center Used
-              th.text-center Remaining
-              th.text-center Actions
+              th.text-white Material
+              th.text-center.text-muted-light Stocked
+              th.text-center.text-muted-light Used
+              th.text-center.text-muted-light Remaining
+              th.text-center.text-muted-light Actions
           tbody
             if materials && materials.length
               each m in materials
@@ -66,19 +67,19 @@ block content
                 - const remaining = (typeof m.remaining === 'number') ? m.remaining : Math.max(0, stocked - used);
                 tr(data-id=m._id)
                   td
-                    strong= m.name
+                    strong.text-white= m.name
                     if m.selections && m.selections.length
                       br
-                      small.text-muted
+                      small.text-muted-light
                         - const labels = m.selections.map(s => (s.unit && s.unit.name ? s.unit.name + ': ' + (s.subUnit && s.subUnit.name ? s.subUnit.name : s.subUnit) : ''));
                         = labels.join(' + ')
-                  td.text-center= stocked
-                  td.text-center= used
+                  td.text-center.text-muted-light= stocked
+                  td.text-center.text-muted-light= used
                   td.text-center
                     if remaining < 0
                       span.text-danger #{remaining}
                     else
-                      span.text-success #{remaining}
+                      span #{remaining}
                   td.text-center
                     button.btn.btn-sm.btn-outline-primary.adjust-stock-btn(data-id=m._id data-stocked=stocked type='button') Adjust
                     button.btn.btn-sm.btn-outline-danger.ms-1.delete-material-btn(data-id=m._id type='button') Delete
@@ -86,19 +87,19 @@ block content
               tr
                 td.text-muted(colspan='5') No count units defined.
 
-  // Adjust stock modal
+  // Adjust stock modal (dark-themed appearance; IDs unchanged)
   .modal.fade(id='adjustStockModal', tabindex='-1', aria-labelledby='adjustStockModalLabel', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
-      .modal-content
+      .modal-content.dark-surface
         .modal-header
-          h5.modal-title(id='adjustStockModalLabel') Adjust stocked quantity
+          h5.modal-title.text-white(id='adjustStockModalLabel') Adjust stocked quantity
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
-        .modal-body
+        .modal-body.dark-card-body
           form#adjustStockForm
             input(type='hidden', id='adjustMaterialId')
             .mb-3
-              label.form-label(for='adjustStockInput') New stocked quantity
-              input.form-control(type='number', id='adjustStockInput', min='0', step='1', required)
+              label.form-label.text-muted-light(for='adjustStockInput') New stocked quantity
+              input.form-control.form-control-dark(type='number', id='adjustStockInput', min='0', step='1', required)
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary(type='button', id='saveAdjustStockBtn') Save

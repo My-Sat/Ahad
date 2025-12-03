@@ -4,39 +4,39 @@ block content
   .container
     .row.justify-content-center
       .col-12.col-md-12
-        .card.shadow-sm
-          .card-body
+        .card.shadow-sm.dark-surface
+          .card-body.dark-card-body
             // Title row: Job Order + Orders explorer button
             .d-flex.justify-content-between.align-items-center.mb-3
               if customer
                 input(type='hidden', id='orderCustomerId', value=customer._id)
 
-              h4.mb-0 Job Order
+              h4.mb-0.text-white Job Order
               // Orders explorer trigger + Customers button
               .mb-2
                 // Customers page link
-                a.btn.btn-outline-secondary.btn-sm(href='/customers', title='Customers')
+                a.btn.btn-outline-light-custom.btn-sm(href='/customers', title='Customers')
                   i.bi.bi-people.me-1
                   | Customers
                 // Orders button (existing)
-                button.btn.btn-outline-secondary.btn-sm#openOrdersExplorerBtn(type='button', title='View orders')
+                button.btn.btn-outline-light-custom.btn-sm#openOrdersExplorerBtn(type='button', title='View orders')
                   i.bi.bi-list-check.me-1
                   | Orders
 
               if customer
                 .mb-2
-                  div.small.text-muted Selected customer:
+                  div.small.text-muted-light Selected customer:
                   if customer.category === 'artist'
                     strong(style='color:#ff7a18;') #{customer.businessName || customer.phone}
                   else
                     strong(style='color:#ff7a18;') #{customer.firstName || customer.businessName || customer.phone}
-                  small.text-muted.ms-3 #{customer.phone}
+                  small.text-muted-light.ms-3 #{customer.phone}
 
             // selection row (services + books)
             .row.g-2.mb-3
               .col-md-5
                 label.form-label(for='serviceSelect') Service
-                select.form-select(id='serviceSelect')
+                select.form-select.form-select-dark(id='serviceSelect')
                   option(value='') -- Select a service --
                   each s in services
                     option(value=s._id)= s.name
@@ -44,23 +44,23 @@ block content
                 label.form-label(for='booksDropdown') Books Printing
                 // We'll populate this select's options via client JS
                 div.input-group
-                  select.form-select(id='booksDropdown')
+                  select.form-select.form-select-dark(id='booksDropdown')
                     option(value='') -- Select a book --
-                  button.btn.btn-outline-secondary(type='button', id='addBookBtn') Add Book
+                  button.btn.btn-outline-light-custom(type='button', id='addBookBtn') Add Book
               .col-md-3.d-flex.align-items-end
 
             // price rules list (populated via AJAX or when a book is selected)
-            .card.mt-3
-              .card-body
-                h6.mb-2 Price rules for selected service / book
-                p.text-muted.small Select a rule and enter number of pages/qty (if applicable) then click Apply to add to cart.
+            .card.mt-3.dark-surface
+              .card-body.dark-card-body
+                h6.mb-2.text-white Price rules for selected service / book
+                p.text-muted-light.small Select a rule and enter number of pages/qty (if applicable) then click Apply to add to cart.
                 #pricesList
-                  p.text-muted Select a service to load price rules.
+                  p.text-muted-light Select a service to load price rules.
 
             // Cart / Order summary
-            .card.mt-3
-              .card-body
-                h6.mb-2 Cart
+            .card.mt-3.dark-surface
+              .card-body.dark-card-body
+                h6.mb-2.text-white Cart
                 table.table.table-sm.table-borderless#cartTable
                   thead
                     tr
@@ -71,41 +71,41 @@ block content
                       th.text-center Actions
                   tbody#cartTbody
                     tr
-                      td.text-muted(colspan='5') Cart is empty.
+                      td.text-muted-light(colspan='5') Cart is empty.
                 .d-flex.justify-content-end.mt-2
-                  span.me-3.fs-5 Total:
-                  strong.fs-5#cartTotal GH₵ 0.00
+                  span.me-3.fs-5.text-white Total:
+                  strong.fs-5#cartTotal.text-white GH₵ 0.00
 
                 .d-flex.justify-content-end.mt-3
                   button.btn.btn-primary#orderNowBtn(type='button', disabled) Order Now
 
     // small debug area
-    .mt-3.text-muted.small
+    .mt-3.text-muted-light.small
       | After placing the order you will receive an Order ID to use at payment.
 
   // Orders Explorer Modal (rich UI, date filters, table) - unchanged...
   .modal.fade(id='ordersExplorerModal', tabindex='-1', aria-labelledby='ordersExplorerModalLabel', aria-hidden='true')
     .modal-dialog.modal-xl.modal-dialog-centered
-      .modal-content
+      .modal-content.dark-surface
         .modal-header
           h5.modal-title(id='ordersExplorerModalLabel') Orders Explorer
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
-        .modal-body
+        .modal-body.dark-card-body
           .row.g-2.mb-3.align-items-center
             .col-auto
-              label.form-label.mb-0 Small Date Range
+              label.form-label.mb-0 small.text-muted-light Small Date Range
             .col-auto
-              input.form-control(type='date', id='ordersFrom')
+              input.form-control.form-control-dark(type='date', id='ordersFrom')
             .col-auto
-              input.form-control(type='date', id='ordersTo')
+              input.form-control.form-control-dark(type='date', id='ordersTo')
             .col
               .btn-group
-                button.btn.btn-outline-secondary.btn-sm#presetToday(type='button') Today
-                button.btn.btn-outline-secondary.btn-sm#presetYesterday(type='button') Yesterday
-                button.btn.btn-outline-secondary.btn-sm#presetThisWeek(type='button') This Week
+                button.btn.btn-outline-light-custom.btn-sm#presetToday(type='button') Today
+                button.btn.btn-outline-light-custom.btn-sm#presetYesterday(type='button') Yesterday
+                button.btn.btn-outline-light-custom.btn-sm#presetThisWeek(type='button') This Week
               button.btn.btn-primary.btn-sm.ms-2#fetchOrdersBtn(type='button') Refresh
             .col-auto.text-end
-              small.text-muted#ordersCount -- results
+              small.text-muted-light#ordersCount -- results
 
           // search / table
           .table-responsive
@@ -119,7 +119,7 @@ block content
                   th.text-center Actions
               tbody
                 tr
-                  td.text-muted(colspan='5') Use the date filters above and click Refresh to load orders.
+                  td.text-muted-light(colspan='5') Use the date filters above and click Refresh to load orders.
 
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close

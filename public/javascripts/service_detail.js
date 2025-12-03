@@ -13,30 +13,34 @@ document.addEventListener('DOMContentLoaded', function () {
       const html = `
 <div class="modal fade" id="editPriceModal" tabindex="-1" aria-labelledby="editPriceModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+    <!-- add dark-surface to modal-content so your CSS targets it -->
+    <div class="modal-content dark-surface">
       <div class="modal-header">
         <h5 class="modal-title" id="editPriceModalLabel">Edit Price Rule</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
+      <!-- wrap body content in dark-card-body so inputs inherit dark styles -->
       <div class="modal-body">
-        <form id="editPriceForm">
-          <input type="hidden" id="editPriceId" name="priceId" />
-          <div class="mb-3">
-            <label class="form-label" for="editPriceInput">Price (GH₵)</label>
-            <input class="form-control" type="number" step="0.01" id="editPriceInput" name="price" required />
-            <div class="invalid-feedback">Please provide a valid price.</div>
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="editPrice2Input">F/B Price (optional)</label>
-            <input class="form-control" type="number" step="0.01" id="editPrice2Input" name="price2" />
-          </div>
-          <div class="mb-2">
-            <small class="text-muted" id="editSelectionLabel"></small>
-          </div>
-        </form>
+        <div class="dark-card-body">
+          <form id="editPriceForm">
+            <input type="hidden" id="editPriceId" name="priceId" />
+            <div class="mb-3">
+              <label class="form-label" for="editPriceInput">Price (GH₵)</label>
+              <input class="form-control form-control-dark" type="number" step="0.01" id="editPriceInput" name="price" required />
+              <div class="invalid-feedback">Please provide a valid price.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="editPrice2Input">F/B Price (optional)</label>
+              <input class="form-control form-control-dark" type="number" step="0.01" id="editPrice2Input" name="price2" />
+            </div>
+            <div class="mb-2">
+              <small class="text-muted" id="editSelectionLabel"></small>
+            </div>
+          </form>
+        </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-secondary btn-outline-light-custom" type="button" data-bs-dismiss="modal">Cancel</button>
         <button class="btn btn-primary" type="button" id="saveEditPriceBtn">Save</button>
       </div>
     </div>
@@ -378,129 +382,131 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Delete handling only (edit handled by capturing handler)
-// ----------------------
-// Robust Delete (modal-driven, creates modal if missing)
-// ----------------------
-(function installDeleteModalHandler() {
-  // Create modal HTML if missing and return element
-  function createDeleteModalIfMissing() {
-    let dlg = document.getElementById('deleteConfirmModal');
-    if (dlg) return dlg;
+  // ----------------------
+  // Robust Delete (modal-driven, creates modal if missing)
+  // ----------------------
+  (function installDeleteModalHandler() {
+    // Create modal HTML if missing and return element
+    function createDeleteModalIfMissing() {
+      let dlg = document.getElementById('deleteConfirmModal');
+      if (dlg) return dlg;
 
-    const html = `
+      const html = `
 <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+    <div class="modal-content dark-surface">
       <div class="modal-header">
         <h5 class="modal-title" id="deleteConfirmModalLabel">Confirm delete</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p id="deleteConfirmMessage">Delete this item?</p>
+        <div class="dark-card-body">
+          <p id="deleteConfirmMessage">Delete this item?</p>
+        </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-secondary btn-outline-light-custom" data-bs-dismiss="modal">Cancel</button>
         <button type="button" id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
       </div>
     </div>
   </div>
 </div>`.trim();
 
-    const container = document.createElement('div');
-    container.innerHTML = html;
-    document.body.appendChild(container.firstElementChild);
-    return document.getElementById('deleteConfirmModal');
-  }
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      document.body.appendChild(container.firstElementChild);
+      return document.getElementById('deleteConfirmModal');
+    }
 
-  // Bind confirm button action only once
-  async function wireConfirmDeleteOnce() {
-    const dlg = createDeleteModalIfMissing();
-    const confirmBtn = document.getElementById('confirmDeleteBtn');
-    if (!confirmBtn) return;
-    if (confirmBtn.dataset.bound === '1') return;
-    confirmBtn.dataset.bound = '1';
+    // Bind confirm button action only once
+    async function wireConfirmDeleteOnce() {
+      const dlg = createDeleteModalIfMissing();
+      const confirmBtn = document.getElementById('confirmDeleteBtn');
+      if (!confirmBtn) return;
+      if (confirmBtn.dataset.bound === '1') return;
+      confirmBtn.dataset.bound = '1';
 
-    confirmBtn.addEventListener('click', async function () {
-      const priceId = confirmBtn._pendingPriceId;
-      if (!priceId) return;
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = 'Deleting...';
+      confirmBtn.addEventListener('click', async function () {
+        const priceId = confirmBtn._pendingPriceId;
+        if (!priceId) return;
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Deleting...';
+
+        try {
+          const res = await fetch(`/admin/services/${serviceId}/prices/${priceId}`, {
+            method: 'DELETE',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+
+          const dlgEl = document.getElementById('deleteConfirmModal');
+          bootstrap.Modal.getInstance(dlgEl)?.hide();
+
+          if (res.ok) {
+            try {
+              await refreshPricesSection();
+              showToast('Price rule deleted', 1800);
+            } catch (e) {
+              console.error('refresh after delete failed', e);
+              window.location.reload();
+            }
+          } else {
+            const ct = res.headers.get('content-type') || '';
+            if (ct.includes('application/json')) {
+              const j = await res.json().catch(()=>null);
+              alert((j && j.error) ? j.error : 'Delete failed');
+            } else {
+              alert('Delete failed');
+            }
+          }
+        } catch (err) {
+          console.error('confirm delete error', err);
+          alert('Failed to delete (network error)');
+        } finally {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = 'Delete';
+          confirmBtn._pendingPriceId = null;
+        }
+      });
+    }
+
+    // Capture-phase delegated click: open delete modal and set pending id
+    document.addEventListener('click', function (e) {
+      const delBtn = e.target && e.target.closest ? e.target.closest('.open-delete-price') : null;
+      if (!delBtn) return;
+      try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
+
+      const priceId = delBtn.dataset.priceId;
+      const selectionLabel = delBtn.dataset.selectionLabel || '';
+
+      const dlg = createDeleteModalIfMissing();
+      wireConfirmDeleteOnce();
+
+      const msgEl = document.getElementById('deleteConfirmMessage');
+      if (msgEl) {
+        msgEl.textContent = selectionLabel ? `Delete price rule: ${selectionLabel}?` : 'Delete this price rule?';
+      }
+      const confirmBtn = document.getElementById('confirmDeleteBtn');
+      if (confirmBtn) confirmBtn._pendingPriceId = priceId;
 
       try {
-        const res = await fetch(`/admin/services/${serviceId}/prices/${priceId}`, {
-          method: 'DELETE',
-          headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        });
-
-        const dlgEl = document.getElementById('deleteConfirmModal');
-        bootstrap.Modal.getInstance(dlgEl)?.hide();
-
-        if (res.ok) {
-          try {
-            await refreshPricesSection();
-            showToast('Price rule deleted', 1800);
-          } catch (e) {
-            console.error('refresh after delete failed', e);
-            window.location.reload();
-          }
-        } else {
-          const ct = res.headers.get('content-type') || '';
-          if (ct.includes('application/json')) {
-            const j = await res.json().catch(()=>null);
-            alert((j && j.error) ? j.error : 'Delete failed');
-          } else {
-            alert('Delete failed');
-          }
-        }
+        const bs = bootstrap.Modal.getInstance(dlg) || new bootstrap.Modal(dlg);
+        bs.show();
       } catch (err) {
-        console.error('confirm delete error', err);
-        alert('Failed to delete (network error)');
-      } finally {
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = 'Delete';
-        confirmBtn._pendingPriceId = null;
+        console.error('Failed to show delete modal', err);
+        // fallback: simple confirm
+        if (confirm('Delete this price rule?')) {
+          fetch(`/admin/services/${serviceId}/prices/${priceId}`, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.ok ? refreshPricesSection().then(()=> showToast('Price rule deleted')) : window.location.reload())
+            .catch(()=> window.location.reload());
+        }
       }
-    });
-  }
+    }, true);
 
-  // Capture-phase delegated click: open delete modal and set pending id
-  document.addEventListener('click', function (e) {
-    const delBtn = e.target && e.target.closest ? e.target.closest('.open-delete-price') : null;
-    if (!delBtn) return;
-    try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
+    // expose helper for debugging (optional)
+    window._svcDetail = window._svcDetail || {};
+    window._svcDetail._wireConfirmDeleteOnce = wireConfirmDeleteOnce;
 
-    const priceId = delBtn.dataset.priceId;
-    const selectionLabel = delBtn.dataset.selectionLabel || '';
-
-    const dlg = createDeleteModalIfMissing();
-    wireConfirmDeleteOnce();
-
-    const msgEl = document.getElementById('deleteConfirmMessage');
-    if (msgEl) {
-      msgEl.textContent = selectionLabel ? `Delete price rule: ${selectionLabel}?` : 'Delete this price rule?';
-    }
-    const confirmBtn = document.getElementById('confirmDeleteBtn');
-    if (confirmBtn) confirmBtn._pendingPriceId = priceId;
-
-    try {
-      const bs = bootstrap.Modal.getInstance(dlg) || new bootstrap.Modal(dlg);
-      bs.show();
-    } catch (err) {
-      console.error('Failed to show delete modal', err);
-      // fallback: simple confirm
-      if (confirm('Delete this price rule?')) {
-        fetch(`/admin/services/${serviceId}/prices/${priceId}`, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-          .then(r => r.ok ? refreshPricesSection().then(()=> showToast('Price rule deleted')) : window.location.reload())
-          .catch(()=> window.location.reload());
-      }
-    }
-  }, true);
-
-  // expose helper for debugging (optional)
-  window._svcDetail = window._svcDetail || {};
-  window._svcDetail._wireConfirmDeleteOnce = wireConfirmDeleteOnce;
-
-})(); // installDeleteModalHandler
+  })(); // installDeleteModalHandler
 
   // Confirm delete modal action
   const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');

@@ -2,6 +2,54 @@
 document.addEventListener('DOMContentLoaded', function () {
   'use strict';
   const containers = document.querySelectorAll('.priceRulesContainer');
+
+  // ---------- Inline dark alert modal helpers ----------
+  function ensureInlineAlertModal() {
+    let modalEl = document.getElementById('booksInlineAlertModal');
+    if (modalEl) return modalEl;
+
+    const container = document.createElement('div');
+    container.innerHTML = ''
+      + '<div class="modal fade" id="booksInlineAlertModal" tabindex="-1" aria-labelledby="booksInlineAlertModalLabel" aria-hidden="true">'
+      + '  <div class="modal-dialog modal-dialog-centered">'
+      + '    <div class="modal-content dark-surface">'
+      + '      <div class="modal-header">'
+      + '        <h5 class="modal-title" id="booksInlineAlertModalLabel">Notice</h5>'
+      + '        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>'
+      + '      </div>'
+      + '      <div class="modal-body">'
+      + '        <div class="dark-card-body" id="booksInlineAlertModalBodyContainer">'
+      + '          <div id="booksInlineAlertModalBody"></div>'
+      + '        </div>'
+      + '      </div>'
+      + '      <div class="modal-footer">'
+      + '        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">OK</button>'
+      + '      </div>'
+      + '    </div>'
+      + '  </div>'
+      + '</div>';
+
+    document.body.appendChild(container.firstElementChild);
+    modalEl = document.getElementById('booksInlineAlertModal');
+    return modalEl;
+  }
+
+  function escapeHtml(s) {
+    if (s === undefined || s === null) return '';
+    return String(s).replace(/[&<>"'`=\/]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
+  }
+
+  function showInlineAlert(message, title) {
+    const modalEl = ensureInlineAlertModal();
+    const titleEl = modalEl.querySelector('#booksInlineAlertModalLabel');
+    const bodyEl = modalEl.querySelector('#booksInlineAlertModalBody');
+    if (titleEl) titleEl.textContent = title || 'Notice';
+    if (bodyEl) bodyEl.innerHTML = escapeHtml(String(message || ''));
+    const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+    inst.show();
+  }
+  // ---------- end inline modal helpers ----------
+
   async function loadServicePrices(serviceId, container) {
     container.innerHTML = '<div class="text-muted small">Loading...</div>';
     try {
@@ -17,7 +65,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const row = document.createElement('div');
         row.className = 'list-group-item d-flex align-items-center gap-2';
         row.innerHTML = `
-          <div style="flex:1;min-width:0;"><strong>${p.selectionLabel}</strong></div>
+          <div style="flex:1;min-width:0;"><strong>${escapeHtml(p.selectionLabel)}</strong></div>
           <div class="d-flex gap-2 align-items-center">
             <input type="number" min="1" class="form-control form-control-sm rule-pages" placeholder="Qty" style="width:90px" />
             <div class="form-check form-check-inline ms-1">
@@ -43,6 +91,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const fb = !!row.querySelector('.rule-fb').checked;
         const spoiled = row.querySelector('.rule-spoiled').value || 0;
         const priceMeta = row._meta;
+        if (!priceMeta) {
+          showInlineAlert('Price rule not found', 'Error');
+          return;
+        }
         // create a "chosen" list in the container (append a li)
         let chosen = container.querySelector('.chosen-list');
         if (!chosen) {
@@ -57,7 +109,7 @@ document.addEventListener('DOMContentLoaded', function () {
         itemHtml.className = 'mb-1';
         itemHtml.innerHTML = `
           <div class="d-flex justify-content-between align-items-center">
-            <div><small class="text-muted">${priceMeta.selectionLabel}</small><div><strong>Unit: GH₵ ${unitPrice}</strong> <small class="text-muted">Q:${pages} (eff ${effectiveQty})</small></div></div>
+            <div><small class="text-muted">${escapeHtml(priceMeta.selectionLabel)}</small><div><strong>Unit: GH₵ ${unitPrice}</strong> <small class="text-muted">Q:${pages} (eff ${effectiveQty})</small></div></div>
             <div><button class="btn btn-sm btn-outline-danger remove-chosen">Remove</button></div>
           </div>
         `;
@@ -91,7 +143,10 @@ document.addEventListener('DOMContentLoaded', function () {
   if (saveBtn) {
     saveBtn.addEventListener('click', async function () {
       const nameInput = document.getElementById('bookName');
-      if (!nameInput || !nameInput.value.trim()) { alert('Enter a book name'); return; }
+      if (!nameInput || !nameInput.value.trim()) {
+        showInlineAlert('Enter a book name', 'Book name required');
+        return;
+      }
       const name = nameInput.value.trim();
       const allChosen = [];
       document.querySelectorAll('.chosen-list').forEach(list => {
@@ -99,7 +154,10 @@ document.addEventListener('DOMContentLoaded', function () {
           if (ch._meta) allChosen.push(ch._meta);
         });
       });
-      if (!allChosen.length) { alert('Add at least one price rule to the book'); return; }
+      if (!allChosen.length) {
+        showInlineAlert('Add at least one price rule to the book', 'No items');
+        return;
+      }
       // compute unitPrice (sum of subtotals)
       const unitPrice = allChosen.reduce((s, it) => s + (Number(it.subtotal) || 0), 0);
       try {
@@ -107,14 +165,14 @@ document.addEventListener('DOMContentLoaded', function () {
         const res = await fetch('/books', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(payload) });
         const j = await res.json().catch(()=>null);
         if (!res.ok) {
-          alert((j && j.error) ? j.error : 'Failed to save book');
+          showInlineAlert((j && j.error) ? j.error : 'Failed to save book', 'Save failed');
           return;
         }
         // on success navigate back to orders page (or show a success message)
         window.location.href = '/orders/new';
       } catch (err) {
         console.error('save book err', err);
-        alert('Network error saving book');
+        showInlineAlert('Network error saving book', 'Network error');
       }
     });
   }

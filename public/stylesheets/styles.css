@@ -1,6 +1,17 @@
+/* ===================================================================================
+   public/stylesheets/styles.css
+   Consolidated app stylesheet:
+   - Your previous UI rules (merged)
+   - Dark-surface utilities (moved from inline)
+   - Robust overrides to prevent Bootstrap from unintentionally overriding the dark UI
+   =================================================================================== */
+
+/* ---------------------------
+   Base app background
+   --------------------------- */
 /* grey app background */
 body.app-bg {
-  background: #f3f4f6;
+  background: #525252;
   min-height: 100vh;
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
@@ -33,11 +44,29 @@ header {
 }
 
 /* subtle card-like content container */
-.content-card {
-  background: #ffffff;
+/* Converted to dark-surface to match navbar (was white previously) */
+.content-card,
+.card.content-card {
+  /* treat content-card as a first-class dark surface */
+  background: #696969 !important;
+  color: #ffffff !important;
   border-radius: 12px;
   padding: 24px;
-  box-shadow: 0 6px 18px rgba(15,23,42,0.03);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* ensure form controls inside content-card inherit dark styles */
+.content-card input.form-control,
+.content-card select.form-select,
+.content-card textarea.form-control,
+.content-card .form-control,
+.content-card .form-select {
+  background: rgba(255,255,255,0.03) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
 }
 
 /* smaller screens: tabs wrap */
@@ -85,9 +114,6 @@ a.service-link:focus {
   top: calc(100% + 4px);
   margin: 0;
 }
-
-/* remove hover-open behavior: ensure dropdown only opens via click (bootstrap's JS) */
-/* previously added :hover / :focus-within rules should be removed to avoid flicker */
 
 /* small improvement to dropdown item icon spacing */
 .dropdown-item svg { width: 1.25rem; margin-right: 0.5rem; vertical-align: -0.12rem; }
@@ -139,7 +165,7 @@ nav#topTabs .nav-pills .nav-link .bi {
 
 /* Active state: stronger visual, but keep logic (classes/IDs) unchanged */
 nav#topTabs .nav-pills .nav-link.active {
-  background-color: #0d6efd !important; /* bootstrap primary */
+  background-color: #36454F !important; /* bootstrap primary */
   color: #fff !important;
   box-shadow: 0 8px 20px rgba(13,110,253,0.14);
   transform: translateY(-1px);
@@ -349,3 +375,927 @@ header .container-fluid { gap: 0.5rem; }
 .expand-toggle[aria-expanded="true"] .bi {
   transform: rotate(180deg);
 }
+
+/* -----------------------------------------------
+   Header / Navbar visual update (applies on top of existing rules)
+   - Uses #696969 background as requested.
+   - Focused on contrast, radius, badges, pills, dropdowns and accessibility.
+   ----------------------------------------------- */
+
+/* =========================
+   Navbar / Header — custom
+   =========================
+   These rules intentionally target header.bg-white.shadow-sm and nav#topTabs
+   so your Pug markup and JS remain unchanged.
+*/
+
+/* Keep header dark and ensure it wins over bootstrap default backgrounds */
+header.bg-white.shadow-sm {
+  background: #696969 !important; /* requested header background */
+  color: #ffffff;                 /* ensure readable text on dark background */
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  backdrop-filter: blur(6px);
+}
+
+/* Make sure sticky header remains visible and contrasts well */
+header a,
+header .nav-link,
+header .dropdown-item,
+header .brand-name,
+header .brand-sub,
+header .btn,
+header .btn-outline-secondary {
+  color: #ffffff !important;
+}
+
+/* Slight translucent backdrop for logo area so logo stands out */
+header .brand-wrap {
+  background: rgba(255,255,255,0.03);
+  padding: 0.18rem 0.42rem;
+  border-radius: 10px;
+  align-items: center;
+}
+
+/* Ensure the site-logo pops against the dark background; keep existing sizes */
+.site-logo {
+  background: rgba(255,255,255,0.06);
+  padding: 6px;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.18);
+}
+
+/* Brand text: preserve prominence but increase contrast */
+.brand-name {
+  color: #fff !important;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.18);
+}
+.brand-sub {
+  color: rgba(255,255,255,0.75) !important;
+}
+
+/* Top tabs nav pills — tuned for the darker header */
+nav#topTabs ul.nav {
+  background: transparent;
+  padding: 0.2rem;
+  gap: 0.35rem;
+}
+
+/* Pill default state on dark header */
+nav#topTabs .nav-pills .nav-link {
+  color: rgba(255,255,255,0.92);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: none;
+  transition: transform .12s ease, box-shadow .14s ease, background-color .12s ease;
+}
+
+/* Hover/focus affordance */
+nav#topTabs .nav-pills .nav-link:hover,
+nav#topTabs .nav-pills .nav-link:focus {
+  background: rgba(255,255,255,0.06);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.22);
+}
+
+/* Active pill — keep strong contrast and readable */
+nav#topTabs .nav-pills .nav-link.active {
+  background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06));
+  color: #111827 !important; /* dark text on light pill for readability */
+  border: 1px solid rgba(255,255,255,0.16);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.28);
+  transform: translateY(-2px);
+}
+
+/* Badge contrast on dark background */
+nav#topTabs .nav-pills .badge {
+  color: #fff;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Desktop user menu / small buttons — inverted outline for contrast */
+.d-none.d-md-flex .btn-outline-secondary,
+.d-md-none .dropdown-toggle {
+  color: #ffffff;
+  border-color: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.03);
+}
+.d-none.d-md-flex .btn-outline-secondary:hover,
+.d-md-none .dropdown-toggle:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.18);
+}
+
+/* Dropdown menus (keep them light for readability) */
+header .dropdown-menu {
+  background: #ffffff;               /* keep menus light for readability */
+  color: #0f172a;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(17,24,39,0.12);
+  min-width: 200px;
+}
+
+/* Orders dropdown: lighter background (use the hover color) and plain-text items.
+   Replace the previous a#tab-orders + .dropdown-menu block with this. */
+a#tab-orders + .dropdown-menu {
+  background: rgba(255,255,255,0.04) !important; /* lighter than #545454 — matches hover */
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+  border-radius: 10px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.10);
+  min-width: 180px;
+}
+
+/* Plain-text dropdown items (no pill visuals) */
+a#tab-orders + .dropdown-menu .dropdown-item {
+  display: block !important;
+  padding: .45rem 1rem !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: #fff !important;
+  font-weight: 400 !important;
+  box-shadow: none !important;
+  text-align: left !important;
+}
+
+/* Subtle hover/focus affordance */
+a#tab-orders + .dropdown-menu .dropdown-item:hover,
+a#tab-orders + .dropdown-menu .dropdown-item:focus {
+  background: rgba(255,255,255,0.06) !important; /* slightly stronger on hover */
+  color: #fff !important;
+}
+
+/* Ensure icons inherit text color */
+a#tab-orders + .dropdown-menu .dropdown-item .bi {
+  color: inherit !important;
+  opacity: 1 !important;
+}
+
+
+/* In dropdowns, keep icons aligned and readable */
+header .dropdown-item {
+  color: #0f172a !important;
+}
+header .dropdown-item:hover {
+  background: rgba(13,110,253,0.06);
+}
+
+/* Mobile compact menu — ensure readable on dark header */
+.d-md-none .dropdown-menu {
+  min-width: 220px;
+}
+
+/* Toast header on dark header — keep toast body readable */
+#assignToast .toast-header {
+  background: rgba(0,0,0,0.02);
+  color: #0f172a;
+}
+
+/* Accessibility helpers: ensure contrast for any header links
+   that accidentally inherit low opacity from other rules */
+header a[role="tab"],
+header a[role="tab"]:hover {
+  color: inherit !important;
+  opacity: 1 !important;
+}
+
+/* Slightly increase rounding to match modern aesthetic */
+header .nav-pills .nav-link,
+.site-logo,
+.brand-wrap,
+header .btn {
+  border-radius: 10px !important;
+}
+
+/* reduce visual clash between header and main content */
+main#main-content {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+}
+
+/* Small screen tweaks (stacking & spacing) */
+@media (max-width: 767.98px) {
+  header.bg-white.shadow-sm {
+    padding: 0.38rem 0.5rem;
+  }
+  nav#topTabs ul.nav { gap: 0.25rem; }
+  .brand-name { font-size: 1rem; }
+}
+
+/* Provide a gentle focus ring for keyboard users */
+header .nav-link:focus,
+header .btn:focus,
+header .dropdown-item:focus {
+  outline: 3px solid rgba(255,255,255,0.12);
+  outline-offset: 2px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.22);
+}
+
+/* ---------------------------
+   DARK SURFACES & FORMS
+   (moved from inline style block and hardened)
+   --------------------------- */
+
+/* Primary dark surface (cards, modal-content etc.) */
+/* Use higher specificity and apply to .card, .modal-content, .dropdown-menu-dark, etc. */
+body.app-bg .dark-surface,
+body.app-bg .card.dark-surface,
+body.app-bg .modal-content.dark-surface,
+body.app-bg .table-dark-surface { /* table wrapper helper if needed */
+  background: #696969 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  border-radius: 12px;
+}
+
+/* Inner card-body look for readable contrast (slightly lighter than outer surface) */
+body.app-bg .dark-card-body,
+body.app-bg .card .dark-card-body,
+body.app-bg .modal-content .dark-card-body {
+  background: rgba(255,255,255,0.02);
+  color: #fff;
+  padding: 1rem;
+  border-radius: 10px;
+}
+
+/* Form controls specifically for dark surfaces (explicit class) */
+.form-control-dark,
+.form-select-dark {
+  background: rgba(255,255,255,0.03);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  transition: box-shadow 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+
+/* Outline variant for header buttons */
+.btn-outline-light-custom {
+  color: #fff;
+  border-color: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.02);
+  transition: background-color .12s ease, transform .08s ease;
+}
+.btn-outline-light-custom:hover,
+.btn-outline-light-custom:focus {
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,0.18);
+}
+
+/* Light-muted text on dark surfaces */
+.text-muted-light {
+  color: rgba(255,255,255,0.80) !important;
+}
+
+/* compact form small variant */
+.form-control-dark.small, .form-select-dark.small {
+  padding: .28rem .5rem;
+  font-size: .875rem;
+}
+
+/* Dropdowns styled dark (optional utility class) */
+.dropdown-menu-dark {
+  background: #545454;
+  color: #fff;
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.24);
+}
+
+/* ---------------------------
+   Ensure any form control inside a dark surface inherits the dark styles,
+   even if JS creates plain .form-control elements (no changes to JS required)
+   We use higher specificity (parent + tag) to override bootstrap.
+   --------------------------- */
+
+/* inputs & selects inside .dark-card-body */
+.dark-card-body input.form-control,
+.dark-card-body textarea.form-control,
+.dark-card-body select.form-select,
+.dark-card-body .form-control,
+.dark-card-body .form-select {
+  background: rgba(255,255,255,0.03) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+/* same for controls directly inside .dark-surface (parent card/modal) */
+.dark-surface input.form-control,
+.dark-surface textarea.form-control,
+.dark-surface select.form-select,
+.dark-surface .form-control,
+.dark-surface .form-select {
+  background: rgba(255,255,255,0.03) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+/* And for controls inside .content-card specifically (to capture any remaining elements) */
+.content-card input.form-control,
+.content-card textarea.form-control,
+.content-card select.form-select,
+.content-card .form-control,
+.content-card .form-select {
+  background: rgba(255,255,255,0.03) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+/* Ensure placeholder text is readable on dark backgrounds */
+.dark-card-body ::placeholder,
+.dark-surface ::placeholder,
+.content-card ::placeholder {
+  color: rgba(255,255,255,0.6) !important;
+}
+
+/* Specific: date inputs / number inputs sizing adjustments */
+.dark-card-body input[type="date"],
+.dark-card-body input[type="number"],
+.dark-card-body input[type="text"],
+.dark-card-body input[type="search"],
+.dark-card-body input[type="tel"],
+.dark-card-body input[type="email"],
+.content-card input[type="date"],
+.content-card input[type="number"],
+.content-card input[type="text"] {
+  height: calc(1.5em + 0.9rem);
+  padding: .32rem .6rem;
+}
+
+/* Buttons that appear on dark surfaces: inverse defaults for contrast */
+.dark-surface .btn.btn-primary {
+  background: #36454F;
+  border-color: #36454F;
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(13,110,253,0.12);
+}
+.dark-surface .btn.btn-secondary,
+.dark-surface .btn.btn-outline-secondary {
+  color: #fff;
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.08);
+}
+
+/* Table backgrounds on dark card: keep rows readable (subtle separation) */
+.dark-card-body table.table {
+  color: #fff;
+}
+.dark-card-body table.table thead th {
+  color: rgba(255,255,255,0.95);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.dark-card-body table.table tbody tr td {
+  border-top: 1px solid rgba(255,255,255,0.02);
+}
+
+/* For list-group items inside dark surfaces */
+.dark-card-body .list-group-item {
+  background: transparent;
+  color: #fff;
+  border: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* For modals that are dark-surface — ensure close button is visible */
+.dark-surface .btn-close {
+  filter: invert(1) grayscale(1) brightness(2) !important;
+}
+
+/* Make dropdown-menus inside header remain light (reads better) while others can be dark */
+header .dropdown-menu { background: #fff !important; color: #0f172a !important; }
+.dark-surface .dropdown-menu { background: rgba(255,255,255,0.03) !important; color: #fff !important; border-color: rgba(255,255,255,0.06) !important; }
+
+/* ---------------------------
+   Orders Explorer / Explorer controls
+   --------------------------- */
+/* keep compact controls readable */
+#ordersExplorerModal .form-control,
+#ordersExplorerModal .form-select {
+  min-width: 160px;
+}
+
+/* ---------------------------
+   Misc visual tweaks (keeps previous styles)
+   --------------------------- */
+
+/* Provide a gentle focus ring for keyboard users (also on dark surfaces) */
+:focus {
+  outline-offset: 2px;
+}
+.dark-card-body .form-control:focus,
+.dark-card-body .form-select:focus,
+.content-card .form-control:focus,
+.content-card .form-select:focus,
+body.app-bg .btn:focus {
+  outline: 3px solid rgba(255,255,255,0.08);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.26);
+}
+
+/* Small visual polish for the toast so it reads well over content */
+#assignToast .toast-header { background: transparent; }
+
+/* ---------------------------
+   Responsive & small-screen polish
+   --------------------------- */
+@media (max-width: 767.98px) {
+  .brand-name { font-size: 1rem; }
+  .form-control-dark.small, .form-select-dark.small { font-size: .875rem; }
+  .dark-card-body { padding: 0.8rem; }
+  header.bg-white.shadow-sm { padding: 0.38rem 0.5rem; }
+}
+
+   /* -----------------------------
+   Force select / dropdowns to match dark surfaces
+   Apply to content-card, dark-card-body and dark-surface
+   ----------------------------- */
+
+/* Dark selects (Bootstrap .form-select) inside the dark UIs */
+.content-card select.form-select,
+.content-card .form-select,
+.dark-card-body select.form-select,
+.dark-card-body .form-select,
+.dark-surface select.form-select,
+.dark-surface .form-select {
+  background: rgba(255,255,255,0.03) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 8px !important;
+  -webkit-appearance: none !important; /* try to get consistent appearance */
+  appearance: none !important;
+  padding-right: 2.25rem !important; /* leave room for chevron */
+  box-shadow: none !important;
+  /* hint to UA that control should use dark UI where supported */
+  color-scheme: dark;
+}
+
+/* Ensure the select's caret/chevron remains visible on dark background */
+.content-card select.form-select::-ms-expand,
+.dark-card-body select.form-select::-ms-expand,
+.dark-surface select.form-select::-ms-expand {
+  display: block;
+  filter: invert(1) brightness(2);
+}
+
+/* Style the select's focused state for contrast */
+.content-card select.form-select:focus,
+.dark-card-body select.form-select:focus,
+.dark-surface select.form-select:focus {
+  background: rgba(255,255,255,0.04) !important;
+  border-color: rgba(255,255,255,0.14) !important;
+  outline: none !important;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.28) !important;
+}
+
+/* Drop-down menus (Bootstrap .dropdown-menu) used inside dark surfaces */
+.content-card .dropdown-menu,
+.dark-card-body .dropdown-menu,
+.dark-surface .dropdown-menu {
+  background: #545454 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.28) !important;
+}
+
+/* Dropdown items in dark menus */
+.content-card .dropdown-menu .dropdown-item,
+.dark-card-body .dropdown-menu .dropdown-item,
+.dark-surface .dropdown-menu .dropdown-item {
+  color: #fff !important;
+}
+.content-card .dropdown-menu .dropdown-item:hover,
+.dark-card-body .dropdown-menu .dropdown-item:hover,
+.dark-surface .dropdown-menu .dropdown-item:hover {
+  background: rgba(255,255,255,0.06) !important;
+  color: #fff !important;
+}
+
+/* Try to style native <option> elements — browsers vary in support.
+   Many mobile browsers will ignore these rules; however, desktop Chromium and Firefox accept them. */
+.content-card select.form-select option,
+.dark-card-body select.form-select option,
+.dark-surface select.form-select option {
+  background: #696969 !important;
+  color: #ffffff !important;
+}
+
+/* Fallback: if the browser ignores option styles, at least ensure the opened native menu uses dark hints */
+.content-card select.form-select,
+.dark-card-body select.form-select,
+.dark-surface select.form-select {
+  /* UA may respect color-scheme when rendering native popup */
+  color-scheme: dark !important;
+}
+
+/* Optional small visual: apply a dark chevron overlay (only if you want consistent chevron color)
+   Use when you can't rely on the native caret color. This places a subtle chevron using CSS pseudo-element. */
+.content-card .form-select.custom-dark::after,
+.dark-card-body .form-select.custom-dark::after,
+.dark-surface .form-select.custom-dark::after {
+  content: "\25BC"; /* small down-triangle */
+  position: absolute;
+  right: .9rem;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: rgba(255,255,255,0.9);
+  font-size: .8rem;
+}
+
+/* If you use the CSS chevron approach, ensure the parent is position:relative */
+.content-card .form-select.custom-dark,
+.dark-card-body .form-select.custom-dark,
+.dark-surface .form-select.custom-dark {
+  position: relative;
+  padding-right: 2.5rem;
+}
+
+
+/* -----------------------------
+   Dark table overrides for tables inside dark surfaces / content-card
+   (overrides Bootstrap table defaults)
+   ----------------------------- */
+
+/* Scope to tables placed inside your dark surfaces */
+.content-card table.table,
+.content-card .table,
+.dark-card-body table.table,
+.dark-card-body .table,
+.dark-surface table.table,
+.dark-surface .table {
+  background: transparent !important;      /* let the parent surface show through */
+  color: #ffffff !important;
+  border-collapse: separate;
+}
+
+/* THEAD: slightly lighter panel to separate header */
+.content-card table.table thead th,
+.dark-card-body table.table thead th,
+.dark-surface table.table thead th {
+  background: rgba(255,255,255,0.06) !important; /* subtle contrast */
+  color: #fff !important;
+  border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+  vertical-align: middle;
+  font-weight: 600;
+}
+
+/* TBODY rows and cells */
+.content-card table.table tbody tr td,
+.dark-card-body table.table tbody tr td,
+.dark-surface table.table tbody tr td {
+  background: transparent !important;
+  color: #fff !important;
+  border-top: 1px solid rgba(255,255,255,0.02) !important;
+}
+
+/* If you use .table-striped, keep subtle stripes */
+.content-card table.table.table-striped tbody tr:nth-of-type(odd),
+.dark-card-body table.table.table-striped tbody tr:nth-of-type(odd),
+.dark-surface table.table.table-striped tbody tr:nth-of-type(odd) {
+  background: rgba(255,255,255,0.02) !important;
+}
+
+/* Hover state for .table-hover */
+.content-card table.table.table-hover tbody tr:hover,
+.dark-card-body table.table.table-hover tbody tr:hover,
+.dark-surface table.table.table-hover tbody tr:hover {
+  background: rgba(255,255,255,0.045) !important;
+}
+
+/* Small / compact table cells: padding & font color */
+.content-card table.table th,
+.content-card table.table td,
+.dark-card-body table.table th,
+.dark-card-body table.table td,
+.dark-surface table.table th,
+.dark-surface table.table td {
+  padding: .45rem .65rem;
+  color: #fff !important;
+}
+
+/* Center / right aligned header cells keep contrast */
+.content-card table.table thead th.text-end,
+.dark-card-body table.table thead th.text-end,
+.dark-surface table.table thead th.text-end {
+  text-align: right;
+}
+
+/* Ensure striped header on mobile where th becomes stacked is still readable */
+@media (max-width: 576px) {
+  .content-card table.table thead th,
+  .dark-card-body table.table thead th,
+  .dark-surface table.table thead th {
+    background: rgba(255,255,255,0.06) !important;
+  }
+}
+
+/* For tables with .table-borderless override any white borders */
+.content-card table.table.table-borderless tbody tr td,
+.dark-card-body table.table.table-borderless tbody tr td,
+.dark-surface table.table.table-borderless tbody tr td {
+  border-top: 0 !important;
+}
+
+/* Make sure small helper text in table cells is readable */
+.content-card table.table small,
+.dark-card-body table.table small,
+.dark-surface table.table small {
+  color: rgba(255,255,255,0.85) !important;
+}
+
+/* Ensure dropdowns inside table rows (e.g. action menus) match dark surface */
+.content-card table.table .dropdown-menu,
+.dark-card-body table.table .dropdown-menu,
+.dark-surface table.table .dropdown-menu {
+  background: #545454 !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+/* Safety: override bootstrap's table background variables inside these scopes */
+.content-card table.table,
+.dark-card-body table.table,
+.dark-surface table.table {
+  --bs-table-bg: transparent !important;
+  --bs-table-striped-bg: rgba(255,255,255,0.02) !important;
+  --bs-table-striped-color: #fff !important;
+  --bs-table-hover-bg: rgba(255,255,255,0.045) !important;
+  --bs-table-hover-color: #fff !important;
+}
+
+
+/* -------------------------------------------------------
+   Checkboxes & Radios — dark-surface overrides
+   Scope: .content-card, .dark-card-body, .dark-surface
+   ------------------------------------------------------- */
+
+/* Make labels readable on dark surfaces */
+.content-card .form-check-label,
+.dark-card-body .form-check-label,
+.dark-surface .form-check-label {
+  color: #ffffff !important;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Base override for Bootstrap's form-check-input inside dark surfaces */
+.content-card .form-check-input,
+.dark-card-body .form-check-input,
+.dark-surface .form-check-input {
+  /* prefer native accent-color (modern browsers) for simplest, most consistent checked visuals */
+  accent-color: #36454F;               /* blue primary accent */
+  background-color: rgba(255,255,255,0.02) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-top: 0.12rem; /* vertical alignment with label text */
+  box-shadow: none !important;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 120ms ease;
+}
+
+/* Focus state: make it visible on dark bg */
+.content-card .form-check-input:focus,
+.dark-card-body .form-check-input:focus,
+.dark-surface .form-check-input:focus {
+  outline: 3px solid rgba(13,110,253,0.14);
+  outline-offset: 2px;
+  box-shadow: 0 8px 22px rgba(13,110,253,0.08);
+}
+
+/* Checked/active appearance where accent-color may not be applied by user agent:
+   ensure we show a visible filled box/circle for :checked */
+.content-card .form-check-input:checked,
+.dark-card-body .form-check-input:checked,
+.dark-surface .form-check-input:checked {
+  background-color: #36454F !important;
+  border-color: #36454F !important;
+  color: #fff !important;
+}
+
+/* Disabled appearance */
+.content-card .form-check-input:disabled,
+.dark-card-body .form-check-input:disabled,
+.dark-surface .form-check-input:disabled {
+  background-color: rgba(255,255,255,0.03) !important;
+  border-color: rgba(255,255,255,0.04) !important;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Make checkboxes slightly square and radios round (matches native) */
+.content-card .form-check-input[type="checkbox"],
+.dark-card-body .form-check-input[type="checkbox"],
+.dark-surface .form-check-input[type="checkbox"] {
+  border-radius: 4px;
+}
+.content-card .form-check-input[type="radio"],
+.dark-card-body .form-check-input[type="radio"],
+.dark-surface .form-check-input[type="radio"] {
+  border-radius: 50%;
+}
+
+/* Bootstrap switches (.form-switch) tune */
+.content-card .form-switch .form-check-input,
+.dark-card-body .form-switch .form-check-input,
+.dark-surface .form-switch .form-check-input {
+  width: 2.2rem;
+  height: 1.2rem;
+  background-color: rgba(255,255,255,0.06) !important;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  position: relative;
+  transition: background-color 140ms ease, border-color 140ms ease;
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 0;
+}
+
+/* Draw the switch thumb using a pseudo-element (works without changing markup) */
+.content-card .form-switch .form-check-input::after,
+.dark-card-body .form-switch .form-check-input::after,
+.dark-surface .form-switch .form-check-input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(1.2rem - 4px);
+  height: calc(1.2rem - 4px);
+  background: #ffffff;
+  border-radius: 50%;
+  transition: transform 160ms ease, background 160ms ease;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+}
+
+/* Switch checked -> move thumb and tint background */
+.content-card .form-switch .form-check-input:checked,
+.dark-card-body .form-switch .form-check-input:checked,
+.dark-surface .form-switch .form-check-input:checked {
+  background-color: #36454F !important;
+  border-color: #36454F !important;
+}
+.content-card .form-switch .form-check-input:checked::after,
+.dark-card-body .form-switch .form-check-input:checked::after,
+.dark-surface .form-switch .form-check-input:checked::after {
+  transform: translateX(calc(1.0rem));
+  background: #fff;
+}
+
+/* If a label wraps input (inline inputs), ensure spacing is right */
+.content-card .form-check,
+.dark-card-body .form-check,
+.dark-surface .form-check {
+  gap: .5rem;
+  align-items: center;
+}
+
+/* Tweak small form-check-input for compact rows (table cells etc.) */
+.content-card .form-check-input.form-check-input-sm,
+.dark-card-body .form-check-input.form-check-input-sm,
+.dark-surface .form-check-input.form-check-input-sm {
+  width: .95rem;
+  height: .95rem;
+}
+
+/* Accessibility: improve hit area by increasing clickable label region */
+.content-card .form-check-label,
+.dark-card-body .form-check-label,
+.dark-surface .form-check-label {
+  padding-left: .125rem;
+}
+
+/* Make inline form-checks more compact but readable */
+.content-card .form-check.form-check-inline,
+.dark-card-body .form-check.form-check-inline,
+.dark-surface .form-check.form-check-inline {
+  margin-right: .75rem;
+}
+
+/* Ensure checkboxes/radios inside table cells stay aligned and visible */
+.content-card table.table td .form-check-input,
+.dark-card-body table.table td .form-check-input,
+.dark-surface table.table td .form-check-input {
+  margin-top: 0;
+  transform: translateY(0);
+}
+
+/* Final safety: if the UA ignores accent-color, ensure a visible checkmark via SVG background for checkboxes (Desktop Chromium/Firefox) */
+.content-card .form-check-input[type="checkbox"]:checked,
+.dark-card-body .form-check-input[type="checkbox"]:checked,
+.dark-surface .form-check-input[type="checkbox"]:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M6.173 11.414L2.05 7.29 0 9.34l6.173 6.174L16 5.688 13.95 3.64z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 50% 50%;
+  background-size: 60% 60%;
+}
+
+/* Older browsers fallback: reduce reliance on heavy pseudo visuals */
+.content-card .form-check-input::-ms-check,
+.dark-card-body .form-check-input::-ms-check,
+.dark-surface .form-check-input::-ms-check {
+  color: #fff;
+}
+
+/* -------------------------------------------------------
+   End of checkboxes & radios
+   ------------------------------------------------------- */
+
+   /* ------------------------------------------------------------------
+   Accordion dark-surface overrides (ensure these appear AFTER bootstrap)
+   Applies when accordion lives inside .dark-card-body / .content-card
+   ------------------------------------------------------------------ */
+
+.dark-card-body .accordion,
+.content-card .accordion,
+.dark-surface .accordion {
+  background: transparent !important;
+}
+
+/* Accordion item container */
+.dark-card-body .accordion-item,
+.content-card .accordion-item,
+.dark-surface .accordion-item {
+  background: transparent !important;
+  border: 1px solid rgba(255,255,255,0.02) !important;
+  border-radius: 8px;
+  margin-bottom: .5rem;
+  overflow: hidden;
+  box-shadow: none !important;
+}
+
+/* Accordion header button (the clickable bar) */
+.dark-card-body .accordion-button,
+.content-card .accordion-button,
+.dark-surface .accordion-button {
+  background: rgba(255,255,255,0.03) !important; /* subtle dark bar */
+  color: #ffffff !important;
+  border: none !important;
+  padding: .6rem 1rem;
+  box-shadow: none !important;
+  transition: background .12s ease, transform .06s ease;
+  border-radius: 6px !important;
+}
+
+/* Expanded state (open) — slightly lighter */
+.dark-card-body .accordion-button:not(.collapsed),
+.content-card .accordion-button:not(.collapsed),
+.dark-surface .accordion-button:not(.collapsed) {
+  background: rgba(255,255,255,0.06) !important;
+  color: #fff !important;
+  transform: translateY(-1px);
+}
+
+/* Ensure the chevron (pseudo element) is visible on dark bg */
+.dark-card-body .accordion-button::after,
+.content-card .accordion-button::after,
+.dark-surface .accordion-button::after {
+  filter: invert(1) brightness(2) !important;
+  opacity: 0.95;
+}
+
+/* Accordion body (content area) */
+.dark-card-body .accordion-body,
+.content-card .accordion-body,
+.dark-surface .accordion-body {
+  background: transparent !important;
+  color: #ffffff !important;
+  padding: .75rem 1rem;
+  border-top: 1px solid rgba(255,255,255,0.02) !important;
+}
+
+/* Focus / keyboard ring for accessibility */
+.dark-card-body .accordion-button:focus,
+.content-card .accordion-button:focus,
+.dark-surface .accordion-button:focus {
+  outline: 3px solid rgba(255,255,255,0.08) !important;
+  outline-offset: 2px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.22) !important;
+}
+
+/* Compact list-group inside accordion body should inherit dark style */
+.dark-card-body .accordion-body .list-group-item,
+.content-card .accordion-body .list-group-item,
+.dark-surface .accordion-body .list-group-item {
+  background: transparent !important;
+  color: #fff !important;
+  border: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.text-muted, a {
+  color: #fff !important;
+}
+
+
+
+
