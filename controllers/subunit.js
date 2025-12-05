@@ -12,6 +12,13 @@ exports.create = async (req, res) => {
     const unitId = req.params.unitId;
     const name = (req.body.name || '').trim();
 
+    // parse factor (optional)
+    let factor = 1;
+    if (req.body.factor !== undefined && req.body.factor !== null && String(req.body.factor).trim() !== '') {
+      const f = Number(req.body.factor);
+      factor = (isNaN(f) || f <= 0) ? 1 : Math.floor(f);
+    }
+
     if (!mongoose.Types.ObjectId.isValid(unitId)) {
       return res.status(400).send('Invalid unit id');
     }
@@ -20,7 +27,7 @@ exports.create = async (req, res) => {
     const unit = await ServiceCostUnit.findById(unitId);
     if (!unit) return res.status(404).send('Parent unit not found');
 
-    const sub = new ServiceCostSubUnit({ unit: unit._id, name });
+    const sub = new ServiceCostSubUnit({ unit: unit._id, name, factor });
     await sub.save();
 
     if (isAjaxRequest(req)) {
@@ -42,6 +49,13 @@ exports.update = async (req, res) => {
     const { unitId, subunitId } = req.params;
     const name = (req.body.name || '').trim();
 
+    // parse factor (optional)
+    let factor = null;
+    if (req.body.factor !== undefined && req.body.factor !== null && String(req.body.factor).trim() !== '') {
+      const f = Number(req.body.factor);
+      factor = (isNaN(f) || f <= 0) ? null : Math.floor(f);
+    }
+
     if (!mongoose.Types.ObjectId.isValid(unitId) || !mongoose.Types.ObjectId.isValid(subunitId)) {
       return res.status(400).send('Invalid id');
     }
@@ -57,11 +71,12 @@ exports.update = async (req, res) => {
     }
 
     sub.name = name;
+    if (factor !== null) sub.factor = factor;
     await sub.save();
 
     // If AJAX: return JSON so client can update DOM without reload
     if (isAjaxRequest(req)) {
-      return res.json({ ok: true, sub: { _id: sub._id, name: sub.name, unit: sub.unit } });
+      return res.json({ ok: true, sub: { _id: sub._id, name: sub.name, unit: sub.unit, factor: sub.factor } });
     }
 
     // fallback: redirect

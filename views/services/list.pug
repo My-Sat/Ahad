@@ -97,7 +97,8 @@ block content
                       if ush.length
                         ul.list-group.mb-3
                           each su in ush
-                            li.list-group-item.d-flex.justify-content-between.align-items-center
+                            // include data attributes so client can read factor when opening edit modal
+                            li.list-group-item.d-flex.justify-content-between.align-items-center(data-subunit-id=su._id data-factor=(typeof su.factor !== 'undefined' && su.factor !== null) ? su.factor : 1)
                               span.subunit-name= su.name
                               // compact bootstrap dropdown per subunit (uses bootstrap icon)
                               .dropdown.d-inline-block
@@ -120,6 +121,8 @@ block content
                         .col
                           input.form-control(type='text', name='name', placeholder='New sub-unit name (e.g., A4)', required)
                           .invalid-feedback Please provide a sub-unit name.
+                        .col-auto
+                          input.form-control.form-control-sm(type='number', name='factor', min='1', step='1', value='1', title='Print factor (e.g., A4=1, A3=2)', style='width:110px;', placeholder='Factor')
                         .col-auto
                           button.btn.btn-sm.btn-outline-primary(type='submit')
                             span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', style='display:none;')
@@ -209,6 +212,9 @@ block content
             .mb-3
               label.form-label(for='editSubunitName') Sub-unit Name
               input.form-control(type='text', id='editSubunitName', name='name', required)
+            .mb-3
+              label.form-label(for='editSubunitFactor') Print Factor
+              input.form-control(type='number', id='editSubunitFactor', name='factor', min='1', step='1', value='1')
         .modal-footer
           button.btn.btn-outline-light-custom(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary(type='button', id='saveEditSubunitBtn') Save changes
@@ -224,3 +230,126 @@ block content
 
   // small footer note
   .mt-3.text-muted
+
+block append scripts
+  script.
+    (function () {
+      'use strict';
+
+      // Edit Sub-unit modal wiring + AJAX save (keeps existing behavior intact)
+      const editSubunitModalEl = document.getElementById('editSubunitModal');
+      const editSubunitUnitIdEl = document.getElementById('editSubunitUnitId');
+      const editSubunitIdEl = document.getElementById('editSubunitId');
+      const editSubunitNameEl = document.getElementById('editSubunitName');
+      const editSubunitFactorEl = document.getElementById('editSubunitFactor');
+      const saveEditSubunitBtn = document.getElementById('saveEditSubunitBtn');
+      const bootstrapModal = (window.bootstrap && editSubunitModalEl) ? new bootstrap.Modal(editSubunitModalEl) : null;
+
+      // Delegated click: open edit modal and populate fields using data attributes on the subunit row/button
+      document.addEventListener('click', function (ev) {
+        const btn = ev.target.closest ? ev.target.closest('.edit-subunit-btn') : null;
+        if (!btn) return;
+        ev.preventDefault();
+        const unitId = btn.dataset.unitId || btn.getAttribute('data-unit-id') || '';
+        const subId = btn.dataset.subunitId || btn.getAttribute('data-subunit-id') || '';
+        const subName = btn.dataset.subunitName || btn.getAttribute('data-subunit-name') || '';
+
+        // default factor
+        let factor = 1;
+        try {
+          const li = btn.closest('li') || document.querySelector(`li[data-subunit-id="${subId}"]`) || null;
+          if (li && li.dataset && typeof li.dataset.factor !== 'undefined') {
+            const f = Number(li.dataset.factor);
+            if (!isNaN(f) && f >= 1) factor = Math.floor(f);
+          } else {
+            const anyEl = document.querySelector(`[data-subunit-id="${subId}"]`);
+            if (anyEl && anyEl.dataset && typeof anyEl.dataset.factor !== 'undefined') {
+              const f = Number(anyEl.dataset.factor);
+              if (!isNaN(f) && f >= 1) factor = Math.floor(f);
+            }
+          }
+        } catch (e) { factor = 1; }
+
+        if (editSubunitUnitIdEl) editSubunitUnitIdEl.value = unitId;
+        if (editSubunitIdEl) editSubunitIdEl.value = subId;
+        if (editSubunitNameEl) editSubunitNameEl.value = subName;
+        if (editSubunitFactorEl) editSubunitFactorEl.value = String(factor || 1);
+
+        if (bootstrapModal) bootstrapModal.show();
+      });
+
+      // Save handler: PUT /admin/units/:unitId/subunits/:subunitId
+      if (saveEditSubunitBtn) {
+        saveEditSubunitBtn.addEventListener('click', async function () {
+          const unitId = editSubunitUnitIdEl ? editSubunitUnitIdEl.value : '';
+          const subId = editSubunitIdEl ? editSubunitIdEl.value : '';
+          const name = editSubunitNameEl ? (editSubunitNameEl.value || '').trim() : '';
+          const factorRaw = editSubunitFactorEl ? String(editSubunitFactorEl.value || '') : '';
+          if (!unitId || !subId || !name) {
+            if (editSubunitNameEl) editSubunitNameEl.classList.add('is-invalid');
+            return;
+          }
+          let factor = 1;
+          if (factorRaw !== '') {
+            const f = Number(factorRaw);
+            if (!isNaN(f) && isFinite(f) && f >= 1) factor = Math.floor(f);
+            else { if (editSubunitFactorEl) editSubunitFactorEl.classList.add('is-invalid'); return; }
+          }
+
+          saveEditSubunitBtn.disabled = true;
+          try {
+            const body = new URLSearchParams();
+            body.append('name', name);
+            body.append('factor', String(factor));
+
+            const url = `/admin/units/${encodeURIComponent(unitId)}/subunits/${encodeURIComponent(subId)}`;
+            const res = await fetch(url, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+              body: body.toString()
+            });
+
+            if (!res.ok) {
+              const ct = res.headers.get('content-type') || '';
+              if (ct.includes('application/json')) {
+                const j = await res.json().catch(()=>null);
+                alert((j && j.error) ? j.error : 'Failed to update sub-unit');
+                return;
+              }
+              return window.location.reload();
+            }
+
+            const j = await res.json().catch(()=>null);
+            if (!j || !j.ok) return window.location.reload();
+
+            // update DOM row in place if present
+            try {
+              const selectorCandidates = [
+                `li[data-subunit-id="${subId}"]`,
+                `[data-subunit-id="${subId}"]`,
+                `li[data-id="${subId}"]`,
+                `tr[data-id="${subId}"]`
+              ];
+              let el = null;
+              for (const sel of selectorCandidates) { el = document.querySelector(sel); if (el) break; }
+              if (el) {
+                const nameEl = el.querySelector('.subunit-name');
+                if (nameEl) nameEl.textContent = name;
+                el.dataset.factor = String(factor);
+                const btn = el.querySelector('.edit-subunit-btn');
+                if (btn && btn.dataset) btn.dataset.subunitName = name;
+                try { window.showGlobalToast && window.showGlobalToast('Sub-unit updated', 1600); } catch(_) {}
+              } else {
+                window.location.reload();
+              }
+            } catch (domErr) { console.warn('Failed to update sub-unit row in DOM', domErr); window.location.reload(); }
+
+            if (bootstrapModal) bootstrapModal.hide();
+          } catch (err) {
+            console.error('save edit subunit err', err);
+            alert('Failed to update sub-unit (network error)');
+          } finally { saveEditSubunitBtn.disabled = false; }
+        });
+      }
+
+    })();

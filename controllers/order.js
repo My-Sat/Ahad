@@ -231,19 +231,37 @@ const selectionsForOrder = (pr.selections || []).map(s => ({
   }
 
   // store pages as original pages so other parts (material matching, printer usage) still use original pages
-builtItems.push({
-  service: it.serviceId,
-  printer: printerId, // may be null
-  selections: selectionsForOrder,
-  selectionLabel,
-  unitPrice,
-  pages,               // raw pages entered by user (kept for material/printer logic)
-  effectiveQty: effectiveQtyForPrice, // server-authoritative quantity used for pricing (e.g. ceil(pages/2) when F/B)
-  subtotal,            // computed using effectiveQty (server authoritative)
-  spoiled: Number(it.spoiled) || 0,
-  fb: !!(it.fb || usedFB),  // store original intent (client flag) OR our usedFB calc
-  printerType // NEW: 'monochrome' | 'colour' | null
-});
+  // compute print factor from populated pr.selections -> subUnit.factor (default 1)
+  let printFactor = 1;
+  try {
+    if (pr && Array.isArray(pr.selections)) {
+      // multiply factors of any populated subUnits (most cases only one relevant subUnit like size)
+      printFactor = pr.selections.reduce((acc, s) => {
+        const f = (s && s.subUnit && (s.subUnit.factor !== undefined && s.subUnit.factor !== null)) ? Number(s.subUnit.factor) : 1;
+        const fv = (isNaN(f) || f <= 0) ? 1 : f;
+        return acc * fv;
+      }, 1);
+      // coerce to integer
+      printFactor = Math.max(1, Math.floor(printFactor));
+    }
+  } catch (pfErr) {
+    printFactor = 1;
+  }
+
+  builtItems.push({
+    service: it.serviceId,
+    printer: printerId, // may be null
+    selections: selectionsForOrder,
+    selectionLabel,
+    unitPrice,
+    pages,               // raw pages entered by user (kept for material/printer logic)
+    effectiveQty: effectiveQtyForPrice, // server-authoritative quantity used for pricing (e.g. ceil(pages/2) when F/B)
+    subtotal,            // computed using effectiveQty (server authoritative)
+    spoiled: Number(it.spoiled) || 0,
+    fb: !!(it.fb || usedFB),  // store original intent (client flag) OR our usedFB calc
+    printerType, // NEW: 'monochrome' | 'colour' | null
+    printFactor // NEW: multiplier for printer counts (default 1)
+  });
   total += subtotal;
 }
     total = Number(total.toFixed(2));
@@ -355,41 +373,44 @@ try {
 try {
   const PrinterUsage = require('../models/printer_usage');
   // for each order item, if printer exists, increment that printer by pages (QTY)
-  for (let idx = 0; idx < builtItems.length; idx++) {
-    const it = builtItems[idx];
-    if (!it.printer) continue;
-    // pages (quantity) default is 1 already
-    const pages = Number(it.pages) || 1;
-    // We record pages as count increment. Do NOT include 'spoiled' for printer count unless you want that
-    const count = Math.max(0, Math.floor(pages));
+for (let idx = 0; idx < builtItems.length; idx++) {
+  const it = builtItems[idx];
+  if (!it.printer) continue;
+  // pages (raw) default is 1 already
+  const pages = Number(it.pages) || 1;
+  // base count is floor(pages) (we intentionally don't include 'spoiled' for printer usage)
+  const baseCount = Math.max(0, Math.floor(pages));
+  const factor = (it.printFactor && !isNaN(Number(it.printFactor))) ? Math.max(1, Math.floor(Number(it.printFactor))) : 1;
+  // final usage count applied to printer = baseCount * factor
+  const usageCount = Math.max(0, Math.floor(baseCount * factor));
 
-    // determine type for this usage (may be 'monochrome'|'colour'|null)
-    const usageType = (it.printerType === 'monochrome' || it.printerType === 'colour') ? it.printerType : null;
+  // determine type for this usage (may be 'monochrome'|'colour'|null)
+  const usageType = (it.printerType === 'monochrome' || it.printerType === 'colour') ? it.printerType : null;
 
-    // create usage record
-    await PrinterUsage.create({
-      printer: it.printer,
-      orderId: order.orderId,
-      orderRef: order._id,
-      itemIndex: idx,
-      count,
-      type: usageType,
-      note: 'order-created'
-    });
+  // create usage record (store final usageCount)
+  await PrinterUsage.create({
+    printer: it.printer,
+    orderId: order.orderId,
+    orderRef: order._id,
+    itemIndex: idx,
+    count: usageCount,
+    type: usageType,
+    note: 'order-created'
+  });
 
-    // update printer aggregate (atomic increment)
-    try {
-      if (usageType === 'monochrome') {
-        await Printer.findByIdAndUpdate(it.printer, { $inc: { monochromeCount: count, totalCount: count } });
-      } else if (usageType === 'colour') {
-        await Printer.findByIdAndUpdate(it.printer, { $inc: { colourCount: count, totalCount: count } });
-      } else {
-        await Printer.findByIdAndUpdate(it.printer, { $inc: { totalCount: count } });
-      }
-    } catch (pErr) {
-      console.error('Failed to increment printer counts', pErr, 'printerId=', it.printer);
+  // update printer aggregate (atomic increment) with usageCount
+  try {
+    if (usageType === 'monochrome') {
+      await Printer.findByIdAndUpdate(it.printer, { $inc: { monochromeCount: usageCount, totalCount: usageCount } });
+    } else if (usageType === 'colour') {
+      await Printer.findByIdAndUpdate(it.printer, { $inc: { colourCount: usageCount, totalCount: usageCount } });
+    } else {
+      await Printer.findByIdAndUpdate(it.printer, { $inc: { totalCount: usageCount } });
     }
+  } catch (pErr) {
+    console.error('Failed to increment printer counts', pErr, 'printerId=', it.printer);
   }
+}
 } catch (puErr) {
   console.error('Printer usage recording error', puErr);
 }
