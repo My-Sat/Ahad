@@ -32,18 +32,24 @@ block content
                     strong(style='color:#ff7a18;') #{customer.firstName || customer.businessName || customer.phone}
                   small.text-muted-light.ms-3 #{customer.phone}
 
-            // selection row (services + books)
+            // selection row (service category + services + books)
             .row.g-2.mb-3
-              .col-md-5
+              .col-md-4
+                label.form-label(for='serviceCategorySelect') Service Category
+                select.form-select.form-select-dark(id='serviceCategorySelect')
+                  option(value='') -- All categories --
+                  // categories will be populated by client JS
+              .col-md-4
                 label.form-label(for='serviceSelect') Service
                 select.form-select.form-select-dark(id='serviceSelect')
                   option(value='') -- Select a service --
                   each s in services
+                    // keep server-provided services for backward compatibility; prices will be loaded client-side
                     option(value=s._id)= s.name
               .col-md-4
                 label.form-label(for='booksDropdown') Books Printing
                 // We'll populate this select's options via client JS
-                div.input-group
+                .input-group
                   select.form-select.form-select-dark(id='booksDropdown')
                     option(value='') -- Select a book --
                   button.btn.btn-outline-light-custom(type='button', id='addBookBtn') Add Book

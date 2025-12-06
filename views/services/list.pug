@@ -8,7 +8,7 @@ block content
       small.text-muted Manage services, units and pricing rules from one place
 
   .row.g-4
-    // Left column — Services list + inline add service form
+    // Left column — Categories selector + Services list + inline add service form
     .col-12.col-lg-7
       .card.h-100.dark-surface
         .card-body.dark-card-body
@@ -16,12 +16,33 @@ block content
             h5.card-title.mb-0 Services
             small.text-muted Choose a service to view details or add a new one below.
 
-          // Add Service inline form (uses Bootstrap validation)
-          form#add-service-form.needs-validation(method='post', action='/admin/services', class='row g-2 align-items-center mb-3', novalidate)
+          // --- Category selector row ---
+          .row.g-2.mb-3.align-items-center
+            .col-auto
+              label.form-label.small.mb-0(for='serviceCategorySelect') Service Category
             .col
+              .input-group
+                select.form-select.form-select-dark(id='serviceCategorySelect', name='serviceCategorySelect')
+                  option(value='') -- All categories --
+                button.btn.btn-outline-light-custom(type='button', id='newCategoryBtn', title='New category')
+                  i.bi.bi-plus-lg.me-1
+                  | New
+                button.btn.btn-outline-light-custom(type='button', id='editCategoryBtn', title='Edit selected category')
+                  i.bi.bi-pencil.me-1
+                  | Edit
+                // optional: remove category (admins only)
+                button.btn.btn-outline-danger(type='button', id='deleteCategoryBtn', title='Delete selected category')
+                  i.bi.bi-trash.me-1
+                  | Delete
+
+          // Add Service inline form (uses Bootstrap validation)
+          // NOTE: category is implicit via the selected category; we add a hidden categoryId input
+          form#add-service-form.needs-validation(method='post', action='/admin/services', class='row g-2 align-items-center mb-3', novalidate)
+            input(type='hidden', name='categoryId', id='addServiceCategoryId', value='')
+            .col-md-8
               input.form-control(type='text', name='name', id='addServiceName', placeholder='New service name (e.g., Printing)', required, autofocus)
               .invalid-feedback Please provide a service name.
-            .col-auto
+            .col-md-4.col-auto
               button.btn.btn-primary(type='submit', id='addServiceBtn')
                 span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', style='display:none;', id='addServiceSpinner')
                 | Add Service
@@ -32,7 +53,7 @@ block content
               strong Added —
               span#addServiceSuccessText
 
-          // Services table
+          // Services table (existing UI) - will be replaced/filtered when a category is selected
           if services && services.length
             table.table.table-hover.table-borderless.mb-0
               thead
@@ -41,7 +62,8 @@ block content
                   th.text-end Actions
               tbody#services-tbody
                 each svc in services
-                  tr(data-id=svc._id)
+                  // attach category id (if present) as a data attribute if backend includes it in services
+                  tr(data-id=svc._id data-category=(svc.category ? svc.category : ''))
                     td
                       a.service-link(href=`/admin/services/${svc._id}`)= svc.name
                     td.text-end
@@ -61,7 +83,7 @@ block content
           else
             .alert.alert-info.mb-0 No services yet. Use the form above to add the first service.
 
-    // Right column — Units and Sub-units manager (accordion)
+    // Right column — Units and Sub-units manager (accordion) (unchanged)
     .col-12.col-lg-5
       .card.h-100.dark-surface
         .card-body.dark-card-body
@@ -92,15 +114,12 @@ block content
 
                   .accordion-collapse.collapse(id=`collapse-${panelId}`, aria-labelledby=`heading-${panelId}`)
                     .accordion-body
-                      // List of sub-units for this unit
                       - const ush = subunits ? subunits.filter(s => String(s.unit) === String(u._id)) : []
                       if ush.length
                         ul.list-group.mb-3
                           each su in ush
-                            // include data attributes so client can read factor when opening edit modal
                             li.list-group-item.d-flex.justify-content-between.align-items-center(data-subunit-id=su._id data-factor=(typeof su.factor !== 'undefined' && su.factor !== null) ? su.factor : 1)
                               span.subunit-name= su.name
-                              // compact bootstrap dropdown per subunit (uses bootstrap icon)
                               .dropdown.d-inline-block
                                 button.btn.btn-sm.btn-outline-light-custom.dropdown-toggle(type='button', id=`subMenuBtn-${su._id}`, data-bs-toggle='dropdown', aria-expanded='false', aria-haspopup='true', title='Actions')
                                   span.visually-hidden Actions
@@ -116,7 +135,6 @@ block content
                       else
                         p.text-muted.mb-3 No sub-units yet.
 
-                      // Add subunit inline form for this unit (with spinner + validation)
                       form.needs-validation(method='post', action=`/admin/units/${u._id}/subunits`, class='row g-2 align-items-center', novalidate)
                         .col
                           input.form-control(type='text', name='name', placeholder='New sub-unit name (e.g., A4)', required)
@@ -124,11 +142,10 @@ block content
                         .col-auto
                           input.form-control.form-control-sm(type='number', name='factor', min='1', step='1', value='1', title='Print factor (e.g., A4=1, A3=2)', style='width:110px;', placeholder='Factor')
                         .col-auto
-                          button.btn.btn-sm.btn-primary(type='submit')
+                          button.btn.btn-sm.btn-outline-primary(type='submit')
                             span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', style='display:none;')
                             | Add
 
-                      // small action row: right-aligned actions for unit (no Created ID shown)
                       .d-flex.justify-content-end.align-items-center.mt-3
                         .dropdown
                           button.btn.btn-sm.btn-outline-light-custom.dropdown-toggle(type='button', id=`unitMenuBtn-${u._id}`, data-bs-toggle='dropdown', aria-expanded='false', aria-haspopup='true', title='Unit actions')
@@ -163,7 +180,7 @@ block content
   form#hiddenDeleteForm(method='post', action='', style='display:none;')
     input(type='hidden', name='_method', value='DELETE')
 
-  // Edit Modals (Service, Unit, Sub-unit) — required for edit_items.js
+  // Edit Modals (Service, Unit, Sub-unit) — required for edit_items.js (unchanged)
   // Edit Service Modal
   .modal.fade(id='editServiceModal', tabindex='-1', aria-labelledby='editServiceModalLabel', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
@@ -219,6 +236,27 @@ block content
           button.btn.btn-outline-light-custom(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary(type='button', id='saveEditSubunitBtn') Save changes
 
+  // --- Category create/edit modal ---
+  .modal.fade(id='categoryModal', tabindex='-1', aria-labelledby='categoryModalLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title(id='categoryModalLabel') Service Category
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          form#categoryForm
+            input(type='hidden', id='categoryId', name='id')
+            .mb-3
+              label.form-label(for='categoryName') Name
+              input.form-control(type='text', id='categoryName', name='name', required)
+            .mb-3
+              .form-check
+                input.form-check-input(type='checkbox', id='categoryShowInOrders', name='showInOrders')
+                label.form-check-label(for='categoryShowInOrders') Show services in Orders (visible to admins and in orders/new)
+        .modal-footer
+          button.btn.btn-outline-light-custom(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary(type='button', id='saveCategoryBtn') Save
+
   // Toast (used for small success messages)
   .position-fixed(bottom='1rem', end='1rem', style='z-index:1080')
     .toast.fade(id='assignToast', role='status', aria-live='polite', aria-atomic='true')
@@ -236,120 +274,211 @@ block append scripts
     (function () {
       'use strict';
 
-      // Edit Sub-unit modal wiring + AJAX save (keeps existing behavior intact)
-      const editSubunitModalEl = document.getElementById('editSubunitModal');
-      const editSubunitUnitIdEl = document.getElementById('editSubunitUnitId');
-      const editSubunitIdEl = document.getElementById('editSubunitId');
-      const editSubunitNameEl = document.getElementById('editSubunitName');
-      const editSubunitFactorEl = document.getElementById('editSubunitFactor');
-      const saveEditSubunitBtn = document.getElementById('saveEditSubunitBtn');
-      const bootstrapModal = (window.bootstrap && editSubunitModalEl) ? new bootstrap.Modal(editSubunitModalEl) : null;
+      // --- Categories helper (AJAX-backed but tolerant) ---
+      const serviceCategorySelect = document.getElementById('serviceCategorySelect');
+      const newCategoryBtn = document.getElementById('newCategoryBtn');
+      const editCategoryBtn = document.getElementById('editCategoryBtn');
+      const deleteCategoryBtn = document.getElementById('deleteCategoryBtn');
+      const categoryModalEl = document.getElementById('categoryModal');
+      const categoryForm = document.getElementById('categoryForm');
+      const categoryIdEl = document.getElementById('categoryId');
+      const categoryNameEl = document.getElementById('categoryName');
+      const categoryShowInOrdersEl = document.getElementById('categoryShowInOrders');
+      const saveCategoryBtn = document.getElementById('saveCategoryBtn');
+      const bootstrapCategoryModal = (window.bootstrap && categoryModalEl) ? new bootstrap.Modal(categoryModalEl) : null;
+      const servicesTbody = document.getElementById('services-tbody');
+      const addServiceCategoryIdEl = document.getElementById('addServiceCategoryId');
+      const addServiceForm = document.getElementById('add-service-form');
 
-      // Delegated click: open edit modal and populate fields using data attributes on the subunit row/button
-      document.addEventListener('click', function (ev) {
-        const btn = ev.target.closest ? ev.target.closest('.edit-subunit-btn') : null;
-        if (!btn) return;
-        ev.preventDefault();
-        const unitId = btn.dataset.unitId || btn.getAttribute('data-unit-id') || '';
-        const subId = btn.dataset.subunitId || btn.getAttribute('data-subunit-id') || '';
-        const subName = btn.dataset.subunitName || btn.getAttribute('data-subunit-name') || '';
-
-        // default factor
-        let factor = 1;
+      async function loadCategories() {
+        if (!serviceCategorySelect) return;
         try {
-          const li = btn.closest('li') || document.querySelector(`li[data-subunit-id="${subId}"]`) || null;
-          if (li && li.dataset && typeof li.dataset.factor !== 'undefined') {
-            const f = Number(li.dataset.factor);
-            if (!isNaN(f) && f >= 1) factor = Math.floor(f);
-          } else {
-            const anyEl = document.querySelector(`[data-subunit-id="${subId}"]`);
-            if (anyEl && anyEl.dataset && typeof anyEl.dataset.factor !== 'undefined') {
-              const f = Number(anyEl.dataset.factor);
-              if (!isNaN(f) && f >= 1) factor = Math.floor(f);
-            }
-          }
-        } catch (e) { factor = 1; }
+          const res = await fetch('/admin/service-categories', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+          if (!res.ok) throw new Error('no categories');
+          const j = await res.json().catch(()=>null);
+          const cats = (j && Array.isArray(j.categories)) ? j.categories : [];
+          // populate the category select
+          serviceCategorySelect.innerHTML = '<option value="">-- All categories --</option>';
+          cats.forEach(c => {
+            const o = document.createElement('option');
+            o.value = c._id;
+            o.textContent = c.name + (c.showInOrders ? '' : ' (hidden)');
+            serviceCategorySelect.appendChild(o);
+          });
+        } catch (err) {
+          // fail silently — page still operates
+          console.warn('Unable to load categories', err);
+        }
+      }
 
-        if (editSubunitUnitIdEl) editSubunitUnitIdEl.value = unitId;
-        if (editSubunitIdEl) editSubunitIdEl.value = subId;
-        if (editSubunitNameEl) editSubunitNameEl.value = subName;
-        if (editSubunitFactorEl) editSubunitFactorEl.value = String(factor || 1);
-
-        if (bootstrapModal) bootstrapModal.show();
-      });
-
-      // Save handler: PUT /admin/units/:unitId/subunits/:subunitId
-      if (saveEditSubunitBtn) {
-        saveEditSubunitBtn.addEventListener('click', async function () {
-          const unitId = editSubunitUnitIdEl ? editSubunitUnitIdEl.value : '';
-          const subId = editSubunitIdEl ? editSubunitIdEl.value : '';
-          const name = editSubunitNameEl ? (editSubunitNameEl.value || '').trim() : '';
-          const factorRaw = editSubunitFactorEl ? String(editSubunitFactorEl.value || '') : '';
-          if (!unitId || !subId || !name) {
-            if (editSubunitNameEl) editSubunitNameEl.classList.add('is-invalid');
-            return;
-          }
-          let factor = 1;
-          if (factorRaw !== '') {
-            const f = Number(factorRaw);
-            if (!isNaN(f) && isFinite(f) && f >= 1) factor = Math.floor(f);
-            else { if (editSubunitFactorEl) editSubunitFactorEl.classList.add('is-invalid'); return; }
-          }
-
-          saveEditSubunitBtn.disabled = true;
-          try {
-            const body = new URLSearchParams();
-            body.append('name', name);
-            body.append('factor', String(factor));
-
-            const url = `/admin/units/${encodeURIComponent(unitId)}/subunits/${encodeURIComponent(subId)}`;
-            const res = await fetch(url, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
-              body: body.toString()
-            });
-
-            if (!res.ok) {
-              const ct = res.headers.get('content-type') || '';
-              if (ct.includes('application/json')) {
-                const j = await res.json().catch(()=>null);
-                alert((j && j.error) ? j.error : 'Failed to update sub-unit');
-                return;
-              }
-              return window.location.reload();
-            }
-
-            const j = await res.json().catch(()=>null);
-            if (!j || !j.ok) return window.location.reload();
-
-            // update DOM row in place if present
-            try {
-              const selectorCandidates = [
-                `li[data-subunit-id="${subId}"]`,
-                `[data-subunit-id="${subId}"]`,
-                `li[data-id="${subId}"]`,
-                `tr[data-id="${subId}"]`
-              ];
-              let el = null;
-              for (const sel of selectorCandidates) { el = document.querySelector(sel); if (el) break; }
-              if (el) {
-                const nameEl = el.querySelector('.subunit-name');
-                if (nameEl) nameEl.textContent = name;
-                el.dataset.factor = String(factor);
-                const btn = el.querySelector('.edit-subunit-btn');
-                if (btn && btn.dataset) btn.dataset.subunitName = name;
-                try { window.showGlobalToast && window.showGlobalToast('Sub-unit updated', 1600); } catch(_) {}
-              } else {
-                window.location.reload();
-              }
-            } catch (domErr) { console.warn('Failed to update sub-unit row in DOM', domErr); window.location.reload(); }
-
-            if (bootstrapModal) bootstrapModal.hide();
-          } catch (err) {
-            console.error('save edit subunit err', err);
-            alert('Failed to update sub-unit (network error)');
-          } finally { saveEditSubunitBtn.disabled = false; }
+      // show New Category modal
+      if (newCategoryBtn) {
+        newCategoryBtn.addEventListener('click', function () {
+          if (categoryIdEl) categoryIdEl.value = '';
+          if (categoryNameEl) categoryNameEl.value = '';
+          if (categoryShowInOrdersEl) categoryShowInOrdersEl.checked = true;
+          if (bootstrapCategoryModal) bootstrapCategoryModal.show();
         });
       }
+
+      // edit selected category
+      if (editCategoryBtn) {
+        editCategoryBtn.addEventListener('click', function () {
+          const id = serviceCategorySelect ? serviceCategorySelect.value : '';
+          if (!id) { alert('Select a category to edit'); return; }
+          // try to fetch details
+          fetch(`/admin/service-categories/${encodeURIComponent(id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.ok ? r.json().catch(()=>null) : null)
+            .then(j => {
+              if (j && j.category) {
+                const c = j.category;
+                if (categoryIdEl) categoryIdEl.value = c._id;
+                if (categoryNameEl) categoryNameEl.value = c.name || '';
+                if (categoryShowInOrdersEl) categoryShowInOrdersEl.checked = !!c.showInOrders;
+                if (bootstrapCategoryModal) bootstrapCategoryModal.show();
+              } else {
+                // fallback - just open modal for manual edit
+                if (categoryIdEl) categoryIdEl.value = id;
+                if (categoryNameEl) categoryNameEl.value = '';
+                if (categoryShowInOrdersEl) categoryShowInOrdersEl.checked = true;
+                if (bootstrapCategoryModal) bootstrapCategoryModal.show();
+              }
+            }).catch(()=> {
+              if (categoryIdEl) categoryIdEl.value = id;
+              if (categoryNameEl) categoryNameEl.value = '';
+              if (categoryShowInOrdersEl) categoryShowInOrdersEl.checked = true;
+              if (bootstrapCategoryModal) bootstrapCategoryModal.show();
+            });
+        });
+      }
+
+      // delete selected category (confirm)
+      if (deleteCategoryBtn) {
+        deleteCategoryBtn.addEventListener('click', function () {
+          const id = serviceCategorySelect ? serviceCategorySelect.value : '';
+          if (!id) { alert('Select a category to delete'); return; }
+          if (!confirm('Delete this category? Services in it will not be removed.')) return;
+          fetch(`/admin/service-categories/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          }).then(r => {
+            if (!r.ok) return r.text().then(t => { throw new Error(t || 'Failed'); });
+            loadCategories();
+            // clear category selection
+            if (serviceCategorySelect) serviceCategorySelect.value = '';
+            // show all services
+            const rows = servicesTbody ? servicesTbody.querySelectorAll('tr') : [];
+            rows.forEach(r => r.style.display = '');
+            if (addServiceCategoryIdEl) addServiceCategoryIdEl.value = '';
+          }).catch(err => { console.warn('Failed to delete category', err); alert('Failed to delete category'); });
+        });
+      }
+
+      // Save category (create or update)
+      if (saveCategoryBtn) {
+        saveCategoryBtn.addEventListener('click', async function () {
+          const id = categoryIdEl ? (categoryIdEl.value || '') : '';
+          const name = categoryNameEl ? (categoryNameEl.value || '').trim() : '';
+          const showInOrders = categoryShowInOrdersEl ? !!categoryShowInOrdersEl.checked : true;
+          if (!name) { if (categoryNameEl) categoryNameEl.classList.add('is-invalid'); return; }
+          saveCategoryBtn.disabled = true;
+          try {
+            const payload = { name, showInOrders: showInOrders ? '1' : '0' };
+            const url = id ? `/admin/service-categories/${encodeURIComponent(id)}` : '/admin/service-categories';
+            const method = id ? 'PUT' : 'POST';
+            const res = await fetch(url, {
+              method,
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+              body: new URLSearchParams(payload).toString()
+            });
+            if (!res.ok) {
+              const j = await res.json().catch(()=>null);
+              alert((j && j.error) ? j.error : 'Failed to save category');
+              return;
+            }
+            await loadCategories();
+            if (bootstrapCategoryModal) bootstrapCategoryModal.hide();
+          } catch (err) {
+            console.error('save category err', err);
+            alert('Failed to save category (network)');
+          } finally { saveCategoryBtn.disabled = false; }
+        });
+      }
+
+      // When category changes, filter services table to match category AND set hidden category input used by add-service form.
+      if (serviceCategorySelect) {
+        serviceCategorySelect.addEventListener('change', function () {
+          const id = this.value;
+          // set hidden input so new services are created under selected category
+          if (addServiceCategoryIdEl) addServiceCategoryIdEl.value = id || '';
+
+          // If backend exposes endpoint to list services for a category, try it first.
+          if (!id) {
+            // show all rows
+            const rows = servicesTbody ? servicesTbody.querySelectorAll('tr') : [];
+            rows.forEach(r => r.style.display = '');
+            return;
+          }
+          // Try AJAX: GET /admin/service-categories/:id/services (fallback to filtering by data-category attr)
+          fetch(`/admin/service-categories/${encodeURIComponent(id)}/services`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => {
+              if (!r.ok) throw new Error('no endpoint');
+              return r.json().catch(()=>null);
+            })
+            .then(j => {
+              if (j && Array.isArray(j.services)) {
+                // replace services table body with returned services (minimally)
+                if (!servicesTbody) return;
+                servicesTbody.innerHTML = '';
+                j.services.forEach(svc => {
+                  const tr = document.createElement('tr');
+                  tr.dataset.id = svc._id;
+                  if (svc.category) tr.dataset.category = svc.category;
+                  tr.innerHTML = `
+                    <td><a class="service-link" href="/admin/services/${encodeURIComponent(svc._id)}">${escapeHtml(svc.name)}</a></td>
+                    <td class="text-end">
+                      <div class="dropdown d-inline-block">
+                        <button class="btn btn-sm btn-outline-light-custom dropdown-toggle" type="button" data-bs-toggle="dropdown">Actions</button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li><button class="dropdown-item edit-service-btn" data-service-id="${escapeHtml(svc._id)}" data-service-name="${escapeHtml(svc.name)}">Edit</button></li>
+                          <li><button class="dropdown-item open-delete-modal" data-action="/admin/services/${escapeHtml(svc._id)}?_method=DELETE" data-item-type="Service" data-item-name="${escapeHtml(svc.name)}">Delete</button></li>
+                        </ul>
+                      </div>
+                    </td>`;
+                  servicesTbody.appendChild(tr);
+                });
+                return;
+              }
+              throw new Error('no services returned');
+            })
+            .catch(() => {
+              // fallback: simple DOM filter using data-category attribute (no server support needed)
+              const rows = servicesTbody ? servicesTbody.querySelectorAll('tr') : [];
+              rows.forEach(r => {
+                const cat = r.dataset.category || '';
+                r.style.display = (cat && String(cat) === String(id)) ? '' : 'none';
+              });
+            });
+        });
+      }
+
+      // Ensure add-service form includes selected categoryId when submitted (covers non-AJAX submission too)
+      if (addServiceForm) {
+        addServiceForm.addEventListener('submit', function (ev) {
+          // category is already updated on change event, but ensure it is set just before submit
+          const cat = serviceCategorySelect ? serviceCategorySelect.value : '';
+          if (addServiceCategoryIdEl) addServiceCategoryIdEl.value = cat || '';
+          // leave default submission behavior (server accepts categoryId)
+        });
+      }
+
+      // Escape helper used above
+      function escapeHtml(s) {
+        if (!s && s !== 0) return '';
+        return String(s).replace(/[&<>"'`=\/]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
+      }
+
+      // initial load
+      loadCategories();
 
     })();

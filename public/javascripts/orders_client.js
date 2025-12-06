@@ -50,6 +50,100 @@ document.addEventListener('DOMContentLoaded', function () {
   let printers = []; // list of printers for the currently loaded service
   let books = [];    // list of available books (basic metadata)
 
+    // ---------- Service categories (populate category select + filter services) ----------
+  const serviceCategorySelect = document.getElementById('serviceCategorySelect');
+
+  async function loadServiceCategories() {
+    if (!serviceCategorySelect) return;
+    try {
+      const res = await fetch('/admin/service-categories', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      if (!res.ok) throw new Error('no categories endpoint');
+      const j = await res.json().catch(()=>null);
+      const cats = (j && Array.isArray(j.categories)) ? j.categories : [];
+      serviceCategorySelect.innerHTML = '<option value="">-- All categories --</option>';
+      cats.forEach(c => {
+        const o = document.createElement('option');
+        o.value = c._id;
+        o.textContent = c.name;
+        serviceCategorySelect.appendChild(o);
+      });
+    } catch (err) {
+      // endpoint not available — ignore
+      console.warn('loadServiceCategories failed', err);
+    }
+  }
+
+  async function loadServicesForCategory(catId) {
+    // if no select present or no category chosen, fallback to original behavior
+    if (!serviceSelect) return;
+    if (!catId) {
+      // if server rendered services are present, leave them; otherwise clear
+      // keep existing options if already present
+      return;
+    }
+    try {
+      const res = await fetch(`/admin/service-categories/${encodeURIComponent(catId)}/services`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      if (!res.ok) throw new Error('no services-per-category endpoint');
+      const j = await res.json().catch(()=>null);
+      if (!j || !Array.isArray(j.services)) throw new Error('invalid services response');
+      // populate serviceSelect
+      serviceSelect.innerHTML = '<option value="">-- Select a service --</option>';
+      j.services.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s._id;
+        opt.textContent = s.name;
+        serviceSelect.appendChild(opt);
+      });
+      // trigger price load for first service if any
+      if (serviceSelect.options.length > 1) {
+        serviceSelect.selectedIndex = 1;
+        loadPricesForService(serviceSelect.value);
+      } else {
+        prices = [];
+        renderPrices();
+      }
+    } catch (err) {
+      // endpoint not present — fallback to basic client-side filtering if server rendered options carry data-category
+      try {
+        const opts = Array.from(serviceSelect.options || []);
+        opts.forEach(o => {
+          const cat = o.dataset ? o.dataset.category : o.getAttribute('data-category');
+          if (!cat) {
+            // cannot filter, keep as-is
+            o.style.display = '';
+          } else {
+            o.style.display = (String(cat) === String(catId)) ? '' : 'none';
+          }
+        });
+        // select first visible option
+        const firstVisible = Array.from(serviceSelect.options).find(o => o.style.display !== 'none' && o.value);
+        if (firstVisible) {
+          serviceSelect.value = firstVisible.value;
+          loadPricesForService(firstVisible.value);
+        } else {
+          prices = [];
+          renderPrices();
+        }
+      } catch (e) {
+        console.warn('Fallback category filtering failed', e);
+      }
+    }
+  }
+
+  // bind category change
+  if (serviceCategorySelect) {
+    serviceCategorySelect.addEventListener('change', function () {
+      const cid = this.value || '';
+      // clear book preview when changing category
+      if (booksDropdown) booksDropdown.selectedIndex = 0;
+      loadServicesForCategory(cid);
+    });
+  }
+
+  // initial categories load
+  loadServiceCategories();
+
+
   // ---------- helpers ----------
   function formatMoney(n) { return (Number(n) || 0).toFixed(2); }
 

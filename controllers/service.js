@@ -141,7 +141,13 @@ exports.create = async (req, res) => {
       requiresPrinter = (v === 'on' || v === 'true' || v === '1' || v === true);
     }
 
-    const service = new Service({ name: name.trim(), components: [], requiresPrinter });
+    // NEW: optional categoryId
+    let category = null;
+    if (req.body.categoryId && mongoose.Types.ObjectId.isValid(req.body.categoryId)) {
+      category = new mongoose.Types.ObjectId(req.body.categoryId);
+    }
+
+    const service = new Service({ name: name.trim(), components: [], requiresPrinter, category });
     await service.save();
 
     // If AJAX request, return JSON of created service for client-side handling
@@ -180,6 +186,18 @@ exports.update = async (req, res) => {
       service.requiresPrinter = (val === 'on' || val === 'true' || val === '1' || val === true);
     }
 
+    // NEW: handle categoryId if provided (allow empty to unset)
+    if (typeof req.body.categoryId !== 'undefined') {
+      const cid = req.body.categoryId;
+      if (!cid || String(cid).trim() === '') {
+        service.category = null;
+      } else if (mongoose.Types.ObjectId.isValid(cid)) {
+        service.category = new mongoose.Types.ObjectId(cid);
+      } else {
+        return res.status(400).send('Invalid category id');
+      }
+    }
+
     // components may be provided as JSON string or array — only if explicitly provided
     if (req.body.components) {
       let comps = req.body.components;
@@ -191,7 +209,7 @@ exports.update = async (req, res) => {
 
     // If AJAX request, return JSON so client can update DOM without reload
     if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
-      return res.json({ ok: true, service: { _id: service._id, name: service.name, requiresPrinter: !!service.requiresPrinter } });
+      return res.json({ ok: true, service: { _id: service._id, name: service.name, requiresPrinter: !!service.requiresPrinter, category: service.category } });
     }
 
     // fallback: redirect (existing behavior)

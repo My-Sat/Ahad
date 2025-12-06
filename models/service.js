@@ -10,6 +10,8 @@ const ServiceSchema = new mongoose.Schema({
   nameNormalized: { type: String, required: true, trim: true, lowercase: true },
   // NEW: explicit flag indicating this service requires choosing a printer at order time
   requiresPrinter: { type: Boolean, default: false },
+  // NEW: optional category reference
+  category: { type: mongoose.Schema.Types.ObjectId, ref: 'ServiceCategory', default: null },
   components: [ServiceComponentSchema]
 }, { timestamps: true });
 

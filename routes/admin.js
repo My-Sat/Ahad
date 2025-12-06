@@ -11,6 +11,7 @@ router.get('/', (req, res) => res.redirect('/login'));
 const printersController = require('../controllers/printers');
 const usersController = require('../controllers/users');
 const { ensureAdmin } = require('../middlewares/auth');
+const serviceCategoryController = require('../controllers/serviceCategory');
 
 
 // Units
@@ -48,6 +49,20 @@ router.put('/services/:id/prices/:priceId', ensureAdmin, priceController.updateP
 // Prices listing/deletion (optional)
 router.get('/services/:id/prices', ensureAdmin, priceController.listForService);
 router.delete('/services/:id/prices/:priceId', ensureAdmin, priceController.removePrice);
+
+// list categories (AJAX-friendly) — publicly accessible (client uses this)
+router.get('/service-categories', serviceCategoryController.list);
+
+// get single category (AJAX)
+router.get('/service-categories/:id', serviceCategoryController.get);
+
+// list services under a category (used by orders_client.js)
+router.get('/service-categories/:id/services', serviceCategoryController.servicesForCategory);
+
+// create / update / delete (ADMIN only)
+router.post('/service-categories', ensureAdmin, serviceCategoryController.create);
+router.put('/service-categories/:id', ensureAdmin, serviceCategoryController.update);
+router.delete('/service-categories/:id', ensureAdmin, serviceCategoryController.remove);
 
 // Materials
 router.get('/materials', ensureAdmin, materialsController.list);
