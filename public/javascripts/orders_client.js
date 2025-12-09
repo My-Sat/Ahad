@@ -60,11 +60,24 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!res.ok) throw new Error('no categories endpoint');
       const j = await res.json().catch(()=>null);
       const cats = (j && Array.isArray(j.categories)) ? j.categories : [];
+
+// determine whether current user is admin (page sets window._isAdmin as boolean)
+      const isAdmin = (typeof window._isAdmin !== 'undefined') ? (window._isAdmin === true || window._isAdmin === 'true') : false;
+
+// filter categories: only those marked showInOrders OR if admin then include all
+      const visibleCats = cats.filter(c => {
+        // c.showInOrders may be boolean or '0'/'1' strings depending on your backend
+        const show = (typeof c.showInOrders === 'boolean') ? c.showInOrders : (c.showInOrders === '1' || c.showInOrders === 'true' || c.showInOrders === 1);
+        return show || isAdmin;
+      });
+
       serviceCategorySelect.innerHTML = '<option value="">-- All categories --</option>';
-      cats.forEach(c => {
+      visibleCats.forEach(c => {
         const o = document.createElement('option');
         o.value = c._id;
-        o.textContent = c.name;
+        // For admins, label hidden categories as "(hidden)" so admins know they are not visible to normal users
+        const show = (typeof c.showInOrders === 'boolean') ? c.showInOrders : (c.showInOrders === '1' || c.showInOrders === 'true' || c.showInOrders === 1);
+        o.textContent = c.name + (isAdmin && !show ? ' (hidden)' : '');
         serviceCategorySelect.appendChild(o);
       });
     } catch (err) {

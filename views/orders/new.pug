@@ -131,4 +131,7 @@ block content
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
 block append scripts
+  // emit isAdmin to client JS (placed inside block so Pug doesn't complain)
+  script.
+    window._isAdmin = !{JSON.stringify((typeof currentUser !== 'undefined' && currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin') ? true : false)};
   script(src='/public/javascripts/orders_client.js')
