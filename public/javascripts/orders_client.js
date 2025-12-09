@@ -53,96 +53,98 @@ document.addEventListener('DOMContentLoaded', function () {
     // ---------- Service categories (populate category select + filter services) ----------
   const serviceCategorySelect = document.getElementById('serviceCategorySelect');
 
-  async function loadServiceCategories() {
-    if (!serviceCategorySelect) return;
-    try {
-      const res = await fetch('/admin/service-categories', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-      if (!res.ok) throw new Error('no categories endpoint');
-      const j = await res.json().catch(()=>null);
-      const cats = (j && Array.isArray(j.categories)) ? j.categories : [];
+async function loadServiceCategories() {
+  if (!serviceCategorySelect) return;
+  try {
+    const res = await fetch('/admin/service-categories', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    if (!res.ok) throw new Error('no categories endpoint');
+    const j = await res.json().catch(()=>null);
+    const cats = (j && Array.isArray(j.categories)) ? j.categories : [];
 
-// determine whether current user is admin (page sets window._isAdmin as boolean)
-      const isAdmin = (typeof window._isAdmin !== 'undefined') ? (window._isAdmin === true || window._isAdmin === 'true') : false;
+    // determine whether current user is admin (page sets window._isAdmin as boolean)
+    const isAdmin = (typeof window._isAdmin !== 'undefined') ? (window._isAdmin === true || window._isAdmin === 'true') : false;
 
-// filter categories: only those marked showInOrders OR if admin then include all
-      const visibleCats = cats.filter(c => {
-        // c.showInOrders may be boolean or '0'/'1' strings depending on your backend
-        const show = (typeof c.showInOrders === 'boolean') ? c.showInOrders : (c.showInOrders === '1' || c.showInOrders === 'true' || c.showInOrders === 1);
-        return show || isAdmin;
-      });
+    // filter categories: only those marked showInOrders OR if admin then include all
+    const visibleCats = cats.filter(c => {
+      const show = (typeof c.showInOrders === 'boolean') ? c.showInOrders : (c.showInOrders === '1' || c.showInOrders === 'true' || c.showInOrders === 1);
+      return show || isAdmin;
+    });
 
-      serviceCategorySelect.innerHTML = '<option value="">-- All categories --</option>';
-      visibleCats.forEach(c => {
-        const o = document.createElement('option');
-        o.value = c._id;
-        // For admins, label hidden categories as "(hidden)" so admins know they are not visible to normal users
-        const show = (typeof c.showInOrders === 'boolean') ? c.showInOrders : (c.showInOrders === '1' || c.showInOrders === 'true' || c.showInOrders === 1);
-        o.textContent = c.name + (isAdmin && !show ? ' (hidden)' : '');
-        serviceCategorySelect.appendChild(o);
-      });
-    } catch (err) {
-      // endpoint not available — ignore
-      console.warn('loadServiceCategories failed', err);
-    }
-  }
+    // Start with a non-actionable placeholder so nothing is treated as "selected" on load
+    serviceCategorySelect.innerHTML = '<option value="" disabled selected hidden>-- Select a category --</option>';
+    visibleCats.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c._id;
+      const show = (typeof c.showInOrders === 'boolean') ? c.showInOrders : (c.showInOrders === '1' || c.showInOrders === 'true' || c.showInOrders === 1);
+      o.textContent = c.name + (isAdmin && !show ? ' (hidden)' : '');
+      serviceCategorySelect.appendChild(o);
+    });
 
-  async function loadServicesForCategory(catId) {
-    // if no select present or no category chosen, fallback to original behavior
-    if (!serviceSelect) return;
-    if (!catId) {
-      // if server rendered services are present, leave them; otherwise clear
-      // keep existing options if already present
-      return;
-    }
-    try {
-      const res = await fetch(`/admin/service-categories/${encodeURIComponent(catId)}/services`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-      if (!res.ok) throw new Error('no services-per-category endpoint');
-      const j = await res.json().catch(()=>null);
-      if (!j || !Array.isArray(j.services)) throw new Error('invalid services response');
-      // populate serviceSelect
+    // Ensure services list is empty until a category is chosen
+    if (serviceSelect) {
       serviceSelect.innerHTML = '<option value="">-- Select a service --</option>';
-      j.services.forEach(s => {
-        const opt = document.createElement('option');
-        opt.value = s._id;
-        opt.textContent = s.name;
-        serviceSelect.appendChild(opt);
-      });
-      // trigger price load for first service if any
-      if (serviceSelect.options.length > 1) {
-        serviceSelect.selectedIndex = 1;
-        loadPricesForService(serviceSelect.value);
-      } else {
-        prices = [];
-        renderPrices();
-      }
-    } catch (err) {
-      // endpoint not present — fallback to basic client-side filtering if server rendered options carry data-category
-      try {
-        const opts = Array.from(serviceSelect.options || []);
-        opts.forEach(o => {
-          const cat = o.dataset ? o.dataset.category : o.getAttribute('data-category');
-          if (!cat) {
-            // cannot filter, keep as-is
-            o.style.display = '';
-          } else {
-            o.style.display = (String(cat) === String(catId)) ? '' : 'none';
-          }
-        });
-        // select first visible option
-        const firstVisible = Array.from(serviceSelect.options).find(o => o.style.display !== 'none' && o.value);
-        if (firstVisible) {
-          serviceSelect.value = firstVisible.value;
-          loadPricesForService(firstVisible.value);
-        } else {
-          prices = [];
-          renderPrices();
-        }
-      } catch (e) {
-        console.warn('Fallback category filtering failed', e);
-      }
+      prices = [];
+      if (typeof renderPrices === 'function') renderPrices();
     }
+  } catch (err) {
+    // endpoint not available — ignore
+    console.warn('loadServiceCategories failed', err);
+  }
+}
+
+async function loadServicesForCategory(catId) {
+  // if no select present, nothing to do
+  if (!serviceSelect) return;
+
+  // If no category chosen, clear the service select and avoid showing any services
+  if (!catId) {
+    serviceSelect.innerHTML = '<option value="">-- Select a service --</option>';
+    // clear prices and UI
+    prices = [];
+    if (typeof renderPrices === 'function') renderPrices();
+    return;
   }
 
+  try {
+    const res = await fetch(`/admin/service-categories/${encodeURIComponent(catId)}/services`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    if (!res.ok) throw new Error('no services-per-category endpoint');
+    const j = await res.json().catch(()=>null);
+    if (!j || !Array.isArray(j.services)) throw new Error('invalid services response');
+
+    // populate serviceSelect but DO NOT auto-select the first one
+    serviceSelect.innerHTML = '<option value="">-- Select a service --</option>';
+    j.services.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s._id;
+      opt.textContent = s.name;
+      serviceSelect.appendChild(opt);
+    });
+
+    // Do NOT automatically select a service or load prices — user must pick a service manually.
+    prices = [];
+    if (typeof renderPrices === 'function') renderPrices();
+
+  } catch (err) {
+    // endpoint not present — fallback to basic client-side filtering if server rendered options carry data-category
+    try {
+      const opts = Array.from(serviceSelect.options || []);
+      opts.forEach(o => {
+        const cat = o.dataset ? o.dataset.category : o.getAttribute('data-category');
+        if (!cat) {
+          // cannot filter, keep as-is
+          o.style.display = '';
+        } else {
+          o.style.display = (String(cat) === String(catId)) ? '' : 'none';
+        }
+      });
+      // do not auto-select — require the user to explicitly choose one
+      prices = [];
+      if (typeof renderPrices === 'function') renderPrices();
+    } catch (e) {
+      console.warn('Fallback category filtering failed', e);
+    }
+  }
+}
   // bind category change
   if (serviceCategorySelect) {
     serviceCategorySelect.addEventListener('change', function () {
@@ -355,123 +357,131 @@ document.addEventListener('DOMContentLoaded', function () {
     try { const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl); inst.show(); } catch (err) { alert(`Order created: ${orderId}\nTotal: GH₵ ${formatMoney(total)}`); }
   }
 
-  // ---------- Price rules rendering ----------
-  // Renders `prices` array into #pricesList
-  function renderPrices(bookMode = false) {
-    if (!prices || !prices.length) {
-      pricesList.innerHTML = '<p class="text-muted">No price rules found for selected service.</p>';
-      return;
-    }
-    const container = document.createElement('div');
-    container.className = 'list-group';
-    prices.forEach(p => {
-      const row = document.createElement('div');
-      row.className = 'list-group-item d-flex align-items-center gap-3 flex-nowrap';
-
-      // left: label (only subunits)
-      const left = document.createElement('div');
-      left.className = 'flex-grow-1 text-truncate';
-      const subOnly = subUnitsOnlyFromLabel(p.selectionLabel || '');
-      const label = document.createElement('div');
-      label.innerHTML = `<strong class="d-inline-block text-truncate" style="max-width:420px;">${escapeHtml(subOnly)}</strong>`;
-      left.appendChild(label);
-
-      // middle: qty input, FB checkbox (only if printer required), optional printer + spoiled inputs
-      const mid = document.createElement('div');
-      mid.className = 'd-flex align-items-center gap-2 flex-nowrap';
-
-      const input = document.createElement('input');
-      input.type = 'number';
-      input.min = '1';
-      input.className = 'form-control form-control-sm pages-input';
-      input.placeholder = serviceRequiresPrinter ? 'Pages' : 'Qty';
-      input.style.width = '90px';
-      mid.appendChild(input);
-
-      // F/B checkbox only for services that require a printer
-      let fbInput = null;
-      if (serviceRequiresPrinter) {
-        const fbWrap = document.createElement('div');
-        fbWrap.className = 'form-check form-check-inline ms-1';
-        fbInput = document.createElement('input');
-        fbInput.type = 'checkbox';
-        fbInput.className = 'form-check-input fb-checkbox';
-        fbInput.id = `fb-${String(p._id)}`;
-        fbInput.setAttribute('data-prid', p._id);
-        const fbLabel = document.createElement('label');
-        fbLabel.className = 'form-check-label small';
-        fbLabel.htmlFor = fbInput.id;
-        fbLabel.textContent = 'F/B';
-        fbWrap.appendChild(fbInput);
-        fbWrap.appendChild(fbLabel);
-        mid.appendChild(fbWrap);
-      }
-
-      // printer select (if serviceRequiresPrinter)
-      if (serviceRequiresPrinter) {
-        const printerWrap = document.createElement('div');
-        printerWrap.className = 'd-flex align-items-center';
-        const sel = document.createElement('select');
-        sel.className = 'form-select form-select-sm printer-select';
-        sel.style.width = '220px';
-        const defaultOpt = document.createElement('option');
-        defaultOpt.value = '';
-        defaultOpt.textContent = '-- Select printer --';
-        sel.appendChild(defaultOpt);
-
-        if (printers && printers.length) {
-          printers.forEach(pr => {
-            const o = document.createElement('option');
-            o.value = pr._id;
-            o.textContent = pr.name || pr._id;
-            sel.appendChild(o);
-          });
-        } else {
-          const o = document.createElement('option');
-          o.value = '';
-          o.textContent = 'No printers available';
-          sel.appendChild(o);
-          sel.disabled = true;
-        }
-        printerWrap.appendChild(sel);
-        mid.appendChild(printerWrap);
-
-        // SPOILED input
-        const spoiledWrap = document.createElement('div');
-        spoiledWrap.className = 'd-flex align-items-center';
-        const spoiledInput = document.createElement('input');
-        spoiledInput.type = 'number';
-        spoiledInput.min = '0';
-        spoiledInput.step = '1';
-        spoiledInput.value = '';
-        spoiledInput.placeholder = 'Spoiled';
-        spoiledInput.setAttribute('aria-label', 'Spoiled count');
-        spoiledInput.className = 'form-control form-control-sm spoiled-input';
-        spoiledInput.style.width = '96px';
-        spoiledInput.title = 'Spoiled count';
-        spoiledWrap.appendChild(spoiledInput);
-        mid.appendChild(spoiledWrap);
-      }
-
-      // right: apply button
-      const right = document.createElement('div');
-      right.className = 'ms-auto';
-      const btn = document.createElement('button');
-      btn.className = 'btn btn-sm btn-primary apply-price-btn';
-      btn.type = 'button';
-      btn.dataset.prId = p._id;
-      btn.textContent = bookMode ? 'Add Book Item' : 'Apply';
-      right.appendChild(btn);
-
-      row.appendChild(left);
-      row.appendChild(mid);
-      row.appendChild(right);
-      container.appendChild(row);
-    });
-
-    pricesList.innerHTML = '';
-    pricesList.appendChild(container);
+// ---------- Price rules rendering ----------
+// Renders `prices` array into #pricesList
+function renderPrices(bookMode = false) {
+  // If not in book preview mode, require an explicit service selection before rendering
+  const serviceSelected = (typeof serviceSelect !== 'undefined' && serviceSelect && serviceSelect.value);
+  if (!bookMode && !serviceSelected) {
+    pricesList.innerHTML = '<p class="text-muted">Select a service to load price rules.</p>';
+    return;
   }
+
+  if (!prices || !prices.length) {
+    pricesList.innerHTML = '<p class="text-muted">No price rules found for selected service.</p>';
+    return;
+  }
+
+  const container = document.createElement('div');
+  container.className = 'list-group';
+  prices.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'list-group-item d-flex align-items-center gap-3 flex-nowrap';
+
+    // left: label (only subunits)
+    const left = document.createElement('div');
+    left.className = 'flex-grow-1 text-truncate';
+    const subOnly = subUnitsOnlyFromLabel(p.selectionLabel || '');
+    const label = document.createElement('div');
+    label.innerHTML = `<strong class="d-inline-block text-truncate" style="max-width:420px;">${escapeHtml(subOnly)}</strong>`;
+    left.appendChild(label);
+
+    // middle: qty input, FB checkbox (only if printer required), optional printer + spoiled inputs
+    const mid = document.createElement('div');
+    mid.className = 'd-flex align-items-center gap-2 flex-nowrap';
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.className = 'form-control form-control-sm pages-input';
+    input.placeholder = serviceRequiresPrinter ? 'Pages' : 'Qty';
+    input.style.width = '90px';
+    mid.appendChild(input);
+
+    // F/B checkbox only for services that require a printer
+    let fbInput = null;
+    if (serviceRequiresPrinter) {
+      const fbWrap = document.createElement('div');
+      fbWrap.className = 'form-check form-check-inline ms-1';
+      fbInput = document.createElement('input');
+      fbInput.type = 'checkbox';
+      fbInput.className = 'form-check-input fb-checkbox';
+      fbInput.id = `fb-${String(p._id)}`;
+      fbInput.setAttribute('data-prid', p._id);
+      const fbLabel = document.createElement('label');
+      fbLabel.className = 'form-check-label small';
+      fbLabel.htmlFor = fbInput.id;
+      fbLabel.textContent = 'F/B';
+      fbWrap.appendChild(fbInput);
+      fbWrap.appendChild(fbLabel);
+      mid.appendChild(fbWrap);
+    }
+
+    // printer select (if serviceRequiresPrinter)
+    if (serviceRequiresPrinter) {
+      const printerWrap = document.createElement('div');
+      printerWrap.className = 'd-flex align-items-center';
+      const sel = document.createElement('select');
+      sel.className = 'form-select form-select-sm printer-select';
+      sel.style.width = '220px';
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = '-- Select printer --';
+      sel.appendChild(defaultOpt);
+
+      if (printers && printers.length) {
+        printers.forEach(pr => {
+          const o = document.createElement('option');
+          o.value = pr._id;
+          o.textContent = pr.name || pr._id;
+          sel.appendChild(o);
+        });
+      } else {
+        const o = document.createElement('option');
+        o.value = '';
+        o.textContent = 'No printers available';
+        sel.appendChild(o);
+        sel.disabled = true;
+      }
+      printerWrap.appendChild(sel);
+      mid.appendChild(printerWrap);
+
+      // SPOILED input
+      const spoiledWrap = document.createElement('div');
+      spoiledWrap.className = 'd-flex align-items-center';
+      const spoiledInput = document.createElement('input');
+      spoiledInput.type = 'number';
+      spoiledInput.min = '0';
+      spoiledInput.step = '1';
+      spoiledInput.value = '';
+      spoiledInput.placeholder = 'Spoiled';
+      spoiledInput.setAttribute('aria-label', 'Spoiled count');
+      spoiledInput.className = 'form-control form-control-sm spoiled-input';
+      spoiledInput.style.width = '96px';
+      spoiledInput.title = 'Spoiled count';
+      spoiledWrap.appendChild(spoiledInput);
+      mid.appendChild(spoiledWrap);
+    }
+
+    // right: apply button
+    const right = document.createElement('div');
+    right.className = 'ms-auto';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm btn-primary apply-price-btn';
+    btn.type = 'button';
+    btn.dataset.prId = p._id;
+    btn.textContent = bookMode ? 'Add Book Item' : 'Apply';
+    right.appendChild(btn);
+
+    row.appendChild(left);
+    row.appendChild(mid);
+    row.appendChild(right);
+    container.appendChild(row);
+  });
+
+  pricesList.innerHTML = '';
+  pricesList.appendChild(container);
+}
 
   // ---------- Load price rules for service ----------
   async function loadPricesForService(serviceId) {

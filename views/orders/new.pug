@@ -36,8 +36,9 @@ block content
             .row.g-2.mb-3
               .col-md-4
                 label.form-label(for='serviceCategorySelect') Service Category
-                select.form-select.form-select-dark(id='serviceCategorySelect')
-                  option(value='') -- All categories --
+                select.form-select.form-select-dark(id='serviceCategorySelect', aria-label='Service Category')
+                  // placeholder — selected but disabled so user must explicitly choose a category
+                  option(value='' disabled selected hidden) -- Select a category --
                   // categories will be populated by client JS
               .col-md-4
                 label.form-label(for='serviceSelect') Service
