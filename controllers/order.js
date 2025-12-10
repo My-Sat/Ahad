@@ -664,68 +664,85 @@ try {
 // GET /api/debtors
 exports.apiGetDebtors = async (req, res) => {
   try {
-    // aggregate: compute paidSoFar and outstanding per order then filter outstanding > 0
-    // aggregate: compute paidSoFar and outstanding per order then filter outstanding > 0
-const rows = await Order.aggregate([
-  // compute paidSoFar (sum of payments.amount)
-  { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
-  // outstanding = total - paidSoFar
-  { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
-  // only those with outstanding > 0
-  { $match: { outstanding: { $gt: 0 } } },
+    // Build base match for date/other filters if needed (currently none)
+    // We'll inject a handledBy filter for non-admins.
 
-  // lookup customer doc (if order.customer references a Customer)
-  { $lookup: {
-      from: 'customers',
-      localField: 'customer',
-      foreignField: '_id',
-      as: 'customer_doc'
-  } },
+    // Determine if we should restrict to current user
+    let userMatch = null;
+    try {
+      const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
+      if (!isAdmin && req.user && req.user._id) {
+        userMatch = { handledBy: new mongoose.Types.ObjectId(req.user._id) };
+      }
+    } catch (e) {
+      console.warn('apiGetDebtors: could not determine user filter', e);
+    }
 
-  // derive a debtorName: prefer explicit order.customerName,
-  // otherwise use customer_doc info (artist -> businessName|phone, else firstName|businessName|phone),
-  // otherwise fallback to empty string
-  { $addFields: {
-      debtorName: {
-        $ifNull: [
-          '$customerName',
-          {
-            $cond: [
-              { $gt: [ { $size: '$customer_doc' }, 0 ] },
+    // aggregate: compute paidSoFar and outstanding per order then filter outstanding > 0
+    const pipeline = [
+      // optionally restrict to orders for this user
+      ...(userMatch ? [{ $match: userMatch }] : []),
+
+      // compute paidSoFar (sum of payments.amount)
+      { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
+      // outstanding = total - paidSoFar
+      { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
+      // only those with outstanding > 0
+      { $match: { outstanding: { $gt: 0 } } },
+
+      // lookup customer doc (if order.customer references a Customer)
+      { $lookup: {
+          from: 'customers',
+          localField: 'customer',
+          foreignField: '_id',
+          as: 'customer_doc'
+      } },
+
+      // derive a debtorName: prefer explicit order.customerName,
+      // otherwise use customer_doc info (artist -> businessName|phone, else firstName|businessName|phone),
+      // otherwise fallback to empty string
+      { $addFields: {
+          debtorName: {
+            $ifNull: [
+              '$customerName',
               {
-                $let: {
-                  vars: { c: { $arrayElemAt: ['$customer_doc', 0] } },
-                  in: {
-                    $cond: [
-                      { $eq: ['$$c.category', 'artist'] },
-                      { $ifNull: ['$$c.businessName', { $ifNull: ['$$c.phone', ''] }] },
-                      { $ifNull: ['$$c.firstName', { $ifNull: ['$$c.businessName', { $ifNull: ['$$c.phone', ''] }] }] }
-                    ]
-                  }
-                }
-              },
-              '' // no customer doc and no customerName -> empty string
+                $cond: [
+                  { $gt: [ { $size: '$customer_doc' }, 0 ] },
+                  {
+                    $let: {
+                      vars: { c: { $arrayElemAt: ['$customer_doc', 0] } },
+                      in: {
+                        $cond: [
+                          { $eq: ['$$c.category', 'artist'] },
+                          { $ifNull: ['$$c.businessName', { $ifNull: ['$$c.phone', ''] }] },
+                          { $ifNull: ['$$c.firstName', { $ifNull: ['$$c.businessName', { $ifNull: ['$$c.phone', ''] }] }] }
+                        ]
+                      }
+                    }
+                  },
+                  '' // no customer doc and no customerName -> empty string
+                ]
+              }
             ]
           }
-        ]
-      }
-  } },
+      } },
 
-  // project fields useful for frontend
-  { $project: {
-      orderId: 1,
-      total: 1,
-      paidSoFar: 1,
-      outstanding: 1,
-      debtorName: 1,
-      createdAt: 1,
-      status: 1
-  } },
+      // project fields useful for frontend
+      { $project: {
+          orderId: 1,
+          total: 1,
+          paidSoFar: 1,
+          outstanding: 1,
+          debtorName: 1,
+          createdAt: 1,
+          status: 1
+      } },
 
-  { $sort: { outstanding: -1, createdAt: -1 } },
-  { $limit: 1000 }
-]);
+      { $sort: { outstanding: -1, createdAt: -1 } },
+      { $limit: 1000 }
+    ];
 
+    const rows = await Order.aggregate(pipeline);
 
     // Normalize output so amounts are numbers with 2 decimals
     const out = (rows || []).map(r => ({
@@ -745,7 +762,6 @@ const rows = await Order.aggregate([
   }
 };
 
-// controllers/orders.js 
 exports.apiListOrders = async (req, res) => {
   try {
     // Accepts ?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -780,6 +796,19 @@ exports.apiListOrders = async (req, res) => {
 
     // Query orders in range, newest first, limit to 1000 for safety
     const q = { createdAt: { $gte: start, $lte: end } };
+
+    // IMPORTANT: restrict list to current user unless admin
+    try {
+      const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
+      if (!isAdmin && req.user && req.user._id) {
+        q.handledBy = new mongoose.Types.ObjectId(req.user._id);
+      }
+      // If req.user is missing we fall back to existing behavior (no extra filter).
+    } catch (e) {
+      // don't block; fallback to existing behavior
+      console.warn('apiListOrders: could not apply user filter', e);
+    }
+
     const orders = await Order.find(q)
       .sort({ createdAt: -1 })
       .limit(1000)
