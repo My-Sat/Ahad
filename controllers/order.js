@@ -738,7 +738,7 @@ exports.apiGetDebtors = async (req, res) => {
           status: 1
       } },
 
-      { $sort: { outstanding: -1, createdAt: -1 } },
+      { $sort: { createdAt: -1 } },
       { $limit: 1000 }
     ];
 

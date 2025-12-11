@@ -861,7 +861,7 @@ if (cashiersTable) {
           <td class="text-end">GH₵ ${escapeHtml(Number(d.amountDue || 0).toFixed(2))}</td>
           <td class="text-end">GH₵ ${escapeHtml(Number(d.paidSoFar || 0).toFixed(2))}</td>
           <td class="text-end">GH₵ ${escapeHtml(out)}</td>
-          <td class="text-center"><button class="btn btn-sm btn-outline-primary view-debtor-order" type="button" data-order-id="${escapeHtml(d.orderId || '')}">Update</button></td>
+          <td class="text-center"><button class="btn btn-sm btn-primary view-debtor-order" type="button" data-order-id="${escapeHtml(d.orderId || '')}">Update</button></td>
         </tr>`;
       }).join('');
       if (tbody) tbody.innerHTML = html;
@@ -1022,7 +1022,7 @@ if (cashiersTable) {
           <td class="text-end">GH₵ ${Number(o.total || 0).toFixed(2)}</td>
           <td>${escapeHtml(o.status || '')}</td>
           <td>${escapeHtml(created)}</td>
-          <td class="text-center"><button class="btn btn-sm btn-outline-secondary orders-explorer-view-btn" data-order-id="${escapeHtml(o.orderId || o._id || '')}">View</button></td>
+          <td class="text-center"><button class="btn btn-sm btn-primary orders-explorer-view-btn" data-order-id="${escapeHtml(o.orderId || o._id || '')}">View</button></td>
         `;
         tbody.appendChild(tr);
       });
