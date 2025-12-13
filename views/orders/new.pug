@@ -26,7 +26,7 @@ block content
               if customer
                 .mb-2
                   div.small.text-muted-light Selected customer:
-                  if customer.category === 'artist'
+                  if customer.category === 'artist' || customer.category === 'organisation'
                     strong(style='color:#ff7a18;') #{customer.businessName || customer.phone}
                   else
                     strong(style='color:#ff7a18;') #{customer.firstName || customer.businessName || customer.phone}
@@ -39,9 +39,11 @@ block content
                     const categoryLabel =
                       customer.category === 'artist'
                         ? 'Artist'
-                        : customer.category === 'regular'
-                          ? 'Regular'
-                          : 'One-Time';
+                        : customer.category === 'organisation'
+                          ? 'Organisation'
+                          : customer.category === 'regular'
+                            ? 'Regular'
+                            : 'One-Time';
                   strong.text-muted-light.ms-3 #{categoryLabel}
 
             // selection row (service category + services + books)

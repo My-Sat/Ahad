@@ -45,14 +45,12 @@ exports.apiCreateCustomer = async (req, res) => {
     if (!phone) return res.status(400).json({ error: 'Phone is required' });
 
     const category = (body.category || 'one_time').toString();
-    if (!['one_time','artist','regular'].includes(category)) return res.status(400).json({ error: 'Invalid category' });
+    if (!['one_time','artist','regular','organisation'].includes(category)) return res.status(400).json({ error: 'Invalid category' });
 
     if (category === 'one_time' && !(body.firstName && body.firstName.trim())) {
       return res.status(400).json({ error: 'First name required for one-time customer' });
     }
-    if (category === 'artist' && !(body.businessName && body.businessName.trim())) {
-      return res.status(400).json({ error: 'Business name required for artist' });
-    }
+    if ((category === 'artist' || category === 'organisation') && !(body.businessName && body.businessName.trim())) {      return res.status(400).json({ error: 'Business name required for artist' });}
 
     const existing = await Customer.findOne({ phone }).lean();
     if (existing) {
@@ -94,8 +92,7 @@ exports.updateRegularStatus = async (customerId) => {
     // Do nothing if customer is artist (we must not convert artists)
     const cust = await Customer.findById(customerId).exec();
     if (!cust) return null;
-    if (cust.category === 'artist') return cust;
-
+    if (cust.category === 'artist' || cust.category === 'organisation') return cust;
     // compute 30-day window (now - 30 days)
     const now = new Date();
     const since = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));

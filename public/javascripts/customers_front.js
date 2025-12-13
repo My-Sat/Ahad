@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const cat = regCategory ? regCategory.value : 'one_time';
     const firstGrp = document.getElementById('regFirstNameGroup');
     const busGrp = document.getElementById('regBusinessNameGroup');
-    if (cat === 'artist') {
+    if (cat === 'artist' || cat === 'organisation') {
       if (firstGrp) firstGrp.style.display = 'none';
       if (busGrp) busGrp.style.display = '';
     } else {
@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!results || !results.length) { suggestionsBox.style.display = 'none'; return; }
     suggestionsBox.innerHTML = '';
     results.forEach(r => {
-      const label = (r.category === 'artist') ? (r.businessName || r.phone) : (r.firstName || r.businessName || r.phone);
+      const label = (r.category === 'artist' || r.category === 'organisation') ? (r.businessName || r.phone) : (r.firstName || r.businessName || r.phone);
       const el = document.createElement('button');
       el.type = 'button';
       el.className = 'list-group-item list-group-item-action';
@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       if (!phone) return showAlert('Phone is required');
       if (category === 'one_time' && !firstName) return showAlert('First name is required for a customer');
-      if (category === 'artist' && !businessName) return showAlert('Business name is required for an artist');
+      if ((category === 'artist' || category === 'organisation') && !businessName) return showAlert('Business name is required for an artist');
 
       saveCustomerBtn.disabled = true;
       saveCustomerBtn.textContent = 'Saving...';
