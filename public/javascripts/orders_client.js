@@ -1277,26 +1277,6 @@ function renderPrices(bookMode = false) {
     });
   }
 
-  // Auto-select first service on page load, then load its prices
-  (function autoSelectFirstService() {
-    if (!serviceSelect) return;
-    let chosen = null;
-    for (let i = 0; i < serviceSelect.options.length; i++) {
-      const opt = serviceSelect.options[i];
-      if (opt && opt.value) {
-        chosen = opt.value;
-        serviceSelect.selectedIndex = i;
-        break;
-      }
-    }
-    if (chosen) {
-      loadPricesForService(chosen);
-    } else {
-      prices = [];
-      renderPrices();
-    }
-  })();
-
   // service select change
   if (serviceSelect) {
     serviceSelect.addEventListener('change', function () {

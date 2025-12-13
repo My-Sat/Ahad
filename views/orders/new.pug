@@ -30,7 +30,19 @@ block content
                     strong(style='color:#ff7a18;') #{customer.businessName || customer.phone}
                   else
                     strong(style='color:#ff7a18;') #{customer.firstName || customer.businessName || customer.phone}
-                  small.text-muted-light.ms-3 #{customer.phone}
+
+                  // phone
+                  strong.text-muted-light.ms-3 #{customer.phone}
+
+                  // customer type (same visual weight)
+                  -
+                    const categoryLabel =
+                      customer.category === 'artist'
+                        ? 'Artist'
+                        : customer.category === 'regular'
+                          ? 'Regular'
+                          : 'One-Time';
+                  strong.text-muted-light.ms-3 #{categoryLabel}
 
             // selection row (service category + services + books)
             .row.g-2.mb-3
