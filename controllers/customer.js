@@ -101,7 +101,16 @@ exports.updateRegularStatus = async (customerId) => {
     const since = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
 
     // count orders for this customer with createdAt >= since
-    const count = await Order.countDocuments({ customer: mongoose.Types.ObjectId(customerId), createdAt: { $gte: since } }).exec();
+const custObjectId = new mongoose.Types.ObjectId(customerId);
+
+// Match orders in last 30 days even if createdAt is missing
+const count = await Order.countDocuments({
+  customer: custObjectId,
+  $or: [
+    { createdAt: { $gte: since } },
+    { createdAt: { $exists: false }, _id: { $gte: mongoose.Types.ObjectId.createFromTime(Math.floor(since.getTime() / 1000)) } }
+  ]
+}).exec();
 
     // Decide new category
     const shouldBeRegular = (count >= 5);
