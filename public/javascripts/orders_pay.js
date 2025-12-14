@@ -852,18 +852,102 @@ if (cashiersTable) {
         debtorsCount.textContent = '0 results';
         return;
       }
-      // populate table
-      const html = rows.map(d => {
-        const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
-        return `<tr data-order-id="${escapeHtml(d.orderId || '')}">
-          <td>${escapeHtml(d.orderId || '')}</td>
-          <td>${escapeHtml(d.debtorName || '-')}</td>
-          <td class="text-end">GH₵ ${escapeHtml(Number(d.amountDue || 0).toFixed(2))}</td>
-          <td class="text-end">GH₵ ${escapeHtml(Number(d.paidSoFar || 0).toFixed(2))}</td>
-          <td class="text-end">GH₵ ${escapeHtml(out)}</td>
-          <td class="text-center"><button class="btn btn-sm btn-primary view-debtor-order" type="button" data-order-id="${escapeHtml(d.orderId || '')}">Update</button></td>
-        </tr>`;
-      }).join('');
+// -------- Group by debtor name --------
+const grouped = {};
+rows.forEach(d => {
+  const key = d.debtorName || 'Unknown';
+  if (!grouped[key]) grouped[key] = [];
+  grouped[key].push(d);
+});
+
+let html = '';
+let groupIndex = 0;
+
+Object.entries(grouped).forEach(([debtorName, items]) => {
+  // SINGLE record → keep existing logic exactly
+  if (items.length === 1) {
+    const d = items[0];
+    const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
+    html += `
+      <tr data-order-id="${escapeHtml(d.orderId || '')}">
+        <td>${escapeHtml(d.orderId || '')}</td>
+        <td>${escapeHtml(debtorName)}</td>
+        <td class="text-end">GH₵ ${Number(d.amountDue || 0).toFixed(2)}</td>
+        <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
+        <td class="text-end">GH₵ ${out}</td>
+        <td class="text-center">
+          <button class="btn btn-sm btn-primary view-debtor-order"
+            type="button"
+            data-order-id="${escapeHtml(d.orderId || '')}">
+            Update
+          </button>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // MULTIPLE records → expandable group
+  const groupId = `debtor-group-${groupIndex++}`;
+
+const totalDue = items.reduce((s, i) => s + Number(i.amountDue || 0), 0);
+const totalPaid = items.reduce((s, i) => s + Number(i.paidSoFar || 0), 0);
+const totalOutstanding = items.reduce(
+  (s, i) => s + Number(i.outstanding || (i.amountDue - i.paidSoFar || 0)),
+  0
+);
+
+html += `
+  <tr class="table-active debtor-group-toggle align-middle"
+      data-target="${groupId}"
+      aria-expanded="false"
+      style="cursor:pointer;">
+    <td colspan="2">
+      <span class="me-2 debtor-toggle-icon">▶</span>
+      <strong>${escapeHtml(debtorName)}</strong>
+      <span class="text-muted ms-2">(${items.length} orders)</span>
+    </td>
+    <td class="text-end">GH₵ ${totalDue.toFixed(2)}</td>
+    <td class="text-end">GH₵ ${totalPaid.toFixed(2)}</td>
+    <td class="text-end fw-semibold">GH₵ ${totalOutstanding.toFixed(2)}</td>
+    <td></td>
+  </tr>
+`;
+
+  items.forEach(d => {
+    const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
+    html += `
+      <tr class="debtor-group-row ${groupId}" style="display:none;">
+        <td>${escapeHtml(d.orderId || '')}</td>
+        <td>${escapeHtml(debtorName)}</td>
+        <td class="text-end">GH₵ ${Number(d.amountDue || 0).toFixed(2)}</td>
+        <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
+        <td class="text-end">GH₵ ${out}</td>
+        <td class="text-center">
+          <button class="btn btn-sm btn-primary view-debtor-order"
+            type="button"
+            data-order-id="${escapeHtml(d.orderId || '')}">
+            Update
+          </button>
+        </td>
+      </tr>
+    `;
+  });
+
+html += `
+  <tr class="debtor-group-end ${groupId}" style="display:none;">
+    <td colspan="6">
+      <div style="
+        border-bottom: 5px solid #E6FFE6;
+        margin: 6px 0 4px;
+      "></div>
+    </td>
+  </tr>
+`;
+
+
+});
+
       if (tbody) tbody.innerHTML = html;
       debtorsCount.textContent = `${rows.length} result${rows.length > 1 ? 's' : ''}`;
     } catch (err) {
@@ -881,20 +965,40 @@ if (cashiersTable) {
   }
 
   // delegate click in debtors table - view order (open that order in the pay page)
-  if (debtorsTable) {
-    debtorsTable.addEventListener('click', function (ev) {
-      const btn = ev.target.closest('.view-debtor-order');
-      if (btn) {
-        const id = btn.dataset.orderId;
-        if (id) {
-          // close modal and load order on page
-          if (debtorsModal) debtorsModal.hide();
-          fetchOrderIdInput.value = id;
-          fetchOrderById(id);
-        }
+if (debtorsTable) {
+  debtorsTable.addEventListener('click', function (ev) {
+
+    // ✅ 1. Handle UPDATE button clicks FIRST
+    const updateBtn = ev.target.closest('.view-debtor-order');
+    if (updateBtn) {
+      ev.stopPropagation(); // prevent toggle
+      const id = updateBtn.dataset.orderId;
+      if (id) {
+        if (debtorsModal) debtorsModal.hide();
+        fetchOrderIdInput.value = id;
+        fetchOrderById(id);
       }
+      return;
+    }
+
+    // ✅ 2. Handle expand/collapse toggle
+    const toggleRow = ev.target.closest('.debtor-group-toggle');
+    if (!toggleRow) return;
+
+    const target = toggleRow.dataset.target;
+    const expanded = toggleRow.getAttribute('aria-expanded') === 'true';
+
+    const rows = debtorsTable.querySelectorAll(`.${target}`);
+    rows.forEach(r => {
+      r.style.display = expanded ? 'none' : '';
     });
-  }
+
+    toggleRow.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+
+    const icon = toggleRow.querySelector('.debtor-toggle-icon');
+    if (icon) icon.textContent = expanded ? '▶' : '▼';
+  });
+}
 
   // Initial state
   renderOrderDetails(null);
