@@ -69,9 +69,26 @@ async function computeItemSnapshot(itemSpec) {
  */
 exports.list = async (req, res) => {
   try {
-    // lightweight list: id, name, unitPrice
-    const rows = await Book.find({}, { name: 1, unitPrice: 1 }).sort({ name: 1 }).lean();
-    const books = (rows || []).map(r => ({ _id: r._id, name: r.name, unitPrice: Number(r.unitPrice || 0) }));
+    const isAdmin =
+      req.user &&
+      req.user.role &&
+      String(req.user.role).toLowerCase() === 'admin';
+
+    const query = isAdmin
+      ? {} // admins see all
+      : { hideForNonAdmin: { $ne: true } }; // non-admin filter
+
+    const rows = await Book.find(query, {
+      name: 1,
+      unitPrice: 1
+    }).sort({ name: 1 }).lean();
+
+    const books = rows.map(r => ({
+      _id: r._id,
+      name: r.name,
+      unitPrice: Number(r.unitPrice || 0)
+    }));
+
     return res.json({ ok: true, books });
   } catch (err) {
     console.error('books.list error', err);
@@ -161,6 +178,8 @@ exports.create = async (req, res) => {
     const body = req.body || {};
     const name = (body.name || '').trim();
     const itemsIn = Array.isArray(body.items) ? body.items : [];
+    const hideForNonAdmin = !!body.hideForNonAdmin;
+
 
     if (!name) return res.status(400).json({ ok: false, error: 'Book name is required' });
     if (!itemsIn.length) return res.status(400).json({ ok: false, error: 'At least one item is required' });
@@ -201,6 +220,7 @@ exports.create = async (req, res) => {
     // store summary unitPrice for book as sum of item subtotals
     const bookDoc = new Book({
       name,
+      hideForNonAdmin,
       items: itemsOut,
       unitPrice: Number(totalUnitPrice.toFixed(2))
     });
