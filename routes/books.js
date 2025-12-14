@@ -21,4 +21,8 @@ router.post('/', booksController.create);
 // delete (optional)
 router.delete('/:id', booksController.delete);
 
+// update book
+router.put('/:id', booksController.update);
+
+
 module.exports = router;

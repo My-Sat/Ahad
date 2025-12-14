@@ -32,8 +32,17 @@ block content
                         td.text-end GH₵ #{(b.unitPrice || 0).toFixed(2)}
                         td.text-center #{b.createdAt ? (new Date(b.createdAt)).toLocaleString() : ''}
                         td.text-center
-                          button.btn.btn-sm.btn-outline-light-custom.preview-book-btn(type='button' data-id=b._id) Preview
-                          button.btn.btn-sm.btn-secondary.delete-book-btn(type='button', data-id=b._id) Delete
+                          button.btn.btn-sm.btn-outline-light-custom.preview-book-btn(
+                            type='button',
+                            data-id=b._id
+                          ) Preview
+                          a.btn.btn-sm.btn-primary.ms-1(
+                            href=`/books/new?id=${b._id}`
+                          ) Edit
+                          button.btn.btn-sm.btn-secondary.ms-1.delete-book-btn(
+                            type='button',
+                            data-id=b._id
+                          ) Delete
                       // placeholder for expanded preview (inserted by client)
                       tr.book-preview-row(data-id=b._id style='display:none')
                         td(colspan='4')

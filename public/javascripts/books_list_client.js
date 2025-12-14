@@ -75,8 +75,28 @@ document.addEventListener('DOMContentLoaded', function () {
         <td class="text-end">GH₵ ${Number(b.unitPrice || 0).toFixed(2)}</td>
         <td class="text-center">${escapeHtml(created)}</td>
         <td class="text-center">
-          <button class="btn btn-sm btn-outline-secondary preview-book-btn" type="button" data-id="${escapeHtml(b._id)}">Preview</button>
-          <button class="btn btn-sm btn-outline-danger delete-book-btn" type="button" data-id="${escapeHtml(b._id)}">Delete</button>
+          <button
+            class="btn btn-sm btn-outline-secondary preview-book-btn"
+            type="button"
+            data-id="${escapeHtml(b._id)}"
+          >
+            Preview
+          </button>
+
+          <a
+            class="btn btn-sm btn-primary ms-1"
+            href="/books/new?id=${escapeHtml(b._id)}"
+          >
+            Edit
+          </a>
+
+          <button
+            class="btn btn-sm btn-danger ms-1 delete-book-btn"
+            type="button"
+            data-id="${escapeHtml(b._id)}"
+          >
+            Delete
+          </button>
         </td>
       `;
       tbody.appendChild(tr);

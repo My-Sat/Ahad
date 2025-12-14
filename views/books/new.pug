@@ -86,6 +86,9 @@ block append scripts
       const bookUnitPriceEl = document.getElementById('bookUnitPrice');
       const saveBookBtn = document.getElementById('saveBook');
       const bookNameInput = document.getElementById('bookName');
+      const params = new URLSearchParams(window.location.search);
+      const editBookId = params.get('id');
+
 
       let printers = [];
       let serviceRequiresPrinter = false;
@@ -373,6 +376,47 @@ block append scripts
         bookUnitPriceEl.textContent = 'GH₵ ' + formatMoney(total);
       }
 
+      // -------- EDIT MODE LOAD --------
+      async function loadBookForEdit(bookId) {
+        try {
+          const res = await fetch('/books/' + encodeURIComponent(bookId), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+          const j = await res.json();
+          if (!j.ok || !j.book) throw new Error('Failed to load book');
+
+          const b = j.book;
+          bookNameInput.value = b.name || '';
+          document.getElementById('hideForNonAdmin').checked = !!b.hideForNonAdmin;
+
+          bookItems = (b.items || []).map(it => {
+            const orig = Number(it.pages || 1);
+            const eff = it.fb ? Math.ceil(orig / 2) : orig;
+            return {
+              priceRuleId: it.priceRule,
+              selectionLabel: it.selectionLabel,
+              unitPrice: it.unitPrice,
+              pagesOriginal: orig,
+              pagesEffective: eff,
+              fb: !!it.fb,
+              printerId: it.printer || null,
+              spoiled: it.spoiled || 0,
+              subtotal: it.subtotal
+            };
+          });
+
+          renderBookItems();
+          saveBookBtn.textContent = 'Update Book';
+        } catch (err) {
+          console.error(err);
+          showInlineAlert('Failed to load book for editing', 'Error');
+        }
+      }
+
+      if (editBookId) {
+        loadBookForEdit(editBookId);
+      }
+
       // remove item delegation
       bookItemsTbody.addEventListener('click', function(ev){
         const btn = ev.target.closest('.remove-book-item-btn');
@@ -413,9 +457,15 @@ block append scripts
         saveBookBtn.disabled = true;
         saveBookBtn.textContent = 'Saving...';
         try {
-          const res = await fetch('/books', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          const url = editBookId ? `/books/${editBookId}` : '/books';
+          const method = editBookId ? 'PUT' : 'POST';
+
+          const res = await fetch(url, {
+            method,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest'
+            },
             body: JSON.stringify(payload)
           });
           const j = await res.json().catch(()=>null);

@@ -239,6 +239,88 @@ exports.create = async (req, res) => {
 };
 
 /**
+ * PUT /books/:id
+ * Update existing book (edit)
+ */
+exports.update = async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ ok: false, error: 'Invalid book id' });
+    }
+
+    const body = req.body || {};
+    const name = (body.name || '').trim();
+    const itemsIn = Array.isArray(body.items) ? body.items : [];
+    const hideForNonAdmin = !!body.hideForNonAdmin;
+
+    if (!name) return res.status(400).json({ ok: false, error: 'Book name is required' });
+    if (!itemsIn.length) return res.status(400).json({ ok: false, error: 'At least one item is required' });
+
+    const itemsOut = [];
+    let totalUnitPrice = 0;
+
+    for (const it of itemsIn) {
+      if (!it.priceRuleId || !ObjectId.isValid(it.priceRuleId)) {
+        return res.status(400).json({ ok: false, error: 'Invalid priceRuleId in items' });
+      }
+
+      const pages = Math.max(1, Math.floor(Number(it.pages || 1)));
+      const fb = !!it.fb;
+      const spoiled = Math.max(0, Math.floor(Number(it.spoiled || 0)));
+      const printer = (it.printerId && ObjectId.isValid(it.printerId))
+        ? new ObjectId(it.printerId)
+        : null;
+
+      const snap = await computeItemSnapshot({
+        priceRuleId: it.priceRuleId,
+        pages,
+        fb,
+        spoiled
+      });
+
+      itemsOut.push({
+        service: snap.serviceId || null,
+        priceRule: new ObjectId(it.priceRuleId),
+        pages,
+        fb,
+        printer,
+        spoiled,
+        unitPrice: snap.unitPrice,
+        subtotal: snap.subtotal,
+        selectionLabel: snap.selectionLabel
+      });
+
+      totalUnitPrice += Number(snap.subtotal || 0);
+    }
+
+    const updated = await Book.findByIdAndUpdate(
+      id,
+      {
+        name,
+        hideForNonAdmin,
+        items: itemsOut,
+        unitPrice: Number(totalUnitPrice.toFixed(2))
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ ok: false, error: 'Book not found' });
+    }
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('books.update error', err);
+    if (err.code === 11000) {
+      return res.status(400).json({ ok: false, error: 'Book name already exists' });
+    }
+    return res.status(500).json({ ok: false, error: 'Error updating book' });
+  }
+};
+
+
+/**
  * Optional: DELETE /books/:id
  */
 exports.delete = async (req, res) => {
