@@ -12,8 +12,8 @@ block content
 
             p.text-muted-light.small Create a named "Book" by selecting price rules and specifying quantities. The server will compute authoritative per-item pricing when saving.
 
-            // book name and actions
-            .row.g-2.mb-3
+            // book name + save button (same alignment row)
+            .row.g-2
               .col-md-8
                 label.form-label(for='bookName') Book name
                 input.form-control.form-control-dark(
@@ -23,17 +23,19 @@ block content
                   required
                 )
 
-                // NEW checkbox
-                .form-check.mt-2
+              .col-md-4.d-flex.align-items-end
+                button.btn.btn-primary#saveBook(type='button') Save Book
+
+            // checkbox gets its own row
+            .row.mt-2.mb-3
+              .col-md-8
+                .form-check
                   input.form-check-input(
                     type='checkbox',
                     id='hideForNonAdmin'
                   )
                   label.form-check-label.text-muted-light(for='hideForNonAdmin')
                     | Hide in books printing drop down list for non Admin users
-
-              .col-md-4.d-flex.align-items-end
-                button.btn.btn-primary#saveBook(type='button') Save Book
 
             hr
 
