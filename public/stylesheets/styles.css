@@ -733,7 +733,7 @@ body.app-bg .modal-content .dark-card-body {
 }
 
 /* Buttons that appear on dark surfaces: inverse defaults for contrast */
-.dark-surface .btn.btn-primary {
+.dark-surface .btn.btn-primary, .compound-button {
   background: #36454F;
   border-color: #36454F;
   color: #fff;

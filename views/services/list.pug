@@ -2,10 +2,13 @@ extends ../layout
 
 block content
   // Page header
-  .d-flex.justify-content-between.align-items-center.mb-4
+  .d-flex.justify-content-between.align-items-start.mb-4
     .d-flex.flex-column
-      h3.mb-0 Services
-      small.text-muted Manage services, units and pricing rules from one place
+      h3.mb-1 Services
+      .d-flex.justify-content-between.align-items-center.w-100
+        span.text-muted Create and Manage Compound Services
+        a.btn.btn-secondary.ms-5.compound-button(href='/books/new', id='addBookBtn')
+          | Create Compound Service
 
   .row.g-4
     // Left column — Categories selector + Services list + inline add service form

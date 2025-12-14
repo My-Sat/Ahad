@@ -63,11 +63,8 @@ block content
                     option(value=s._id)= s.name
               .col-md-4
                 label.form-label(for='booksDropdown') Books Printing
-                // We'll populate this select's options via client JS
-                .input-group
-                  select.form-select.form-select-dark(id='booksDropdown')
-                    option(value='') -- Select a book --
-                  button.btn.btn-outline-light-custom(type='button', id='addBookBtn') Add Book
+                select.form-select.form-select-dark(id='booksDropdown')
+                  option(value='') -- Select a book --
               .col-md-3.d-flex.align-items-end
 
             // price rules list (populated via AJAX or when a book is selected)
