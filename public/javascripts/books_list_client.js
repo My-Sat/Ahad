@@ -55,13 +55,13 @@ document.addEventListener('DOMContentLoaded', function () {
       renderRows(j.books);
     } catch (err) {
       console.error('books list load err', err);
-      tbody.innerHTML = '<tr><td class="text-muted-light" colspan="4">Unable to load books.</td></tr>';
+      tbody.innerHTML = '<tr><td class="text-muted-light" colspan="4">Unable to load service.</td></tr>';
     }
   }
 
   function renderRows(rows) {
     if (!rows || !rows.length) {
-      tbody.innerHTML = '<tr><td class="text-muted-light" colspan="4">No books created yet.</td></tr>';
+      tbody.innerHTML = '<tr><td class="text-muted-light" colspan="4">No service created yet.</td></tr>';
       return;
     }
     tbody.innerHTML = '';
@@ -232,7 +232,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (row) row.remove();
         if (previewRow) previewRow.remove();
         if (!tbody.querySelector('tr')) {
-          tbody.innerHTML = '<tr><td class="text-muted-light" colspan="4">No books created yet.</td></tr>';
+          tbody.innerHTML = '<tr><td class="text-muted-light" colspan="4">No service created yet.</td></tr>';
         }
         if (typeof window.showGlobalToast === 'function') window.showGlobalToast('Book deleted', 1400);
       } catch (err) {

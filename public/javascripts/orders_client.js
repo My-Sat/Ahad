@@ -518,7 +518,7 @@ function renderPrices(bookMode = false) {
     }
   }
 
-  // ---------- Books support: load list & preview ----------
+  // ---------- Compound service support: load list & preview ----------
   async function loadBooks() {
     if (!booksDropdown) return;
     try {
@@ -530,7 +530,7 @@ function renderPrices(bookMode = false) {
       }
       const j = await res.json().catch(()=>null);
       books = (j && Array.isArray(j.books)) ? j.books : [];
-      booksDropdown.innerHTML = '<option value="">-- Select a book --</option>';
+      booksDropdown.innerHTML = '<option value="">-- Select a Service --</option>';
       books.forEach(b => {
         const opt = document.createElement('option');
         opt.value = b._id;

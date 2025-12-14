@@ -144,7 +144,7 @@ document.addEventListener('DOMContentLoaded', function () {
     saveBtn.addEventListener('click', async function () {
       const nameInput = document.getElementById('bookName');
       if (!nameInput || !nameInput.value.trim()) {
-        showInlineAlert('Enter a book name', 'Book name required');
+        showInlineAlert('Enter a service name', 'Service name required');
         return;
       }
       const name = nameInput.value.trim();
@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
       });
       if (!allChosen.length) {
-        showInlineAlert('Add at least one price rule to the book', 'No items');
+        showInlineAlert('Add at least one price rule to the service', 'No items');
         return;
       }
       // compute unitPrice (sum of subtotals)
@@ -165,14 +165,14 @@ document.addEventListener('DOMContentLoaded', function () {
         const res = await fetch('/books', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(payload) });
         const j = await res.json().catch(()=>null);
         if (!res.ok) {
-          showInlineAlert((j && j.error) ? j.error : 'Failed to save book', 'Save failed');
+          showInlineAlert((j && j.error) ? j.error : 'Failed to save service', 'Save failed');
           return;
         }
         // on success navigate back to orders page (or show a success message)
         window.location.href = '/orders/new';
       } catch (err) {
         console.error('save book err', err);
-        showInlineAlert('Network error saving book', 'Network error');
+        showInlineAlert('Network error saving service', 'Network error');
       }
     });
   }

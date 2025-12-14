@@ -7,24 +7,24 @@ block content
         .card.shadow-sm.dark-surface
           .card-body.dark-card-body
             .d-flex.justify-content-between.align-items-center.mb-3
-              h4.mb-0.text-white Add & Cost Book
-              a.btn.btn-outline-light-custom.btn-sm(href='/books') Books Page
+              h4.mb-0.text-white Add & Cost Compound Service
+              a.btn.btn-outline-light-custom.btn-sm(href='/books') Compound Services
 
-            p.text-muted-light.small Create a named "Book" by selecting price rules and specifying quantities. The server will compute authoritative per-item pricing when saving.
+            p.text-muted-light.small Create a named "Compound Service" by selecting price rules and specifying quantities. The server will compute authoritative per-item pricing when saving.
 
             // book name + save button (same alignment row)
             .row.g-2
               .col-md-8
-                label.form-label(for='bookName') Book name
+                label.form-label(for='bookName') Service Name
                 input.form-control.form-control-dark(
                   type='text',
                   id='bookName',
-                  placeholder='e.g. School Handbook',
+                  placeholder='e.g. Book',
                   required
                 )
 
               .col-md-4.d-flex.align-items-end
-                button.btn.btn-primary#saveBook(type='button') Save Book
+                button.btn.btn-primary#saveBook(type='button') Save Service
 
             // checkbox gets its own row
             .row.mt-2.mb-3
@@ -35,7 +35,7 @@ block content
                     id='hideForNonAdmin'
                   )
                   label.form-check-label.text-muted-light(for='hideForNonAdmin')
-                    | Hide in books printing drop down list for non Admin users
+                    | Hide in "Compound Services" drop down list for non Admin users
 
             hr
 
@@ -61,7 +61,7 @@ block content
             .card.mt-3.dark-surface
               .card-body.dark-card-body
                 .d-flex.justify-content-between.align-items-center.mb-2
-                  h6.mb-0.text-white Book items (preview)
+                  h6.mb-0.text-white Service items (preview)
                   small.text-muted-light#bookUnitPrice GH₵ 0.00
                 table.table.table-sm.table-borderless#bookItemsTable
                   thead
@@ -75,7 +75,7 @@ block content
                     tr
                       td.text-muted-light(colspan='5') No items added yet.
 
-                p.text-muted-light.small.mt-2 After saving, this book will be available in the Orders page Books dropdown.
+                p.text-muted-light.small.mt-2 After saving, this service will be available in the Orders page Compound Service dropdown.
 
 block append scripts
   // inline script to handle loading price rules and building book items
@@ -408,10 +408,10 @@ block append scripts
           });
 
           renderBookItems();
-          saveBookBtn.textContent = 'Update Book';
+          saveBookBtn.textContent = 'Update Service';
         } catch (err) {
           console.error(err);
-          showInlineAlert('Failed to load book for editing', 'Error');
+          showInlineAlert('Failed to load service for editing', 'Error');
         }
       }
 
@@ -436,10 +436,10 @@ block append scripts
         const name = (bookNameInput.value || '').trim();
         if (!name) {
           // use modal instead of alert
-          showInlineAlert('Enter a book name', 'Book name required');
+          showInlineAlert('Enter a service name', 'Service name required');
           return;
         }
-        if (!bookItems.length) { alert('Add at least one item to the book'); return; }
+        if (!bookItems.length) { alert('Add at least one item to the service'); return; }
 
         const hideForNonAdmin =
           document.getElementById('hideForNonAdmin')?.checked || false;
@@ -472,17 +472,17 @@ block append scripts
           });
           const j = await res.json().catch(()=>null);
           if (!res.ok) {
-            alert((j && j.error) ? j.error : 'Failed to save book');
+            alert((j && j.error) ? j.error : 'Failed to save service');
             return;
           }
           // success - redirect to /books or refresh parent page
           window.location.href = '/books';
         } catch (err) {
           console.error('save book err', err);
-          alert('Failed to save book (network error)');
+          alert('Failed to save service (network error)');
         } finally {
           saveBookBtn.disabled = false;
-          saveBookBtn.textContent = 'Save Book';
+          saveBookBtn.textContent = 'Save Service';
         }
       });
 
