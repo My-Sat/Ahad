@@ -1296,6 +1296,24 @@ body.app-bg .btn:focus {
   color: #fff !important;
 }
 
+/* Cart table mobile safety */
+@media (max-width: 576px) {
+  #cartTable th,
+  #cartTable td {
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  #cartTable th:first-child,
+  #cartTable td:first-child {
+    min-width: 160px; /* Selection column */
+  }
+
+  #cartTable th:last-child,
+  #cartTable td:last-child {
+    min-width: 90px; /* Actions */
+  }
+}
 
 
 

@@ -117,8 +117,13 @@ html(lang="en")
           // Mobile / small-screen compact menu (keeps same links/ids but role-filtered)
           .d-md-none
             div.dropdown
-              button.btn.btn-outline-secondary.btn-sm.dropdown-toggle(type='button', data-bs-toggle='dropdown', aria-expanded='false')
-                i.bi.bi-list aria-hidden="true"
+              button.btn.btn-outline-secondary.btn-sm.dropdown-toggle(
+                type='button',
+                data-bs-toggle='dropdown',
+                aria-expanded='false',
+                aria-label='Open navigation menu'
+              )
+                i.bi.bi-list(aria-hidden='true')
               ul.dropdown-menu
                 if currentUser
                   - const roleSm = (currentUser.role || '').toString().toLowerCase();

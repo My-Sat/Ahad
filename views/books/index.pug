@@ -7,14 +7,14 @@ block content
         .card.shadow-sm.dark-surface
           .card-body.dark-card-body
             .d-flex.justify-content-between.align-items-center.mb-3
-              h4.mb-0.text-white Books
+              h4.mb-0.text-white Services List
               .btn-group
                 a.btn.btn-outline-light-custom.btn-sm(href='/books/new')
                   i.bi.bi-plus-lg.me-1
-                  | Create book
+                  | Create New Service
                 a.btn.btn-outline-light-custom.btn-sm(href='/orders/new')
                   | Orders Page
-            p.text-muted-light.small.mb-3 Use this page to review and delete created books.
+            p.text-muted-light.small.mb-3 Use this page to review and delete created services.
 
             .table-responsive
               table.table.table-hover.table-sm#booksTable
@@ -50,10 +50,10 @@ block content
 
                   else
                     tr
-                      td.text-muted-light(colspan='4') No books created yet.
+                      td.text-muted-light(colspan='4') No service created yet.
 
   .mt-3.text-muted-light.small
-    | Deleting a book will not affect existing orders. Use with care.
+    | Deleting a service will not affect existing orders. Use with care.
 
 block append scripts
   script(src='/public/javascripts/books_list_client.js')
