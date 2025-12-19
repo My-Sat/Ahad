@@ -9,6 +9,9 @@ router.get('/', booksController.listPage);
 // list (AJAX)
 router.get('/list', booksController.list);
 
+router.get('/for-orders', booksController.listForOrders);
+
+
 // new page (render) - put BEFORE '/:id' so 'new' is not captured by the id param
 router.get('/new', booksController.getNewPage);
 

@@ -16,10 +16,6 @@ document.addEventListener('DOMContentLoaded', function () {
   const cartTotalEl = document.getElementById('cartTotal');
   const orderNowBtn = document.getElementById('orderNowBtn');
 
-  // Books UI
-  const booksDropdown = document.getElementById('booksDropdown');
-  const addBookBtn = document.getElementById('addBookBtn');
-
   // Orders explorer elements
   const openOrdersExplorerBtn = document.getElementById('openOrdersExplorerBtn');
   const ordersExplorerModalEl = document.getElementById('ordersExplorerModal');
@@ -93,56 +89,59 @@ async function loadServiceCategories() {
 }
 
 async function loadServicesForCategory(catId) {
-  // if no select present, nothing to do
   if (!serviceSelect) return;
 
-  // If no category chosen, clear the service select and avoid showing any services
-  if (!catId) {
-    serviceSelect.innerHTML = '<option value="">-- Select a service --</option>';
-    // clear prices and UI
-    prices = [];
-    if (typeof renderPrices === 'function') renderPrices();
-    return;
-  }
+  serviceSelect.innerHTML = '<option value="">-- Select a service --</option>';
+  prices = [];
+  renderPrices();
+
+  if (!catId) return;
 
   try {
-    const res = await fetch(`/admin/service-categories/${encodeURIComponent(catId)}/services`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-    if (!res.ok) throw new Error('no services-per-category endpoint');
-    const j = await res.json().catch(()=>null);
-    if (!j || !Array.isArray(j.services)) throw new Error('invalid services response');
+    // Load normal services
+    const svcRes = await fetch(
+      `/admin/service-categories/${encodeURIComponent(catId)}/services`,
+      { headers: { 'X-Requested-With': 'XMLHttpRequest' } }
+    );
+    const svcJson = svcRes.ok ? await svcRes.json() : null;
+    const services = (svcJson && Array.isArray(svcJson.services)) ? svcJson.services : [];
 
-    // populate serviceSelect but DO NOT auto-select the first one
-    serviceSelect.innerHTML = '<option value="">-- Select a service --</option>';
-    j.services.forEach(s => {
+    services.forEach(s => {
       const opt = document.createElement('option');
       opt.value = s._id;
       opt.textContent = s.name;
+      opt.dataset.type = 'service';
       serviceSelect.appendChild(opt);
     });
 
-    // Do NOT automatically select a service or load prices — user must pick a service manually.
-    prices = [];
-    if (typeof renderPrices === 'function') renderPrices();
+    // Load books for orders (category-aware)
+    const bookRes = await fetch('/books/for-orders', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    const bookJson = bookRes.ok ? await bookRes.json() : null;
+    const allBooks = (bookJson && Array.isArray(bookJson.books)) ? bookJson.books : [];
+
+    const booksInCategory = allBooks.filter(b =>
+      String(b.category) === String(catId)
+    );
+
+    if (booksInCategory.length) {
+      const group = document.createElement('optgroup');
+      group.label = 'Compound Services';
+
+      booksInCategory.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b._id;
+        opt.textContent = `${b.name} — GH₵ ${formatMoney(b.unitPrice)}`;
+        opt.dataset.type = 'book';
+        group.appendChild(opt);
+      });
+
+      serviceSelect.appendChild(group);
+    }
 
   } catch (err) {
-    // endpoint not present — fallback to basic client-side filtering if server rendered options carry data-category
-    try {
-      const opts = Array.from(serviceSelect.options || []);
-      opts.forEach(o => {
-        const cat = o.dataset ? o.dataset.category : o.getAttribute('data-category');
-        if (!cat) {
-          // cannot filter, keep as-is
-          o.style.display = '';
-        } else {
-          o.style.display = (String(cat) === String(catId)) ? '' : 'none';
-        }
-      });
-      // do not auto-select — require the user to explicitly choose one
-      prices = [];
-      if (typeof renderPrices === 'function') renderPrices();
-    } catch (e) {
-      console.warn('Fallback category filtering failed', e);
-    }
+    console.error('loadServicesForCategory failed', err);
   }
 }
   // bind category change
@@ -150,7 +149,6 @@ async function loadServicesForCategory(catId) {
     serviceCategorySelect.addEventListener('change', function () {
       const cid = this.value || '';
       // clear book preview when changing category
-      if (booksDropdown) booksDropdown.selectedIndex = 0;
       loadServicesForCategory(cid);
     });
   }
@@ -518,32 +516,6 @@ function renderPrices(bookMode = false) {
     }
   }
 
-  // ---------- Compound service support: load list & preview ----------
-  async function loadBooks() {
-    if (!booksDropdown) return;
-    try {
-      const res = await fetch('/books/list', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-      if (!res.ok) {
-        booksDropdown.innerHTML = '<option value="">Error loading books</option>';
-        books = [];
-        return;
-      }
-      const j = await res.json().catch(()=>null);
-      books = (j && Array.isArray(j.books)) ? j.books : [];
-      booksDropdown.innerHTML = '<option value="">-- Select a Service --</option>';
-      books.forEach(b => {
-        const opt = document.createElement('option');
-        opt.value = b._id;
-        opt.textContent = `${b.name} — GH₵ ${formatMoney(b.unitPrice)}`;
-        booksDropdown.appendChild(opt);
-      });
-    } catch (err) {
-      console.error('loadBooks err', err);
-      booksDropdown.innerHTML = '<option value="">Error loading books</option>';
-      books = [];
-    }
-  }
-
   // load book preview (converts book items into a prices array for preview)
   async function loadBookPreview(bookId) {
     if (!bookId) {
@@ -781,28 +753,6 @@ function renderPrices(bookMode = false) {
     }
   });
 
-  // ---------- Add Book UI wiring ----------
-  if (booksDropdown) {
-    booksDropdown.addEventListener('change', function () {
-      const bid = this.value;
-      if (!bid) {
-        // clear preview or reload service prices
-        if (serviceSelect && serviceSelect.value) loadPricesForService(serviceSelect.value);
-        else { prices = []; renderPrices(); }
-        return;
-      }
-      // Show quantity modal when a book is selected
-      showAddBookModal(bid);
-    });
-  }
-
-  if (addBookBtn) {
-    addBookBtn.addEventListener('click', function () {
-      // navigate to book editor page (you should have /books/new)
-      window.location.href = '/books/new';
-    });
-  }
-
   // ---------- showAddBookModal ----------
   function showAddBookModal(bookId) {
     // Create or reuse modal HTML
@@ -813,7 +763,7 @@ function renderPrices(bookMode = false) {
   <div class="modal-dialog modal-sm modal-dialog-centered">
     <div class="modal-content dark-surface">
       <div class="modal-header">
-        <h5 class="modal-title" id="addBookModalLabel">Add Book to Cart</h5>
+        <h5 class="modal-title" id="addBookModalLabel">Add Service to Cart</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body dark-card-body">
@@ -886,7 +836,6 @@ function renderPrices(bookMode = false) {
       await addBookToCartById(bookId, qty);
       // Reset dropdown back to default and reload service prices (so UI doesn't stay in preview)
       try {
-        if (booksDropdown) booksDropdown.selectedIndex = 0;
         if (serviceSelect && serviceSelect.value) loadPricesForService(serviceSelect.value);
         else { prices = []; renderPrices(); }
       } catch (e) { /* ignore */ }
@@ -1277,15 +1226,37 @@ function renderPrices(bookMode = false) {
     });
   }
 
-  // service select change
-  if (serviceSelect) {
-    serviceSelect.addEventListener('change', function () {
-      const sid = this.value;
-      // clear any selected book
-      if (booksDropdown) booksDropdown.selectedIndex = 0;
-      loadPricesForService(sid);
-    });
-  }
+if (serviceSelect) {
+  serviceSelect.addEventListener('change', function () {
+    const selectedOption = this.options[this.selectedIndex];
+    const value = this.value;
+
+    if (!value || !selectedOption) {
+      prices = [];
+      renderPrices();
+      return;
+    }
+
+    const type = selectedOption.dataset.type;
+
+    // ---------- Compound Service (Book) ----------
+    if (type === 'book') {
+      // reset service pricing UI
+      prices = [];
+      renderPrices();
+
+      // IMPORTANT: show quantity modal (previous behavior)
+      showAddBookModal(value);
+
+      // reset select so user can re-open it later
+      this.selectedIndex = 0;
+      return;
+    }
+
+    // ---------- Normal Service ----------
+    loadPricesForService(value);
+  });
+}
 
   // initial render and load books list
   renderCart();

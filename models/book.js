@@ -32,8 +32,11 @@ const BookItemSchema = new mongoose.Schema({
 
 const BookSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
-   // hide from books dropdown for non-admin users
-  hideForNonAdmin: { type: Boolean, default: false },
+   category: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'ServiceCategory',
+  required: true
+},
   // sum of item subtotals (unit price for one "book" instance)
   unitPrice: { type: Number, required: true, default: 0 },
   // items that comprise the book (snapshots + references)

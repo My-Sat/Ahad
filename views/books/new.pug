@@ -11,6 +11,13 @@ block content
               a.btn.btn-outline-light-custom.btn-sm(href='/books') Compound Services
 
             p.text-muted-light.small Create a named "Compound Service" by selecting price rules and specifying quantities. The server will compute authoritative per-item pricing when saving.
+            .row.mb-2
+              .col-md-8
+                label.form-label(for='categorySelect') Service Category
+                select.form-select.form-select-dark#categorySelect
+                  option(value='') -- Select category --
+                  each c in categories
+                    option(value=c._id)= c.name
 
             // book name + save button (same alignment row)
             .row.g-2
@@ -25,18 +32,6 @@ block content
 
               .col-md-4.d-flex.align-items-end
                 button.btn.btn-primary#saveBook(type='button') Save Service
-
-            // checkbox gets its own row
-            .row.mt-2.mb-3
-              .col-md-8
-                .form-check
-                  input.form-check-input(
-                    type='checkbox',
-                    id='hideForNonAdmin'
-                  )
-                  label.form-check-label.text-muted-light(for='hideForNonAdmin')
-                    | Hide in "Compound Services" drop down list for non Admin users
-
             hr
 
             .row.g-2.mb-3
@@ -389,7 +384,6 @@ block append scripts
 
           const b = j.book;
           bookNameInput.value = b.name || '';
-          document.getElementById('hideForNonAdmin').checked = !!b.hideForNonAdmin;
 
           bookItems = (b.items || []).map(it => {
             const orig = Number(it.pages || 1);
@@ -441,12 +435,9 @@ block append scripts
         }
         if (!bookItems.length) { alert('Add at least one item to the service'); return; }
 
-        const hideForNonAdmin =
-          document.getElementById('hideForNonAdmin')?.checked || false;
-
         const payload = {
           name: name,
-          hideForNonAdmin: hideForNonAdmin, // NEW
+          categoryId: document.getElementById('categorySelect').value,
           items: bookItems.map(it => ({
             priceRuleId: it.priceRuleId,
             pages: it.pagesOriginal,

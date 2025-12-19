@@ -1,6 +1,7 @@
 // controllers/books.js
 const mongoose = require('mongoose');
 const Service = require('../models/service');
+const ServiceCategory = require('../models/service_category');
 const ServicePrice = require('../models/service_price');
 const Book = require('../models/book'); // assume you have a Book model
 const { ObjectId } = mongoose.Types;
@@ -101,18 +102,45 @@ exports.list = async (req, res) => {
  */
 exports.getNewPage = async (req, res) => {
   try {
+    const categories = await ServiceCategory.find().sort('name').lean();
+
     // load services & price rules to let the "Add and Cost Book" page populate UI
     const services = await Service.find().select('_id name requiresPrinter components').lean();
     // we will not eagerly load every price rule here; client will request /admin/services/:id/prices as before
-    return res.render('books/new', {
-      title: 'Add and Cost Book',
-      services
-    });
-  } catch (err) {
+return res.render('books/new', {
+  title: 'Add and Cost Compound Service',
+  services,
+  categories
+});  } catch (err) {
     console.error('books.getNewPage error', err);
     return res.status(500).send('Error loading book editor');
   }
 };
+
+exports.listForOrders = async (req, res) => {
+  try {
+    const isAdmin =
+      req.user?.role &&
+      String(req.user.role).toLowerCase() === 'admin';
+
+    const categories = await require('../models/service_category')
+      .find(isAdmin ? {} : { showInOrders: true })
+      .select('_id')
+      .lean();
+
+    const catIds = categories.map(c => c._id);
+
+    const books = await Book.find({ category: { $in: catIds } })
+      .select('_id name category unitPrice')
+      .lean();
+
+    return res.json({ ok:true, books });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok:false });
+  }
+};
+
 
 /**
  * GET /books/:id  (AJAX JSON) - returns book details OR { ok:true, book: null } for 'new'
@@ -178,7 +206,11 @@ exports.create = async (req, res) => {
     const body = req.body || {};
     const name = (body.name || '').trim();
     const itemsIn = Array.isArray(body.items) ? body.items : [];
-    const hideForNonAdmin = !!body.hideForNonAdmin;
+
+    const categoryId = body.categoryId;
+    if (!categoryId || !ObjectId.isValid(categoryId)) {
+      return res.status(400).json({ ok:false, error:'Service category is required' });
+    }
 
 
     if (!name) return res.status(400).json({ ok: false, error: 'Book name is required' });
@@ -220,7 +252,7 @@ exports.create = async (req, res) => {
     // store summary unitPrice for book as sum of item subtotals
     const bookDoc = new Book({
       name,
-      hideForNonAdmin,
+      category: new ObjectId(categoryId),
       items: itemsOut,
       unitPrice: Number(totalUnitPrice.toFixed(2))
     });
@@ -252,7 +284,12 @@ exports.update = async (req, res) => {
     const body = req.body || {};
     const name = (body.name || '').trim();
     const itemsIn = Array.isArray(body.items) ? body.items : [];
-    const hideForNonAdmin = !!body.hideForNonAdmin;
+
+    const categoryId = body.categoryId;
+    if (!categoryId || !ObjectId.isValid(categoryId)) {
+      return res.status(400).json({ ok:false, error:'Service category is required' });
+    }
+    
 
     if (!name) return res.status(400).json({ ok: false, error: 'Book name is required' });
     if (!itemsIn.length) return res.status(400).json({ ok: false, error: 'At least one item is required' });
@@ -298,7 +335,7 @@ exports.update = async (req, res) => {
       id,
       {
         name,
-        hideForNonAdmin,
+        category: new ObjectId(categoryId),
         items: itemsOut,
         unitPrice: Number(totalUnitPrice.toFixed(2))
       },
