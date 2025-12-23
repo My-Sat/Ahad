@@ -395,6 +395,7 @@ function renderPrices(bookMode = false) {
     input.placeholder = serviceRequiresPrinter ? 'Pages' : 'Qty';
     input.style.width = '90px';
     mid.appendChild(input);
+    
 
     // F/B checkbox only for services that require a printer
     let fbInput = null;
@@ -452,7 +453,7 @@ function renderPrices(bookMode = false) {
       spoiledInput.min = '0';
       spoiledInput.step = '1';
       spoiledInput.value = '';
-      spoiledInput.placeholder = 'Spoiled';
+      spoiledInput.placeholder = 'Jammed';
       spoiledInput.setAttribute('aria-label', 'Spoiled count');
       spoiledInput.className = 'form-control form-control-sm spoiled-input';
       spoiledInput.style.width = '96px';
