@@ -388,6 +388,10 @@ function renderPrices(bookMode = false) {
     const mid = document.createElement('div');
     mid.className = 'd-flex align-items-center gap-2 flex-nowrap';
 
+    // inside price rule render block (printing service only)
+
+
+
     const input = document.createElement('input');
     input.type = 'number';
     input.min = '1';
@@ -395,6 +399,20 @@ function renderPrices(bookMode = false) {
     input.placeholder = serviceRequiresPrinter ? 'Pages' : 'Qty';
     input.style.width = '90px';
     mid.appendChild(input);
+    
+    // factor input (only if printer required)
+    if (serviceRequiresPrinter) {
+    const factorInput = document.createElement('input');
+    factorInput.type = 'number';
+    factorInput.min = '1';
+    factorInput.step = '1';
+    factorInput.value = '';
+    factorInput.className = 'form-control form-control-sm factor-input';
+    factorInput.placeholder = 'QTY';
+    factorInput.style.width = '90px';
+    mid.appendChild(factorInput);
+    }
+
     
 
     // F/B checkbox only for services that require a printer
@@ -603,32 +621,63 @@ function renderPrices(bookMode = false) {
     }
   }
 
-  // ---------- Add single price rule to cart ----------
-  function addToCart({ serviceId, serviceName, priceRuleId, label, unitPrice, pages, fb, printerId, spoiled }) {
-    const origPages = Number(pages) || 1;
-    spoiled = Math.max(0, Math.floor(Number(spoiled) || 0));
+// ---------- Add single price rule to cart ----------
+function addToCart({
+  serviceId,
+  serviceName,
+  priceRuleId,
+  label,
+  unitPrice,
+  pages,
+  factor,          // NEW (optional)
+  fb,
+  printerId,
+  spoiled
+}) {
+  const origPages = Number(pages) || 1;
+  const factorVal = Number(factor) && Number(factor) > 0 ? Number(factor) : 1;
 
-    // effective quantity used for price calculation:
-    const effectiveQty = fb ? Math.ceil(origPages / 2) : origPages;
+  spoiled = Math.max(0, Math.floor(Number(spoiled) || 0));
 
-    const subtotal = Number((Number(unitPrice) * effectiveQty).toFixed(2));
+  // effective quantity used for price calculation (existing logic)
+  const effectiveQty = fb ? Math.ceil(origPages / 2) : origPages;
 
-    cart.push({
-      isBook: false,
-      serviceId,
-      serviceName,
-      priceRuleId,
-      selectionLabel: label,
-      unitPrice: Number(unitPrice),
-      pages: effectiveQty,         // what we show in the cart (effective qty)
-      pagesOriginal: origPages,    // original pages input — will be sent to server
-      subtotal,
-      fb: !!fb,
-      printerId: printerId || null,
-      spoiled
-    });
-    renderCart();
-  }
+  // subtotal logic:
+  // - printing service → unitPrice × effectiveQty × factor
+  // - non-printing service → unitPrice × effectiveQty
+  const subtotal = Number(
+    (
+      Number(unitPrice) *
+      effectiveQty *
+      (printerId ? factorVal : 1)
+    ).toFixed(2)
+  );
+
+  cart.push({
+    isBook: false,
+    serviceId,
+    serviceName,
+    priceRuleId,
+    selectionLabel: label,
+    unitPrice: Number(unitPrice),
+
+    // what we show in cart
+    pages: effectiveQty,
+
+    // original user input (server uses this)
+    pagesOriginal: origPages,
+
+    // NEW: factor only meaningful for printing services
+    factor: printerId ? factorVal : null,
+
+    subtotal,
+    fb: !!fb,
+    printerId: printerId || null,
+    spoiled
+  });
+
+  renderCart();
+}
 
   // ---------- Render cart ----------
   function renderCart() {
@@ -682,6 +731,16 @@ function renderPrices(bookMode = false) {
     const pagesInput = row ? row.querySelector('.pages-input') : null;
     const pages = pagesInput && pagesInput.value ? Number(pagesInput.value) : 1;
 
+    let factor = 1;
+    if (serviceRequiresPrinter) {
+      const factorInput = row ? row.querySelector('.factor-input') : null;
+      if (factorInput && factorInput.value !== '') {
+        const f = Number(factorInput.value);
+        factor = (!isNaN(f) && f > 0) ? f : 1;
+      }
+    }
+
+
     const fbCheckbox = row ? row.querySelector('.fb-checkbox') : null;
     const fbChecked = fbCheckbox ? fbCheckbox.checked : false;
 
@@ -712,6 +771,7 @@ function renderPrices(bookMode = false) {
         label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''),
         unitPrice: Number(priceObj.unitPrice || 0),
         pages: pages,
+        factor,
         fb: fbChecked,
         printerId: selectedPrinterId || priceObj.__bookItem.printer,
         spoiled
@@ -724,12 +784,14 @@ function renderPrices(bookMode = false) {
       if (fbChecked && priceObj.price2 !== null && priceObj.price2 !== undefined) {
         chosenPrice = Number(priceObj.price2);
       }
-      addToCart({ serviceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), unitPrice: chosenPrice, pages, fb: fbChecked, printerId: selectedPrinterId, spoiled });
+      addToCart({ serviceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), unitPrice: chosenPrice, pages, factor, fb: fbChecked, printerId: selectedPrinterId, spoiled });
     }
 
     // clear inputs
     try {
       if (pagesInput) pagesInput.value = '';
+      const factorInput = row ? row.querySelector('.factor-input') : null;
+      if (factorInput) factorInput.value = '';
       if (fbCheckbox) { fbCheckbox.checked = false; }
       const printerSelect = row ? row.querySelector('.printer-select') : null;
       if (printerSelect) { printerSelect.selectedIndex = 0; }
@@ -858,70 +920,95 @@ function renderPrices(bookMode = false) {
     modalInst.show();
   }
 
-  // ---------- Order placement ----------
-  async function placeOrderFlow() {
-    if (!cart.length) return;
-    orderNowBtn.disabled = true;
-    const originalText = orderNowBtn.textContent;
-    orderNowBtn.textContent = 'Placing...';
-    try {
-      // Build payload items
-      const items = [];
-      cart.forEach(line => {
-        if (line.isBook) {
-          // expand to underlying rules. Multiply raw pages by book quantity so server sees copies of book.
-          (line.bookItems || []).forEach(bi => {
-            const pagesToSend = (typeof bi.pagesOriginal === 'number' ? bi.pagesOriginal : Number(bi.pagesOriginal || bi.pages || 1)) * Number(line.qty || 1);
-            items.push({
-              serviceId: bi.serviceId,
-              priceRuleId: bi.priceRuleId,
-              pages: pagesToSend,
-              fb: !!bi.fb,
-              printerId: bi.printerId || null,
-              spoiled: bi.spoiled || 0
-            });
-          });
-        } else {
+// ---------- Order placement ----------
+async function placeOrderFlow() {
+  if (!cart.length) return;
+  orderNowBtn.disabled = true;
+  const originalText = orderNowBtn.textContent;
+  orderNowBtn.textContent = 'Placing...';
+
+  try {
+    // Build payload items
+    const items = [];
+
+    cart.forEach(line => {
+      if (line.isBook) {
+        // expand to underlying rules. Multiply raw pages by book quantity
+        (line.bookItems || []).forEach(bi => {
+          const rawPages =
+            (typeof bi.pagesOriginal === 'number'
+              ? bi.pagesOriginal
+              : Number(bi.pagesOriginal || bi.pages || 1));
+
+          const pagesToSend = rawPages * Number(line.qty || 1);
+
           items.push({
-            serviceId: line.serviceId,
-            priceRuleId: line.priceRuleId,
-            pages: (typeof line.pagesOriginal !== 'undefined') ? Number(line.pagesOriginal) : Number(line.pages || 1),
-            fb: !!line.fb,
-            printerId: line.printerId || null,
-            spoiled: line.spoiled || 0
+            serviceId: bi.serviceId,
+            priceRuleId: bi.priceRuleId,
+            pages: pagesToSend,
+            factor: bi.printerId ? (bi.factor || 1) : undefined,
+            fb: !!bi.fb,
+            printerId: bi.printerId || null,
+            spoiled: bi.spoiled || 0
           });
-        }
-      });
+        });
+      } else {
+        const rawPages =
+          (typeof line.pagesOriginal !== 'undefined')
+            ? Number(line.pagesOriginal)
+            : Number(line.pages || 1);
 
-      const payload = {
-        items,
-        customerId: (document.getElementById('orderCustomerId') && document.getElementById('orderCustomerId').value) ? document.getElementById('orderCustomerId').value : null
-      };
-
-      const res = await fetch('/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        body: JSON.stringify(payload)
-      });
-      const j = await res.json().catch(() => null);
-      if (!res.ok) {
-        showAlertModal((j && j.error) ? j.error : 'Order creation failed');
-        return;
+        items.push({
+          serviceId: line.serviceId,
+          priceRuleId: line.priceRuleId,
+          pages: rawPages,
+          factor: line.printerId ? (line.factor || 1) : undefined,
+          fb: !!line.fb,
+          printerId: line.printerId || null,
+          spoiled: line.spoiled || 0
+        });
       }
+    });
 
-      showOrderSuccessModal(j.orderId, j.total);
-      if (typeof showGlobalToast === 'function') showGlobalToast(`Order created: ${j.orderId}`, 3200);
+    const payload = {
+      items,
+      customerId:
+        (document.getElementById('orderCustomerId') &&
+         document.getElementById('orderCustomerId').value)
+          ? document.getElementById('orderCustomerId').value
+          : null
+    };
 
-      cart = [];
-      renderCart();
-    } catch (err) {
-      console.error('create order err', err);
-      showAlertModal('Failed to create order');
-    } finally {
-      orderNowBtn.disabled = false;
-      orderNowBtn.textContent = originalText;
+    const res = await fetch('/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const j = await res.json().catch(() => null);
+    if (!res.ok) {
+      showAlertModal((j && j.error) ? j.error : 'Order creation failed');
+      return;
     }
+
+    showOrderSuccessModal(j.orderId, j.total);
+    if (typeof showGlobalToast === 'function') {
+      showGlobalToast(`Order created: ${j.orderId}`, 3200);
+    }
+
+    cart = [];
+    renderCart();
+  } catch (err) {
+    console.error('create order err', err);
+    showAlertModal('Failed to create order');
+  } finally {
+    orderNowBtn.disabled = false;
+    orderNowBtn.textContent = originalText;
   }
+}
 
   // New "Order Now" handler: check for customer modal as before
   orderNowBtn.addEventListener('click', async function () {

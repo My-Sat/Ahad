@@ -145,14 +145,21 @@ exports.apiCreateOrder = async (req, res) => {
         const sp = Number(it.spoiled);
         spoiled = (isNaN(sp) || sp < 0) ? 0 : Math.floor(sp);
       }
-      return {
-        serviceId: it.serviceId,
-        priceRuleId: it.priceRuleId,
-        pages,
-        fb,
-        printerId: it.printerId || null,
-        spoiled
-      };
+let factor = 1;
+if (it.factor !== undefined && it.factor !== null && String(it.factor).trim() !== '') {
+  const f = Number(it.factor);
+  factor = (isNaN(f) || f < 1) ? 1 : Math.floor(f);
+}
+
+return {
+  serviceId: it.serviceId,
+  priceRuleId: it.priceRuleId,
+  pages,
+  factor,              // NEW
+  fb,
+  printerId: it.printerId || null,
+  spoiled
+};
     });
 
     const builtItems = [];
@@ -168,19 +175,34 @@ for (const it of items) {
   if (!pr) return res.status(404).json({ error: `Price rule ${it.priceRuleId} not found` });
 
   // Determine which price to use: use price2 only when client requested FB and price2 exists
-  let unitPrice = Number(pr.price);
-  let usedFB = false;
-  if (it.fb && pr.price2 !== undefined && pr.price2 !== null) {
-    unitPrice = Number(pr.price2);
-    usedFB = true;
-  }
+// Check whether this service requires a printer
+const svc = await Service.findById(it.serviceId).lean();
+const svcRequiresPrinter = !!(svc && svc.requiresPrinter);
 
-  const pages = Number(it.pages) || 1;
-  // determine effective quantity for pricing: if FB was used for this line, effective = ceil(pages/2)
-  const effectiveQtyForPrice = (usedFB) ? Math.ceil(pages / 2) : pages;
+// normalize factor (pricing factor comes from client)
+let pricingFactor = 1;
+if (svcRequiresPrinter && it.factor !== undefined && it.factor !== null && String(it.factor).trim() !== '') {
+  const f = Number(it.factor);
+  pricingFactor = (isNaN(f) || f < 1) ? 1 : Math.floor(f);
+}
 
-// subtotal uses the effective quantity (server authoritative)
-  const subtotal = Number((unitPrice * effectiveQtyForPrice).toFixed(2));
+// Determine which price to use: use price2 only when client requested FB and price2 exists
+let unitPrice = Number(pr.price);
+let usedFB = false;
+if (it.fb && pr.price2 !== undefined && pr.price2 !== null) {
+  unitPrice = Number(pr.price2);
+  usedFB = true;
+}
+
+const pages = Number(it.pages) || 1;
+
+// determine effective quantity for pricing: if FB was used for this line
+const effectiveQtyForPrice = usedFB ? Math.ceil(pages / 2) : pages;
+
+// ✅ APPLY pricing factor HERE
+const subtotal = Number(
+  (unitPrice * effectiveQtyForPrice * pricingFactor).toFixed(2)
+);
 
 // Build human-friendly selection label (append F/B suffix always when usedFB)
 const baseLabel = pr.selectionLabel || ((pr.selections || []).map(s => {
@@ -208,9 +230,6 @@ const selectionsForOrder = (pr.selections || []).map(s => ({
     printerType = null;
   }
 
-  // Check whether this service requires a printer
-  const svc = await Service.findById(it.serviceId).lean();
-  const svcRequiresPrinter = !!(svc && svc.requiresPrinter);
 
   // validate printer if required
   let printerId = null;
@@ -256,6 +275,7 @@ const selectionsForOrder = (pr.selections || []).map(s => ({
     unitPrice,
     pages,               // raw pages entered by user (kept for material/printer logic)
     effectiveQty: effectiveQtyForPrice, // server-authoritative quantity used for pricing (e.g. ceil(pages/2) when F/B)
+    factor: pricingFactor,             // NEW: quantity multiplier for printer-required services
     subtotal,            // computed using effectiveQty (server authoritative)
     spoiled: Number(it.spoiled) || 0,
     fb: !!(it.fb || usedFB),  // store original intent (client flag) OR our usedFB calc
