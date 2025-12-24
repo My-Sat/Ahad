@@ -1109,29 +1109,49 @@ if (debtorsTable) {
       return String(s).replace(/[&<>"'`=\/]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
     }
 
-    function renderOrdersList(orders) {
-      const tbody = table.querySelector('tbody');
-      if (!orders || !orders.length) {
-        tbody.innerHTML = '<tr><td class="text-muted" colspan="5">No orders in this range.</td></tr>';
-        if (countEl) countEl.textContent = '0 results';
-        return;
-      }
-      tbody.innerHTML = '';
-      orders.forEach(o => {
-        const oid = escapeHtml(o.orderId || o._id || '');
-        const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : '';
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td><a href="/orders/view/${encodeURIComponent(o.orderId || o._id || '')}" class="orders-explorer-link">${oid}</a></td>
-          <td class="text-end">GH₵ ${Number(o.total || 0).toFixed(2)}</td>
-          <td>${escapeHtml(o.status || '')}</td>
-          <td>${escapeHtml(created)}</td>
-          <td class="text-center"><button class="btn btn-sm btn-primary orders-explorer-view-btn" data-order-id="${escapeHtml(o.orderId || o._id || '')}">View</button></td>
-        `;
-        tbody.appendChild(tr);
-      });
-      if (countEl) countEl.textContent = `${orders.length} result${orders.length > 1 ? 's' : ''}`;
-    }
+function renderOrdersList(orders) {
+  const tbody = table.querySelector('tbody');
+
+  if (!orders || !orders.length) {
+    tbody.innerHTML = '<tr><td class="text-muted" colspan="5">No orders in this range.</td></tr>';
+    if (countEl) countEl.textContent = '0 results';
+    return;
+  }
+
+  tbody.innerHTML = '';
+
+  orders.forEach(o => {
+    const oid = escapeHtml(o.orderId || o._id || '');
+    const name = escapeHtml(o.name || 'Walk-in');
+    const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : '';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <a href="/orders/view/${encodeURIComponent(o.orderId || o._id || '')}"
+           class="orders-explorer-link"
+           title="Order ID: ${oid}">
+          ${name}
+        </a>
+      </td>
+      <td class="text-end">GH₵ ${Number(o.total || 0).toFixed(2)}</td>
+      <td>${escapeHtml(o.status || '')}</td>
+      <td>${escapeHtml(created)}</td>
+      <td class="text-center">
+        <button
+          class="btn btn-sm btn-primary orders-explorer-view-btn"
+          data-order-id="${oid}">
+          View
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  if (countEl) {
+    countEl.textContent = `${orders.length} result${orders.length > 1 ? 's' : ''}`;
+  }
+}
 
     // open modal and auto-fetch
     openBtn.addEventListener('click', function () {

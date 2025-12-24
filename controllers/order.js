@@ -830,18 +830,39 @@ exports.apiListOrders = async (req, res) => {
     }
 
     const orders = await Order.find(q)
+      .populate('customer', 'firstName businessName category phone')
       .sort({ createdAt: -1 })
       .limit(1000)
       .lean();
 
     // Map to minimal info the client needs in the list
-    const out = orders.map(o => ({
-      _id: o._id,
-      orderId: o.orderId,
-      total: o.total,
-      status: o.status,
-      createdAt: o.createdAt
-    }));
+const out = orders.map(o => {
+  let displayName = 'Walk-in';
+
+  if (o.customer) {
+    if (o.customer.category === 'artist') {
+      displayName =
+        o.customer.businessName ||
+        o.customer.phone ||
+        'Artist';
+    } else {
+      displayName =
+        o.customer.firstName ||
+        o.customer.businessName ||
+        o.customer.phone ||
+        'Customer';
+    }
+  }
+
+  return {
+    _id: o._id,
+    name: displayName,      // ✅ NEW
+    orderId: o.orderId,     // keep for actions
+    total: o.total,
+    status: o.status,
+    createdAt: o.createdAt
+  };
+});
 
     return res.json({ ok: true, orders: out });
   } catch (err) {
