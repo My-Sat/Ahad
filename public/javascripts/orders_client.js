@@ -1167,32 +1167,58 @@ async function placeOrderFlow() {
     if (ordersCountEl) ordersCountEl.textContent = '0 results';
   }
 
-  function renderOrdersList(orders) {
-    if (!ordersTable) return;
-    const tbody = ordersTable.querySelector('tbody');
-    if (!orders || !orders.length) {
-      tbody.innerHTML = '<tr><td class="text-muted" colspan="5">No orders in this range.</td></tr>';
-      if (ordersCountEl) ordersCountEl.textContent = '0 results';
-      return;
-    }
-    tbody.innerHTML = '';
-    orders.forEach(o => {
-      const safeOrderId = escapeHtml(o.orderId || o._id || '');
-      const viewHref = '/orders/view/' + encodeURIComponent(o.orderId || o._id || '');
-      const tr = document.createElement('tr');
-      tr.dataset.orderId = o.orderId || o._id || '';
-      const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : (o.createdAt || '');
-      tr.innerHTML = `
-        <td><a href="${viewHref}" class="orders-explorer-open-order" data-order-id="${safeOrderId}">${safeOrderId}</a></td>
-        <td class="text-end">GH₵ ${formatMoney(o.total)}</td>
-        <td>${escapeHtml(o.status || '')}</td>
-        <td>${escapeHtml(created)}</td>
-        <td class="text-center"><button class="btn btn-sm btn-outline-secondary view-order-btn" data-order-id="${escapeHtml(o.orderId || o._id || '')}">View</button></td>
-      `;
-      tbody.appendChild(tr);
-    });
-    if (ordersCountEl) ordersCountEl.textContent = `${orders.length} result${orders.length > 1 ? 's' : ''}`;
+function renderOrdersList(orders) {
+  if (!ordersTable) return;
+
+  const tbody = ordersTable.querySelector('tbody');
+
+  if (!orders || !orders.length) {
+    tbody.innerHTML = '<tr><td class="text-muted" colspan="5">No orders in this range.</td></tr>';
+    if (ordersCountEl) ordersCountEl.textContent = '0 results';
+    return;
   }
+
+  tbody.innerHTML = '';
+
+  orders.forEach(o => {
+    const orderId = o.orderId || o._id || '';
+    const safeOrderId = escapeHtml(orderId);
+    const name = escapeHtml(o.name || 'Walk-in');
+    const viewHref = '/orders/view/' + encodeURIComponent(orderId);
+    const created = o.createdAt
+      ? formatDateTimeForDisplay(o.createdAt)
+      : (o.createdAt || '');
+
+    const tr = document.createElement('tr');
+    tr.dataset.orderId = orderId;
+
+    tr.innerHTML = `
+      <td>
+        <a href="${viewHref}"
+           class="orders-explorer-open-order"
+           title="Order ID: ${safeOrderId}">
+          ${name}
+        </a>
+      </td>
+      <td class="text-end">GH₵ ${formatMoney(o.total)}</td>
+      <td>${escapeHtml(o.status || '')}</td>
+      <td>${escapeHtml(created)}</td>
+      <td class="text-center">
+        <button
+          class="btn btn-sm btn-outline-secondary view-order-btn"
+          data-order-id="${safeOrderId}">
+          View
+        </button>
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+
+  if (ordersCountEl) {
+    ordersCountEl.textContent = `${orders.length} result${orders.length > 1 ? 's' : ''}`;
+  }
+}
 
   // ---------- view order details (orders explorer / detail modal) ----------
   async function viewOrderDetails(orderId) {
