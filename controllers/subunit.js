@@ -15,8 +15,8 @@ exports.create = async (req, res) => {
     // parse factor (optional)
     let factor = 1;
     if (req.body.factor !== undefined && req.body.factor !== null && String(req.body.factor).trim() !== '') {
-      const f = Number(req.body.factor);
-      factor = (isNaN(f) || f <= 0) ? 1 : Math.floor(f);
+    const f = Number(req.body.factor);
+    factor = (isNaN(f) || f <= 0) ? 1 : f;
     }
 
     if (!mongoose.Types.ObjectId.isValid(unitId)) {
@@ -53,7 +53,7 @@ exports.update = async (req, res) => {
     let factor = null;
     if (req.body.factor !== undefined && req.body.factor !== null && String(req.body.factor).trim() !== '') {
       const f = Number(req.body.factor);
-      factor = (isNaN(f) || f <= 0) ? null : Math.floor(f);
+      factor = (isNaN(f) || f <= 0) ? null : f;
     }
 
     if (!mongoose.Types.ObjectId.isValid(unitId) || !mongoose.Types.ObjectId.isValid(subunitId)) {
