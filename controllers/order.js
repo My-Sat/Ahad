@@ -571,7 +571,7 @@ exports.apiGetOrderById = async (req, res) => {
 
 // API: mark order paid (record payment)
 // POST /api/orders/:orderId/pay
-exports.apiPayOrder = async (req, res) => {
+exports.apiPayOrder = async (req, res) => {   
   try {
     const { orderId } = req.params;
     if (!orderId) return res.status(400).json({ error: 'No orderId provided' });
@@ -722,31 +722,45 @@ exports.apiGetDebtors = async (req, res) => {
       // otherwise use customer_doc info (artist -> businessName|phone, else firstName|businessName|phone),
       // otherwise fallback to empty string
       { $addFields: {
-          debtorName: {
-            $ifNull: [
-              '$customerName',
-              {
-                $cond: [
-                  { $gt: [ { $size: '$customer_doc' }, 0 ] },
-                  {
-                    $let: {
-                      vars: { c: { $arrayElemAt: ['$customer_doc', 0] } },
-                      in: {
-                        $cond: [
-                          { $eq: ['$$c.category', 'artist'] },
-                          { $ifNull: ['$$c.businessName', { $ifNull: ['$$c.phone', ''] }] },
-                          { $ifNull: ['$$c.firstName', { $ifNull: ['$$c.businessName', { $ifNull: ['$$c.phone', ''] }] }] }
-                        ]
-                      }
+        debtorName: {
+          $ifNull: [
+            '$customerName',
+            {
+              $cond: [
+                { $gt: [ { $size: '$customer_doc' }, 0 ] },
+                {
+                  $let: {
+                    vars: { c: { $arrayElemAt: ['$customer_doc', 0] } },
+                    in: {
+                      $cond: [
+                        { $in: ['$$c.category', ['artist', 'organisation']] },
+                        {
+                          $ifNull: [
+                            '$$c.businessName',
+                            { $ifNull: ['$$c.phone', ''] }
+                          ]
+                        },
+                        {
+                          $ifNull: [
+                            '$$c.firstName',
+                            {
+                              $ifNull: [
+                                '$$c.businessName',
+                                { $ifNull: ['$$c.phone', ''] }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
                     }
-                  },
-                  '' // no customer doc and no customerName -> empty string
-                ]
-              }
-            ]
-          }
-      } },
-
+                  }
+                },
+                ''
+              ]
+            }
+          ]
+        }
+      }},
       // project fields useful for frontend
       { $project: {
           orderId: 1,
