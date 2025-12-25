@@ -703,11 +703,26 @@ function addToCart({
         displayLabel = `<div class="small text-muted">${escapeHtml(it.serviceName || '')}</div><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.selectionLabel || '')}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}</div>`;
       }
 
-      const qtyCell = it.isBook ? String(it.qty) : String(it.pages);
+      let qtyCell = '';
+      let factorCell = '';
+
+      if (it.isBook) {
+        qtyCell = String(it.qty);
+        factorCell = '';
+      } else if (it.printerId) {
+        // printer service → reverse display
+        qtyCell = it.factor ? String(it.factor) : '';
+        factorCell = String(it.pages);
+      } else {
+        // normal service
+        qtyCell = String(it.pages);
+        factorCell = '';
+      }
 
       tr.innerHTML = `
         <td>${displayLabel}</td>
         <td class="text-center">${escapeHtml(qtyCell)}</td>
+        <td class="text-center">${escapeHtml(factorCell)}</td>
         <td class="text-end">GH₵ ${formatMoney(it.unitPrice)}</td>
         <td class="text-end">GH₵ ${formatMoney(it.subtotal)}</td>
         <td class="text-center"><button class="btn btn-sm btn-danger remove-cart-btn" type="button">Remove</button></td>
