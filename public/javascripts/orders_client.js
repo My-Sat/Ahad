@@ -723,6 +723,7 @@ function addToCart({
         <td>${displayLabel}</td>
         <td class="text-center">${escapeHtml(qtyCell)}</td>
         <td class="text-center">${escapeHtml(factorCell)}</td>
+        <td class="text-center">${escapeHtml(it.pagesOriginal)}</td>
         <td class="text-end">GH₵ ${formatMoney(it.unitPrice)}</td>
         <td class="text-end">GH₵ ${formatMoney(it.subtotal)}</td>
         <td class="text-center"><button class="btn btn-sm btn-danger remove-cart-btn" type="button">Remove</button></td>
