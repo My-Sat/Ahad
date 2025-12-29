@@ -49,7 +49,6 @@ block content
                         span.text-white #{subs}
 
                       if it.fb
-                        span.badge.bg-secondary.ms-2 F/B
 
                       if it.spoiled
                         span.text-danger.ms-2 Spoiled: #{it.spoiled}
@@ -58,7 +57,12 @@ block content
                       - const rawPages = Number(it.pages || 1);
                       - const qty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (it.fb ? Math.ceil(rawPages / 2) : rawPages);
                       - const factor = Number(it.factor || 1);
-                      div QTY: #{qty}
+                      - const qtyLabel = it.printer ? 'Sheets' : 'QTY'
+                      div #{qtyLabel}: #{qty}
+
+                      if it.printer
+                        div.small.text-muted-light Pages: #{rawPages}
+
                       if factor > 1
                         div.small.text-muted-light Factor ×#{factor}
 
