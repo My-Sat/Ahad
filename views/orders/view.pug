@@ -61,10 +61,10 @@ block content
                       div #{qtyLabel}: #{qty}
 
                       if it.printer
-                        div.small.text-muted-light Pages: #{rawPages}
+                        div Pages: #{rawPages}
 
                       if factor > 1
-                        div.small.text-muted-light Factor ×#{factor}
+                        div QTY ×#{factor}
 
                       div Unit: GH₵ #{(it.unitPrice || 0).toFixed(2)}
                       div Subtotal: GH₵ #{(it.subtotal || 0).toFixed(2)}
@@ -86,9 +86,9 @@ block content
               .me-3
                 div.text-white Remaining:
                 if outstanding > 0
-                  strong.text-danger GH₵ #{outstanding.toFixed(2)}
+                  strong GH₵ #{outstanding.toFixed(2)}
                 else
-                  strong.text-success GH₵ 0.00
+                  strong GH₵ 0.00
 
             // Payment history
             h6.mb-2.text-white Payment History

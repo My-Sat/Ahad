@@ -232,13 +232,12 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
               <span style="display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:520px;">
                 ${escapeHtml(selLabel)}
               </span>
-              ${fbBadge}
             </div>
 
             <div class="text-end ms-3" style="min-width:200px;">
               <div>${qtyLabel}: ${escapeHtml(String(qty))}</div>
-              ${ requiresPrinter ? `<div class="small text-muted">Pages: ${escapeHtml(String(pages))}</div>` : '' }
-              ${ factor > 1 ? `<div class="small text-muted">Factor ×${factor}</div>` : '' }
+              ${ requiresPrinter ? `<div>Pages: ${escapeHtml(String(pages))}</div>` : '' }
+              ${ factor > 1 ? `<div>QTY ×${factor}</div>` : '' }
               <div>Unit: GH₵ ${escapeHtml(fmt(unit))}</div>
               <div>Subtotal: GH₵ ${escapeHtml(fmt(subtotal))}</div>
             </div>
