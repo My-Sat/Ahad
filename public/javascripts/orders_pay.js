@@ -216,16 +216,25 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
         // prefer server-subtotal; otherwise compute from displayQty
         const subtotal = Number((typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))) ? Number(it.subtotal) : (qty * unit));
 
+const serviceName = it.serviceName || 'Service';
+const factor = Number(it.factor || 1);
+
         itemsHtml += `
-          <div class="list-group-item d-flex align-items-center justify-content-between" style="padding:0.5rem 0.75rem;">
+          <div class="list-group-item d-flex align-items-start justify-content-between" style="padding:0.5rem 0.75rem;">
             <div style="flex:1;min-width:0;">
+              <div class="fw-semibold">
+                ${escapeHtml(serviceName)}
+              </div>
+
               <span style="display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:520px;">
                 ${escapeHtml(selLabel)}
               </span>
               ${fbBadge}
             </div>
-            <div class="text-end ms-3" style="min-width:180px;">
+
+            <div class="text-end ms-3" style="min-width:200px;">
               <div>QTY: ${escapeHtml(String(qty))}</div>
+              ${factor > 1 ? `<div class="small text-muted">Factor ×${factor}</div>` : ''}
               <div>Unit: GH₵ ${escapeHtml(fmt(unit))}</div>
               <div>Subtotal: GH₵ ${escapeHtml(fmt(subtotal))}</div>
             </div>

@@ -21,6 +21,7 @@ const OrderItemSchema = new mongoose.Schema({
   pages: { type: Number, default: 1 },
   // the effective quantity used for pricing (e.g. ceil(pages/2) for F/B). Stored so clients can show exactly what server used.
   effectiveQty: { type: Number, default: 1 },
+  factor: { type: Number, default: 1 }, 
   // computed line subtotal (unitPrice * effectiveQty)
   subtotal: { type: Number, required: true },
   // optional flags stored per-item (backwards compat)

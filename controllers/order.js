@@ -45,6 +45,32 @@ exports.viewOrderPage = async (req, res) => {
     const orderDoc = await Order.findOne({ orderId }).lean();
     if (!orderDoc) return res.status(404).send('Order not found');
 
+    // Populate service names for items
+try {
+  const serviceIds = Array.from(
+    new Set((orderDoc.items || []).map(it => String(it.service)))
+  );
+
+  if (serviceIds.length) {
+    const services = await Service.find({ _id: { $in: serviceIds } })
+      .select('_id name')
+      .lean();
+
+    const smap = {};
+    services.forEach(s => {
+      smap[String(s._id)] = s.name;
+    });
+
+    orderDoc.items = (orderDoc.items || []).map(it => ({
+      ...it,
+      serviceName: smap[String(it.service)] || 'Unknown Service'
+    }));
+  }
+} catch (e) {
+  console.error('Failed to populate service names for order view', e);
+}
+
+
     // Manually populate customer (mirroring apiGetOrderById and newOrderPage prefill logic)
     let customer = null;
     if (orderDoc.customer) {
@@ -472,6 +498,46 @@ exports.apiGetOrderById = async (req, res) => {
       // If printer lookup fails, keep original ids (do not block response)
       console.error('Failed to populate printer names for order items', pErr);
     }
+
+    // Populate service names for order items
+try {
+  const serviceIds = Array.from(new Set(
+    (order.items || [])
+      .filter(it => it.service)
+      .map(it => String(it.service))
+  ));
+
+  if (serviceIds.length) {
+    const Service = require('../models/service');
+    const services = await Service.find({ _id: { $in: serviceIds } })
+      .select('_id name')
+      .lean();
+
+    const smap = {};
+    services.forEach(s => {
+      smap[String(s._id)] = s.name;
+    });
+
+    order.items = (order.items || []).map(it => {
+      if (it.service) {
+        const sid = String(it.service);
+        return Object.assign({}, it, {
+          serviceName: smap[sid] || it.serviceName || 'Service'
+        });
+      }
+      return Object.assign({}, it, {
+        serviceName: it.serviceName || 'Service'
+      });
+    });
+  }
+} catch (sErr) {
+  console.error('Failed to populate service names for order items', sErr);
+  // ensure serviceName always exists
+  order.items = (order.items || []).map(it =>
+    Object.assign({}, it, { serviceName: it.serviceName || 'Service' })
+  );
+}
+
 
     // Populate customer (if present)
     let customerInfo = null;
