@@ -158,3 +158,22 @@ exports.apiSearch = async (req, res) => {
     return res.status(500).json({ error: 'Error searching customers' });
   }
 };
+
+
+/**
+ * API: list all customers (admin only)
+ * GET /api/customers
+ */
+exports.apiListCustomers = async (req, res) => {
+  try {
+    const customers = await Customer.find({})
+      .sort({ createdAt: -1 })
+      .select('_id category firstName businessName phone createdAt')
+      .lean();
+
+    return res.json({ ok: true, customers });
+  } catch (err) {
+    console.error('apiListCustomers error', err);
+    return res.status(500).json({ error: 'Failed to load customers' });
+  }
+};

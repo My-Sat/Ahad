@@ -33,11 +33,17 @@ block content
                 button.btn.btn-outline-light-custom.btn-sm#openDebtorsBtn(type='button', title='Debtors')
                   i.bi.bi-list-check.me-1
                   | Debtors
+                  
                 // Cashiers / Collections (new) & Accountant — show only to admins
                 if currentUser && currentUser.role && currentUser.role.toLowerCase() === 'admin'
                   button.btn.btn-outline-light-custom.btn-sm#openCashiersBtn(type='button', title='Cashiers')
                     i.bi.bi-people.me-1
                     | Receive Payments
+                if currentUser && currentUser.role && currentUser.role.toLowerCase() === 'admin'
+                  button.btn.btn-outline-light-custom.btn-sm#openCustomersBtn(type='button', title='Customers')
+                    i.bi.bi-people.me-1
+                    | Customers
+
                   button.btn.btn-outline-light-custom.btn-sm#openAccountantBtn(type='button', title='Accountant ledger')
                     i.bi.bi-journal-check.me-1
                     | Accountant
@@ -136,6 +142,34 @@ block content
                   td.text-muted(colspan='3') Loading...
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
+
+          // Customers Explorer Modal
+  .modal.fade(id='customersModal', tabindex='-1', aria-labelledby='customersModalLabel', aria-hidden='true')
+    .modal-dialog.modal-xl.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title#customersModalLabel Customers
+          button.btn-close(type='button', data-bs-dismiss='modal')
+
+        .modal-body.dark-card-body
+          p.text-muted.small#customersCount Loading...
+
+          .table-responsive
+            table.table.table-hover.table-sm#customersTable
+              thead
+                tr
+                  th Name
+                  th Phone
+                  th Category
+                  th Registered
+                  th.text-center Actions
+              tbody
+                tr
+                  td.text-muted(colspan='5') Loading customers...
+
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
+
 
   // Debtors modal (lists part-payment transactions; client fetches /debtors)
   .modal.fade(id='debtorsModal', tabindex='-1', aria-labelledby='debtorsModalLabel', aria-hidden='true')

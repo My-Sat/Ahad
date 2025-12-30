@@ -1028,6 +1028,66 @@ if (debtorsTable) {
   } catch (e) { /* ignore */ }
 })();
 
+
+const customersModalEl = document.getElementById('customersModal');
+const customersModal = customersModalEl ? new bootstrap.Modal(customersModalEl) : null;
+const openCustomersBtn = document.getElementById('openCustomersBtn');
+
+if (openCustomersBtn) {
+  openCustomersBtn.addEventListener('click', async () => {
+    if (customersModal) customersModal.show();
+    await fetchCustomers();
+  });
+}
+
+async function fetchCustomers() {
+  const tbody = document.querySelector('#customersTable tbody');
+  const countEl = document.getElementById('customersCount');
+
+  tbody.innerHTML = `<tr><td colspan="5" class="text-muted">Loading...</td></tr>`;
+
+  try {
+    const res = await fetch('/customers/api/list', {
+  headers: { 'X-Requested-With': 'XMLHttpRequest' }
+});
+
+    const j = await res.json();
+
+    if (!j.ok) throw new Error();
+
+    if (!j.customers.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="text-muted">No customers found.</td></tr>`;
+      countEl.textContent = '0 customers';
+      return;
+    }
+
+    tbody.innerHTML = '';
+    j.customers.forEach(c => {
+      const name =
+        (c.category === 'artist' || c.category === 'organisation')
+          ? c.businessName
+          : c.firstName;
+
+      tbody.insertAdjacentHTML('beforeend', `
+        <tr>
+          <td>${escapeHtml(name || '-')}</td>
+          <td>${escapeHtml(c.phone)}</td>
+          <td><span class="badge bg-secondary">${escapeHtml(c.category)}</span></td>
+          <td>${new Date(c.createdAt).toLocaleDateString()}</td>
+          <td class="text-center">
+            <button class="btn btn-sm btn-outline-primary me-1" data-edit="${c._id}">Edit</button>
+            <button class="btn btn-sm btn-outline-danger" data-delete="${c._id}">Delete</button>
+          </td>
+        </tr>
+      `);
+    });
+
+    countEl.textContent = `${j.customers.length} customers`;
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-danger">Failed to load customers</td></tr>`;
+  }
+}
+
   // -------------------------
   // Orders Explorer for Pay page (re-uses server /api/orders)
   // - openOrdersExplorerBtn opens modal and auto-loads today's orders

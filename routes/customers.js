@@ -10,6 +10,14 @@ router.get('/', ensureHasPermission('/customers'), customerController.frontPage)
 // API: lookup customer by phone
 router.get('/lookup', ensureHasPermission('/lookup'), customerController.apiLookupByPhone);
 
+// API: list all customers (admin)
+router.get(
+  '/api/list',
+  ensureHasPermission('/customers'),
+  customerController.apiListCustomers
+);
+
+
 // API: create new customer
 router.post('/', ensureHasPermission('/customers'), customerController.apiCreateCustomer);
 
