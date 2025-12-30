@@ -27,9 +27,9 @@ block content
                 .mb-2
                   div.small.text-muted-light Selected customer:
                   if customer.category === 'artist' || customer.category === 'organisation'
-                    strong(style='color:#ff7a18;') #{customer.businessName || customer.phone}
+                    strong(style='color:#21BCFF;') #{customer.businessName || customer.phone}
                   else
-                    strong(style='color:#ff7a18;') #{customer.firstName || customer.businessName || customer.phone}
+                    strong(style='color:#21BCFF;') #{customer.firstName || customer.businessName || customer.phone}
 
                   // phone
                   strong.text-muted-light.ms-3 #{customer.phone}

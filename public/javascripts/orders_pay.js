@@ -330,7 +330,7 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
       <p><strong>Status:</strong> ${statusLabel}</p>
       ${itemsHtml}
       <p class="text-end"><strong>Total: GH₵ ${fmt(order.total)}</strong></p>
-      ${ (outstanding !== null && outstanding > 0) ? `<p class="text-end text-danger"><strong>Remaining: GH₵ ${fmt(outstanding)}</strong></p>` : '' }
+      ${ (outstanding !== null && outstanding > 0) ? `<p class="text-end"><strong>Remaining: GH₵ ${fmt(outstanding)}</strong></p>` : '' }
     `;
 
 
