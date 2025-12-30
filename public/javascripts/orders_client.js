@@ -705,25 +705,29 @@ function addToCart({
 
       let qtyCell = '';
       let factorCell = '';
+      let pagesCell = '';
 
       if (it.isBook) {
         qtyCell = String(it.qty);
         factorCell = '';
+        pagesCell = '';
       } else if (it.printerId) {
         // printer service → reverse display
         qtyCell = it.factor ? String(it.factor) : '';
         factorCell = String(it.pages);
+        pagesCell = String(it.pagesOriginal);
       } else {
         // normal service
         qtyCell = String(it.pages);
         factorCell = '';
+        pagesCell = '';
       }
 
       tr.innerHTML = `
         <td>${displayLabel}</td>
         <td class="text-center">${escapeHtml(qtyCell)}</td>
         <td class="text-center">${escapeHtml(factorCell)}</td>
-        <td class="text-center">${escapeHtml(it.pagesOriginal)}</td>
+        <td class="text-center">${escapeHtml(pagesCell)}</td>
         <td class="text-end">GH₵ ${formatMoney(it.unitPrice)}</td>
         <td class="text-end">GH₵ ${formatMoney(it.subtotal)}</td>
         <td class="text-center"><button class="btn btn-sm btn-danger remove-cart-btn" type="button">Remove</button></td>
