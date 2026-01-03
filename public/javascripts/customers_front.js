@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const regBusinessName = document.getElementById('regBusinessName');
   const regPhone = document.getElementById('regPhone');
   const regNotes = document.getElementById('regNotes');
-  const saveCustomerBtn = document.getElementById('saveCustomerBtn');
+  const saveCustomerBtn = document.getElementById('saveCustomerBtn');  
 
   // Typeahead container
   let suggestionsBox = null;
@@ -210,66 +210,106 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Register button opens modal (clear fields)
-  if (registerBtn) {
-    registerBtn.addEventListener('click', function () {
-      if (regPhone) regPhone.value = lookupPhoneInput ? normalizePhone(lookupPhoneInput.value) : '';
-      regCategory.value = 'one_time';
-      updateRegFields();
-      if (regFirstName) regFirstName.value = '';
-      if (regBusinessName) regBusinessName.value = '';
-      if (regNotes) regNotes.value = '';
-      if (regModal) regModal.show();
-    });
-  }
+if (registerBtn) {
+  registerBtn.addEventListener('click', function () {
+    // reset edit state
+    window.editingCustomerId = null;
+
+    // reset modal title + button
+    const titleEl = document.getElementById('registerCustomerModalLabel');
+    if (titleEl) titleEl.textContent = 'Register Customer';
+    if (saveCustomerBtn) saveCustomerBtn.textContent = 'Register';
+
+    // prefill phone if available
+    if (regPhone) {
+      regPhone.value = lookupPhoneInput
+        ? normalizePhone(lookupPhoneInput.value)
+        : '';
+    }
+
+    if (regCategory) regCategory.value = 'one_time';
+    updateRegFields();
+
+    if (regFirstName) regFirstName.value = '';
+    if (regBusinessName) regBusinessName.value = '';
+    if (regNotes) regNotes.value = '';
+
+    if (regModal) regModal.show();
+  });
+}
 
   // Save registration
-  if (saveCustomerBtn) {
-    saveCustomerBtn.addEventListener('click', async function () {
-      const category = regCategory ? regCategory.value : 'one_time';
-      const phone = normalizePhone(regPhone ? regPhone.value : '');
-      const firstName = regFirstName ? regFirstName.value.trim() : '';
-      const businessName = regBusinessName ? regBusinessName.value.trim() : '';
-      const notes = regNotes ? regNotes.value.trim() : '';
+if (saveCustomerBtn) {
+  saveCustomerBtn.addEventListener('click', async function () {
+    const category = regCategory ? regCategory.value : 'one_time';
+    const phone = normalizePhone(regPhone ? regPhone.value : '');
+    const firstName = regFirstName ? regFirstName.value.trim() : '';
+    const businessName = regBusinessName ? regBusinessName.value.trim() : '';
+    const notes = regNotes ? regNotes.value.trim() : '';
 
-      if (!phone) return showAlert('Phone is required');
-      if (category === 'one_time' && !firstName) return showAlert('First name is required for a customer');
-      if ((category === 'artist' || category === 'organisation') && !businessName) return showAlert('Business name is required for an artist');
+    // ---- validations (unchanged logic) ----
+    if (!phone) return showAlert('Phone is required');
 
-      saveCustomerBtn.disabled = true;
-      saveCustomerBtn.textContent = 'Saving...';
+    if (category === 'one_time' && !firstName) {
+      return showAlert('First name is required for a customer');
+    }
 
-      try {
-        const payload = { category, phone, firstName, businessName, notes };
-        const res = await fetch('/customers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-          body: JSON.stringify(payload)
-        });
-        const j = await res.json().catch(()=>null);
-        if (!res.ok) {
-          showAlert((j && j.error) ? j.error : 'Registration failed');
-          return;
-        }
-        if (j && j.ok) {
-          const cust = j.customer;
-          if (regModal) regModal.hide();
-          window.location.href = `/orders/new?customerId=${encodeURIComponent(cust._id)}`;
-          return;
-        } else if (j && j.customer) {
-          if (regModal) regModal.hide();
-          window.location.href = `/orders/new?customerId=${encodeURIComponent(j.customer._id)}`;
-          return;
-        } else {
-          showAlert('Unexpected response from server');
-        }
-      } catch (err) {
-        console.error('save customer err', err);
-        showAlert('Network error while saving');
-      } finally {
-        saveCustomerBtn.disabled = false;
-        saveCustomerBtn.textContent = 'Register';
+    if ((category === 'artist' || category === 'organisation') && !businessName) {
+      return showAlert('Business name is required');
+    }
+
+    saveCustomerBtn.disabled = true;
+    saveCustomerBtn.textContent = window.editingCustomerId ? 'Updating...' : 'Saving...';
+
+    try {
+      const payload = { category, phone, firstName, businessName, notes };
+
+      const url = window.editingCustomerId
+        ? `/customers/${encodeURIComponent(window.editingCustomerId)}`
+        : '/customers';
+
+      const method = window.editingCustomerId ? 'PATCH' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const j = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        showAlert((j && j.error) ? j.error : 'Operation failed');
+        return;
       }
-    });
-  }
+
+      // ---- EDIT MODE ----
+      if (window.editingCustomerId) {
+        window.editingCustomerId = null;
+        if (regModal) regModal.hide();
+        showAlert('Customer updated successfully');
+        return;
+      }
+
+      // ---- CREATE MODE (existing behavior preserved) ----
+      if (j && j.customer) {
+        if (regModal) regModal.hide();
+        window.location.href = `/orders/new?customerId=${encodeURIComponent(j.customer._id)}`;
+        return;
+      }
+
+      showAlert('Unexpected response from server');
+
+    } catch (err) {
+      console.error('save customer err', err);
+      showAlert('Network error while saving');
+    } finally {
+      saveCustomerBtn.disabled = false;
+      saveCustomerBtn.textContent = window.editingCustomerId ? 'Update' : 'Register';
+    }
+  });
+}
 
 });

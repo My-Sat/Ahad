@@ -78,6 +78,54 @@ exports.apiCreateCustomer = async (req, res) => {
 };
 
 /**
+ * Update customer
+ * PATCH /customers/:id
+ */
+exports.apiUpdateCustomer = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid customer id' });
+    }
+
+    const body = req.body || {};
+    const category = (body.category || '').toString();
+    const phone = (body.phone || '').toString().trim();
+
+    if (!phone) return res.status(400).json({ error: 'Phone is required' });
+    if (!['one_time','artist','regular','organisation'].includes(category)) {
+      return res.status(400).json({ error: 'Invalid category' });
+    }
+
+    if (category === 'one_time' && !(body.firstName && body.firstName.trim())) {
+      return res.status(400).json({ error: 'First name required' });
+    }
+
+    if ((category === 'artist' || category === 'organisation') &&
+        !(body.businessName && body.businessName.trim())) {
+      return res.status(400).json({ error: 'Business name required' });
+    }
+
+    const customer = await Customer.findById(id);
+    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+    customer.category = category;
+    customer.phone = phone;
+    customer.firstName = (body.firstName || '').trim();
+    customer.businessName = (body.businessName || '').trim();
+    customer.notes = (body.notes || '').trim();
+
+    await customer.save();
+
+    return res.json({ ok: true, customer });
+  } catch (err) {
+    console.error('apiUpdateCustomer error', err);
+    return res.status(500).json({ error: 'Failed to update customer' });
+  }
+};
+
+
+/**
  * Helper: updateRegularStatus(customerId)
  * - Counts orders in the last 30 days for this customer
  * - If count >= 5 and customer is not an artist, set category='regular'

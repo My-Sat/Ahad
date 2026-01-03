@@ -21,6 +21,14 @@ router.get(
 // API: create new customer
 router.post('/', ensureHasPermission('/customers'), customerController.apiCreateCustomer);
 
+// API: update customer
+router.patch(
+  '/:id',
+  ensureHasPermission('/customers'),
+  customerController.apiUpdateCustomer
+);
+
+
 // API: search suggestions (for typeahead)
 router.get('/search', ensureHasPermission('/search'), customerController.apiSearch);
 

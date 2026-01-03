@@ -1044,47 +1044,88 @@ async function fetchCustomers() {
   const tbody = document.querySelector('#customersTable tbody');
   const countEl = document.getElementById('customersCount');
 
+  if (!tbody) return;
+
   tbody.innerHTML = `<tr><td colspan="5" class="text-muted">Loading...</td></tr>`;
+  if (countEl) countEl.textContent = 'Loading...';
 
   try {
     const res = await fetch('/customers/api/list', {
-  headers: { 'X-Requested-With': 'XMLHttpRequest' }
-});
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
 
-    const j = await res.json();
-
-    if (!j.ok) throw new Error();
+    const j = await res.json().catch(() => null);
+    if (!j || !j.ok || !Array.isArray(j.customers)) {
+      throw new Error('Invalid response');
+    }
 
     if (!j.customers.length) {
       tbody.innerHTML = `<tr><td colspan="5" class="text-muted">No customers found.</td></tr>`;
-      countEl.textContent = '0 customers';
+      if (countEl) countEl.textContent = '0 customers';
       return;
     }
 
     tbody.innerHTML = '';
+
     j.customers.forEach(c => {
       const name =
         (c.category === 'artist' || c.category === 'organisation')
-          ? c.businessName
-          : c.firstName;
+          ? (c.businessName || '-')
+          : (c.firstName || '-');
 
-      tbody.insertAdjacentHTML('beforeend', `
-        <tr>
-          <td>${escapeHtml(name || '-')}</td>
-          <td>${escapeHtml(c.phone)}</td>
-          <td><span class="badge bg-secondary">${escapeHtml(c.category)}</span></td>
-          <td>${new Date(c.createdAt).toLocaleDateString()}</td>
-          <td class="text-center">
-            <button class="btn btn-sm btn-outline-primary me-1" data-edit="${c._id}">Edit</button>
-            <button class="btn btn-sm btn-outline-danger" data-delete="${c._id}">Delete</button>
-          </td>
-        </tr>
-      `);
+      const tr = document.createElement('tr');
+
+      tr.innerHTML = `
+        <td>${escapeHtml(name)}</td>
+        <td>${escapeHtml(c.phone || '')}</td>
+        <td>
+          <span class="badge bg-secondary">
+            ${escapeHtml(c.category || '')}
+          </span>
+        </td>
+        <td>${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '-'}</td>
+        <td class="text-center">
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary me-1 edit-customer-btn">
+            Edit
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-danger delete-customer-btn"
+            disabled>
+            Delete
+          </button>
+        </td>
+      `;
+
+      // ---- EDIT HANDLER (clean + safe) ----
+      const editBtn = tr.querySelector('.edit-customer-btn');
+      if (editBtn) {
+        editBtn.addEventListener('click', () => {
+          if (typeof openEditCustomerModal === 'function') {
+            openEditCustomerModal(c);
+          } else {
+            console.error('openEditCustomerModal is not defined');
+          }
+        });
+      }
+
+      tbody.appendChild(tr);
     });
 
-    countEl.textContent = `${j.customers.length} customers`;
-  } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-danger">Failed to load customers</td></tr>`;
+    if (countEl) countEl.textContent = `${j.customers.length} customers`;
+
+  } catch (err) {
+    console.error('fetchCustomers error', err);
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="text-danger">
+          Failed to load customers
+        </td>
+      </tr>
+    `;
+    if (countEl) countEl.textContent = 'Error';
   }
 }
 

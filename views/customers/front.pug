@@ -49,9 +49,11 @@ block content
             .mb-2
               label.form-label(for='regNotes') Notes (optional)
               input.form-control.form-control-dark#regNotes(type='text', placeholder='Notes')
+              input(type='hidden', id='regCustomerId')
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary#saveCustomerBtn(type='button') Register
 
 block append scripts
+  script(src='/public/javascripts/customer_editor.js')
   script(src='/public/javascripts/customers_front.js')

@@ -170,6 +170,40 @@ block content
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
+            // Registration modal (customer / artist)
+  .modal.fade(id='registerCustomerModal', tabindex='-1', aria-labelledby='registerCustomerModalLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title(id='registerCustomerModalLabel').text-white Register Customer
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          form#registerCustomerForm
+            .mb-2
+              label.form-label(for='regCategory') Register as
+              select.form-select#regCategory
+                option(value='one_time') Customer
+                option(value='artist') Artist
+                option(value='organisation') Organisation / NGO
+            .mb-2#regFirstNameGroup
+              label.form-label(for='regFirstName') Full Name
+              input.form-control.form-control-dark#regFirstName(type='text', placeholder='Full name')
+            .mb-2#regBusinessNameGroup(style='display:none;')
+              label.form-label(for='regBusinessName') Business name
+              input.form-control.form-control-dark#regBusinessName(type='text', placeholder='Business name')
+            .mb-2
+              label.form-label(for='regPhone') Phone
+              input.form-control.form-control-dark#regPhone(type='text', placeholder='Phone number')
+            .mb-2
+              label.form-label(for='regNotes') Notes (optional)
+              input.form-control.form-control-dark#regNotes(type='text', placeholder='Notes')
+              input(type='hidden', id='regCustomerId')
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary#saveCustomerBtn(type='button') Register
+
+          
+
 
   // Debtors modal (lists part-payment transactions; client fetches /debtors)
   .modal.fade(id='debtorsModal', tabindex='-1', aria-labelledby='debtorsModalLabel', aria-hidden='true')
@@ -238,4 +272,5 @@ block content
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
 block append scripts
+  script(src='/public/javascripts/customer_editor.js')
   script(src='/public/javascripts/orders_pay.js')
