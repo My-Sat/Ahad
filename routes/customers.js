@@ -28,6 +28,14 @@ router.patch(
   customerController.apiUpdateCustomer
 );
 
+// API: delete customer
+router.delete(
+  '/:id',
+  ensureHasPermission('/customers'),
+  customerController.apiDeleteCustomer
+);
+
+
 
 // API: search suggestions (for typeahead)
 router.get('/search', ensureHasPermission('/search'), customerController.apiSearch);

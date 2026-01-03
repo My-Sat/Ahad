@@ -124,6 +124,42 @@ exports.apiUpdateCustomer = async (req, res) => {
   }
 };
 
+/**
+ * Delete customer (only if no orders exist)
+ * DELETE /customers/:id
+ */
+exports.apiDeleteCustomer = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid customer id' });
+    }
+
+    const customer = await Customer.findById(id);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    // Check if customer has any orders
+    const hasOrders = await Order.exists({ customer: customer._id });
+    if (hasOrders) {
+      return res.status(400).json({
+        error: 'Cannot delete customer with existing orders'
+      });
+    }
+
+    await customer.deleteOne();
+
+    return res.json({ ok: true });
+
+  } catch (err) {
+    console.error('apiDeleteCustomer error', err);
+    return res.status(500).json({ error: 'Failed to delete customer' });
+  }
+};
+
+
 
 /**
  * Helper: updateRegularStatus(customerId)

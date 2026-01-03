@@ -288,10 +288,22 @@ if (saveCustomerBtn) {
       // ---- EDIT MODE ----
       if (window.editingCustomerId) {
         window.editingCustomerId = null;
-        if (regModal) regModal.hide();
-        showAlert('Customer updated successfully');
-        return;
-      }
+
+      const modal = bootstrap.Modal.getInstance(
+        document.getElementById('registerCustomerModal')
+      );
+      if (modal) modal.hide();
+
+        // 🔔 Notify other pages/components
+        document.dispatchEvent(
+          new CustomEvent('customer:updated', {
+            detail: { customer: j.customer }
+          })
+        );
+
+  showAlert('Customer updated successfully');
+  return;
+}
 
       // ---- CREATE MODE (existing behavior preserved) ----
       if (j && j.customer) {

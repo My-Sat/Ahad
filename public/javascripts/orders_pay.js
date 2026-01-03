@@ -1087,13 +1087,12 @@ async function fetchCustomers() {
         <td class="text-center">
           <button
             type="button"
-            class="btn btn-sm btn-outline-primary me-1 edit-customer-btn">
+            class="btn btn-sm btn-primary me-1 edit-customer-btn">
             Edit
           </button>
           <button
             type="button"
-            class="btn btn-sm btn-outline-danger delete-customer-btn"
-            disabled>
+            class="btn btn-sm btn-danger delete-customer-btn">
             Delete
           </button>
         </td>
@@ -1112,6 +1111,50 @@ async function fetchCustomers() {
       }
 
       tbody.appendChild(tr);
+
+      // ---- DELETE HANDLER (safe + confirmed) ----
+const deleteBtn = tr.querySelector('.delete-customer-btn');
+if (deleteBtn) {
+  deleteBtn.addEventListener('click', async () => {
+    const nameLabel =
+      (c.category === 'artist' || c.category === 'organisation')
+        ? (c.businessName || c.phone)
+        : (c.firstName || c.phone);
+
+    const ok = confirm(
+      `Delete customer "${nameLabel}"?\n\nThis cannot be undone.\nCustomers with orders cannot be deleted.`
+    );
+    if (!ok) return;
+
+    deleteBtn.disabled = true;
+    deleteBtn.textContent = 'Deleting...';
+
+    try {
+      const res = await fetch(`/customers/${encodeURIComponent(c._id)}`, {
+        method: 'DELETE',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+
+      const j = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        alert((j && j.error) ? j.error : 'Delete failed');
+        return;
+      }
+
+      // Refresh customers list
+      await fetchCustomers();
+
+    } catch (err) {
+      console.error('delete customer error', err);
+      alert('Network error while deleting customer');
+    } finally {
+      deleteBtn.disabled = false;
+      deleteBtn.textContent = 'Delete';
+    }
+  });
+}
+
     });
 
     if (countEl) countEl.textContent = `${j.customers.length} customers`;
@@ -1128,6 +1171,14 @@ async function fetchCustomers() {
     if (countEl) countEl.textContent = 'Error';
   }
 }
+
+// Refresh customers list after edit
+document.addEventListener('customer:updated', async () => {
+  if (customersModalEl && customersModalEl.classList.contains('show')) {
+    await fetchCustomers();
+  }
+});
+
 
   // -------------------------
   // Orders Explorer for Pay page (re-uses server /api/orders)

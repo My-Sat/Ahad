@@ -5,15 +5,12 @@
   if (typeof window.editingCustomerId === 'undefined') {
     window.editingCustomerId = null;
   }
-  let regModal = null;
-  let editingCustomerId = null;
 
-  function initCustomerEditor() {
-    const regModalEl = document.getElementById('registerCustomerModal');
-    if (window.bootstrap && regModalEl) {
-      regModal = new bootstrap.Modal(regModalEl);
-    }
-  }
+function getRegModalInstance() {
+  const modalEl = document.getElementById('registerCustomerModal');
+  if (!modalEl || !window.bootstrap) return null;
+  return bootstrap.Modal.getOrCreateInstance(modalEl);
+}
 
   function updateRegFields() {
     const regCategory = document.getElementById('regCategory');
@@ -44,16 +41,20 @@ function openEditCustomerModal(customer) {
     return;
   }
 
+  // ✅ SET EDIT MODE
   window.editingCustomerId = customer._id;
 
-
+  // ✅ Update title
   const titleEl = document.getElementById('registerCustomerModalLabel');
   if (titleEl) titleEl.textContent = 'Edit Customer';
 
+  // ✅ Update button text
+  const saveBtn = document.getElementById('saveCustomerBtn');
+  if (saveBtn) saveBtn.textContent = 'Update';
+
+  // Fill form
   const categoryEl = document.getElementById('regCategory');
-  if (categoryEl) {
-    categoryEl.value = customer.category || 'one_time';
-  }
+  if (categoryEl) categoryEl.value = customer.category || 'one_time';
 
   updateRegFields();
 
@@ -69,12 +70,12 @@ function openEditCustomerModal(customer) {
   const notesEl = document.getElementById('regNotes');
   if (notesEl) notesEl.value = customer.notes || '';
 
-  if (regModal) regModal.show();
+  const modal = getRegModalInstance();
+if (modal) modal.show();
+
 }
 
   // expose globally
   window.openEditCustomerModal = openEditCustomerModal;
-  window.initCustomerEditor = initCustomerEditor;
 
-  document.addEventListener('DOMContentLoaded', initCustomerEditor);
 })();
