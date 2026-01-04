@@ -745,6 +745,57 @@ try {
   }
 };
 
+// POST /orders/pay-bulk
+// POST /orders/pay-bulk
+exports.apiPayBulkDebtor = async (req, res) => {
+  try {
+    const { orderIds, paymentMethod, momoNumber, momoTxId, chequeNumber } = req.body;
+
+    if (!Array.isArray(orderIds) || !orderIds.length) {
+      return res.status(400).json({ error: 'No orders provided for bulk payment' });
+    }
+
+    for (const oid of orderIds) {
+      const order = await Order.findOne({ orderId: oid });
+      if (!order) continue;
+
+      const paidSoFar = (order.payments || []).reduce(
+        (s, p) => s + (Number(p.amount) || 0),
+        0
+      );
+
+      const outstanding = Number(order.total || 0) - paidSoFar;
+      if (outstanding <= 0) continue;
+
+      order.payments.push({
+        method: paymentMethod || 'cash',
+        amount: outstanding,
+        meta: {
+          momoNumber,
+          momoTxId,
+          chequeNumber
+        },
+        note: 'bulk-full-payment',
+        createdAt: new Date(),
+        recordedBy: req.user?._id || null,
+        recordedByName: req.user?.name || req.user?.username || ''
+      });
+
+      order.status = 'paid';
+      order.paidAt = new Date();
+
+      await order.save();
+    }
+
+    return res.json({ ok: true });
+
+  } catch (err) {
+    console.error('apiPayBulkDebtor error', err);
+    return res.status(500).json({ error: 'Bulk payment failed' });
+  }
+};
+
+
 
 // API: list debtors (orders with outstanding > 0)
 // GET /api/debtors

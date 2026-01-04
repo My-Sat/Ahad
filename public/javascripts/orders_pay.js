@@ -73,6 +73,7 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
     document.body.appendChild(container.firstElementChild);
     return document.body.lastElementChild;
   }
+  
 
   function showAlertModal(message, title = 'Notice') {
     let modalEl = document.getElementById('ordersPayAlertModal');
@@ -913,6 +914,7 @@ html += `
   <tr class="table-active debtor-group-toggle align-middle"
       data-target="${groupId}"
       aria-expanded="false"
+      data-debtor-name="${escapeHtml(debtorName)}"
       style="cursor:pointer;">
     <td colspan="2">
       <span class="me-2 debtor-toggle-icon">▶</span>
@@ -922,7 +924,15 @@ html += `
     <td class="text-end">GH₵ ${totalDue.toFixed(2)}</td>
     <td class="text-end">GH₵ ${totalPaid.toFixed(2)}</td>
     <td class="text-end fw-semibold">GH₵ ${totalOutstanding.toFixed(2)}</td>
-    <td></td>
+    <td class="text-center">
+      <button
+        class="btn btn-sm btn-success pay-debtor-full"
+        type="button"
+        data-order-ids='${JSON.stringify(items.map(i => i.orderId))}'
+        data-total="${totalOutstanding.toFixed(2)}">
+        Full Payment
+      </button>
+    </td>
   </tr>
 `;
 
@@ -978,7 +988,60 @@ html += `
 
   // delegate click in debtors table - view order (open that order in the pay page)
 if (debtorsTable) {
-  debtorsTable.addEventListener('click', function (ev) {
+  debtorsTable.addEventListener('click', async function (ev) {
+
+
+    const fullPayBtn = ev.target.closest('.pay-debtor-full');
+if (fullPayBtn) {
+  ev.stopPropagation();
+
+  const orderIds = JSON.parse(fullPayBtn.dataset.orderIds || '[]');
+  const total = Number(fullPayBtn.dataset.total || 0);
+
+  const method = paymentMethodSel ? paymentMethodSel.value : 'cash';
+
+const ok = await showConfirmModal(
+  `Apply FULL payment of GH₵ ${fmt(total)} to ALL selected outstanding orders?`,
+  'Confirm Full Payment'
+);
+
+  if (!ok) return;
+
+  try {
+    const payload = {
+      orderIds,
+      paymentMethod: method,
+      momoNumber: momoNumberInput?.value || null,
+      momoTxId: momoTxInput?.value || null,
+      chequeNumber: chequeNumberInput?.value || null
+    };
+
+    const res = await fetch('/orders/pay-bulk', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const j = await res.json().catch(() => null);
+    if (!res.ok) {
+      showAlertModal(j?.error || 'Bulk payment failed', 'Error');
+      return;
+    }
+
+    showAlertModal('Full payment applied successfully', 'Success');
+    fetchDebtorsList();
+
+  } catch (err) {
+    console.error(err);
+    showAlertModal('Network error during bulk payment', 'Error');
+  }
+
+  return;
+}
+
 
     // ✅ 1. Handle UPDATE button clicks FIRST
     const updateBtn = ev.target.closest('.view-debtor-order');
@@ -1052,7 +1115,7 @@ async function fetchCustomers() {
   try {
     const res = await fetch('/customers/api/list', {
       headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
+    }); 
 
     const j = await res.json().catch(() => null);
     if (!j || !j.ok || !Array.isArray(j.customers)) {
