@@ -24,7 +24,9 @@ exports.getCashiers = async (req, res) => {
     const { start, end } = dayRangeForIso(dateIso);
 
     // load cashiers (role 'cashier' or 'clerk')
-    const cashiers = await User.find({ role: { $in: ['cashier', 'clerk'] } }).select('_id name username').lean();
+    const cashiers = await User.find({
+      role: { $in: ['cashier', 'admin'] }
+    }).select('_id name username role').lean();
 
     // compute payments aggregated by recordedBy for the day (include cash, momo, cheque)
     const paymentsByCashier = await Order.aggregate([
