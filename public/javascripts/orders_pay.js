@@ -32,6 +32,29 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
   const debtorsModal = (window.bootstrap && debtorsModalEl) ? new bootstrap.Modal(debtorsModalEl) : null;
   const debtorsTable = document.getElementById('debtorsTable');
   const debtorsCount = document.getElementById('debtorsCount');
+  const fullPaymentModalEl = document.getElementById('fullPaymentConfirmModal');
+  const fullPaymentModal = fullPaymentModalEl ? new bootstrap.Modal(fullPaymentModalEl) : null;
+
+  const fullPaymentConfirmText = document.getElementById('fullPaymentConfirmText');
+  const fullPaymentMethod = document.getElementById('fullPaymentMethod');
+  const fullPaymentMomoFields = document.getElementById('fullPaymentMomoFields');
+  const fullPaymentChequeField = document.getElementById('fullPaymentChequeField');
+  const fullPaymentMomoNumber = document.getElementById('fullPaymentMomoNumber');
+  const fullPaymentMomoTx = document.getElementById('fullPaymentMomoTx');
+  const fullPaymentCheque = document.getElementById('fullPaymentCheque');
+  const confirmFullPaymentBtn = document.getElementById('confirmFullPaymentBtn');
+
+  let pendingFullPayment = null; // holds orderIds + total
+
+  if (fullPaymentMethod) {
+  fullPaymentMethod.addEventListener('change', function () {
+    const v = this.value;
+    fullPaymentMomoFields.style.display = v === 'momo' ? '' : 'none';
+    fullPaymentChequeField.style.display = v === 'cheque' ? '' : 'none';
+  });
+}
+
+
 
   let currentOrderId = null;
   let currentOrderTotal = 0;
@@ -986,67 +1009,51 @@ html += `
     });
   }
 
-  // delegate click in debtors table - view order (open that order in the pay page)
+// delegate click in debtors table - view order (open that order in the pay page)
 if (debtorsTable) {
   debtorsTable.addEventListener('click', async function (ev) {
 
-
+    // ===============================
+    // FULL PAYMENT (GROUPED DEBTORS)
+    // ===============================
     const fullPayBtn = ev.target.closest('.pay-debtor-full');
-if (fullPayBtn) {
-  ev.stopPropagation();
+    if (fullPayBtn) {
+      ev.stopPropagation();
 
-  const orderIds = JSON.parse(fullPayBtn.dataset.orderIds || '[]');
-  const total = Number(fullPayBtn.dataset.total || 0);
+      const orderIds = JSON.parse(fullPayBtn.dataset.orderIds || '[]');
+      const total = Number(fullPayBtn.dataset.total || 0);
 
-  const method = paymentMethodSel ? paymentMethodSel.value : 'cash';
+      // store pending bulk payment
+      pendingFullPayment = { orderIds, total };
 
-const ok = await showConfirmModal(
-  `Apply FULL payment of GH₵ ${fmt(total)} to ALL selected outstanding orders?`,
-  'Confirm Full Payment'
-);
+      // prepare modal UI
+      if (fullPaymentConfirmText) {
+        fullPaymentConfirmText.textContent =
+          `Apply FULL payment of GH₵ ${fmt(total)} to ALL selected outstanding orders?`;
+      }
 
-  if (!ok) return;
+      if (fullPaymentMethod) {
+        fullPaymentMethod.value = 'cash';
+      }
 
-  try {
-    const payload = {
-      orderIds,
-      paymentMethod: method,
-      momoNumber: momoNumberInput?.value || null,
-      momoTxId: momoTxInput?.value || null,
-      chequeNumber: chequeNumberInput?.value || null
-    };
+      // reset fields
+      if (fullPaymentMomoNumber) fullPaymentMomoNumber.value = '';
+      if (fullPaymentMomoTx) fullPaymentMomoTx.value = '';
+      if (fullPaymentCheque) fullPaymentCheque.value = '';
 
-    const res = await fetch('/orders/pay-bulk', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
-      body: JSON.stringify(payload)
-    });
+      if (fullPaymentMomoFields) fullPaymentMomoFields.style.display = 'none';
+      if (fullPaymentChequeField) fullPaymentChequeField.style.display = 'none';
 
-    const j = await res.json().catch(() => null);
-    if (!res.ok) {
-      showAlertModal(j?.error || 'Bulk payment failed', 'Error');
+      if (fullPaymentModal) fullPaymentModal.show();
       return;
     }
 
-    showAlertModal('Full payment applied successfully', 'Success');
-    fetchDebtorsList();
-
-  } catch (err) {
-    console.error(err);
-    showAlertModal('Network error during bulk payment', 'Error');
-  }
-
-  return;
-}
-
-
-    // ✅ 1. Handle UPDATE button clicks FIRST
+    // ===============================
+    // UPDATE SINGLE ORDER
+    // ===============================
     const updateBtn = ev.target.closest('.view-debtor-order');
     if (updateBtn) {
-      ev.stopPropagation(); // prevent toggle
+      ev.stopPropagation();
       const id = updateBtn.dataset.orderId;
       if (id) {
         if (debtorsModal) debtorsModal.hide();
@@ -1056,7 +1063,9 @@ const ok = await showConfirmModal(
       return;
     }
 
-    // ✅ 2. Handle expand/collapse toggle
+    // ===============================
+    // EXPAND / COLLAPSE GROUP
+    // ===============================
     const toggleRow = ev.target.closest('.debtor-group-toggle');
     if (!toggleRow) return;
 
@@ -1074,6 +1083,84 @@ const ok = await showConfirmModal(
     if (icon) icon.textContent = expanded ? '▶' : '▼';
   });
 }
+
+// =====================================================
+// CONFIRM FULL PAYMENT (bulk debtor payment)
+// =====================================================
+if (confirmFullPaymentBtn) {
+  confirmFullPaymentBtn.addEventListener('click', async function () {
+    if (!pendingFullPayment) {
+      showAlertModal('No pending payment found.', 'Error');
+      return;
+    }
+
+    const { orderIds, total } = pendingFullPayment;
+    const method = fullPaymentMethod ? fullPaymentMethod.value : 'cash';
+
+    // --------------------
+    // Validate inputs
+    // --------------------
+    if (method === 'momo') {
+      if (!fullPaymentMomoNumber.value || !fullPaymentMomoTx.value) {
+        showAlertModal('Enter MoMo number and transaction ID', 'Missing details');
+        return;
+      }
+    }
+
+    if (method === 'cheque') {
+      if (!fullPaymentCheque.value) {
+        showAlertModal('Enter cheque number', 'Missing details');
+        return;
+      }
+    }
+
+    confirmFullPaymentBtn.disabled = true;
+    const originalText = confirmFullPaymentBtn.textContent;
+    confirmFullPaymentBtn.textContent = 'Processing...';
+
+    try {
+      const payload = {
+        orderIds,
+        paymentMethod: method,
+        momoNumber: method === 'momo' ? fullPaymentMomoNumber.value.trim() : null,
+        momoTxId: method === 'momo' ? fullPaymentMomoTx.value.trim() : null,
+        chequeNumber: method === 'cheque' ? fullPaymentCheque.value.trim() : null
+      };
+
+      const res = await fetch('/orders/pay-bulk', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        showAlertModal(j?.error || 'Bulk payment failed', 'Error');
+        return;
+      }
+
+      // --------------------
+      // SUCCESS
+      // --------------------
+      if (fullPaymentModal) fullPaymentModal.hide();
+      pendingFullPayment = null;
+
+      showAlertModal('Full payment applied successfully', 'Success');
+      fetchDebtorsList();
+
+    } catch (err) {
+      console.error('bulk pay error', err);
+      showAlertModal('Network error during bulk payment', 'Error');
+    } finally {
+      confirmFullPaymentBtn.disabled = false;
+      confirmFullPaymentBtn.textContent = originalText;
+    }
+  });
+}
+
 
   // Initial state
   renderOrderDetails(null);

@@ -230,6 +230,41 @@ block content
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
+          // Full Payment Confirmation Modal
+  .modal.fade#fullPaymentConfirmModal(tabindex='-1', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title Confirm Full Payment
+          button.btn-close(type='button', data-bs-dismiss='modal')
+
+        .modal-body.dark-card-body
+          p#fullPaymentConfirmText.mb-3
+
+          .mb-2
+            label.form-label.mb-1 Payment method
+            select.form-select.form-select-sm.form-select-dark#fullPaymentMethod
+              option(value='cash') Cash
+              option(value='momo') MoMo
+              option(value='cheque') Cheque
+
+          .row.g-2.mb-2#fullPaymentMomoFields(style='display:none;')
+            .col-6
+              label.form-label.mb-0 MoMo Number
+              input.form-control.form-control-sm.form-control-dark#fullPaymentMomoNumber(type='text')
+            .col-6
+              label.form-label.mb-0 Transaction ID
+              input.form-control.form-control-sm.form-control-dark#fullPaymentMomoTx(type='text')
+
+          .mb-2#fullPaymentChequeField(style='display:none;')
+            label.form-label.mb-0 Cheque Number
+            input.form-control.form-control-sm.form-control-dark#fullPaymentCheque(type='text')
+
+        .modal-footer
+          button.btn.btn-outline-light-custom(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-success#confirmFullPaymentBtn Confirm Payment
+
+
   // Orders Explorer Modal (same UX as new.pug)
   .modal.fade(id='ordersExplorerModal', tabindex='-1', aria-labelledby='ordersExplorerModalLabel', aria-hidden='true')
     .modal-dialog.modal-xl.modal-dialog-centered
