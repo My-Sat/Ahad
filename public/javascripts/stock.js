@@ -16,6 +16,11 @@ document.addEventListener('DOMContentLoaded', function () {
   const adjustMaterialId = document.getElementById('adjustMaterialId');
   const saveAdjustBtn = document.getElementById('saveAdjustStockBtn');
   const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+  const adjustCurrentStock = document.getElementById('adjustCurrentStock');
+  const saveAdjustSpinner = document.getElementById('saveAdjustSpinner');
+  const saveAdjustLabel = document.getElementById('saveAdjustLabel');
+
+
 
   // Guards and dedupe sets
   let creatingPending = false;
@@ -260,16 +265,25 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // --- Adjust & Delete handlers (same as before) ---
-  function openAdjustModal(id, stocked) {
-    if (!adjustModalEl) {
-      alert('Adjust modal not available');
-      return;
-    }
-    adjustMaterialId.value = id;
-    adjustStockInput.value = Number(stocked || 0);
-    const md = bootstrap.Modal.getOrCreateInstance(adjustModalEl);
-    md.show();
+function openAdjustModal(id, stocked) {
+  if (!adjustModalEl) {
+    alert('Adjust modal not available');
+    return;
   }
+
+  const current = Number(stocked || 0);
+
+  adjustMaterialId.value = id;
+  adjustCurrentStock.value = current;
+  adjustStockInput.value = '';
+
+  // Default to delta mode
+  const deltaRadio = document.getElementById('adjustModeDelta');
+  if (deltaRadio) deltaRadio.checked = true;
+
+  const md = bootstrap.Modal.getOrCreateInstance(adjustModalEl);
+  md.show();
+}
 
   document.addEventListener('click', function (e) {
     const a = e.target.closest && e.target.closest('.adjust-stock-btn');
@@ -281,60 +295,141 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (saveAdjustBtn && saveAdjustBtn.dataset.bound !== '1') {
     saveAdjustBtn.dataset.bound = '1';
-    saveAdjustBtn.addEventListener('click', async function (ev) {
-      ev && ev.preventDefault && ev.preventDefault();
-      const id = adjustMaterialId.value;
-      if (!id) return;
-      let newVal = adjustStockInput.value;
-      newVal = newVal === '' ? 0 : Number(newVal);
-      if (isNaN(newVal) || newVal < 0) {
-        alert('Provide a valid non-negative integer for stocked quantity.');
-        return;
-      }
+saveAdjustBtn.addEventListener('click', async function (ev) {
+  ev && ev.preventDefault && ev.preventDefault();
 
-      saveAdjustBtn.disabled = true;
-      try {
-        const body = new URLSearchParams();
-        body.append('stock', String(Math.floor(newVal)));
-        const res = await fetch(`/admin/materials/${encodeURIComponent(id)}/stock`, {
-          method: 'POST',
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-          },
-          body: body.toString()
-        });
+  // ---- helpers for button state ----
+  function setSavingState(isSaving) {
+    saveAdjustBtn.disabled = isSaving;
+    if (saveAdjustSpinner) {
+      saveAdjustSpinner.style.display = isSaving ? 'inline-block' : 'none';
+    }
+    if (saveAdjustLabel) {
+      saveAdjustLabel.textContent = isSaving ? 'Saving…' : 'Save';
+    }
+  }
 
-        const j = await res.json().catch(()=>null);
-        if (res.ok && j && j.material) {
-          const mat = j.material;
-          const tr = document.querySelector(`tr[data-id="${mat._id}"]`);
-          if (tr) {
-            const stockedCell = tr.querySelector('.stocked-cell');
-            if (stockedCell) stockedCell.textContent = (typeof mat.stock === 'number') ? mat.stock : stockedCell.textContent;
-            const usedCell = tr.querySelector('.used-cell');
-            if (usedCell) usedCell.textContent = (typeof mat.used === 'number') ? mat.used : usedCell.textContent;
-            const remainingCell = tr.querySelector('.remaining-cell');
-            if (remainingCell) {
-              const rem = (typeof mat.remaining === 'number') ? mat.remaining : ((Number(stockedCell.textContent) || 0) - (Number(usedCell.textContent) || 0));
-              remainingCell.innerHTML = (rem < 0) ? `<span class="text-danger">${rem}</span>` : `<span>${rem}</span>`;
-            }
-            const adjBtn = tr.querySelector('.adjust-stock-btn');
-            if (adjBtn) adjBtn.dataset.stocked = (typeof mat.stock === 'number') ? mat.stock : adjBtn.dataset.stocked;
-          }
-          bootstrap.Modal.getInstance(adjustModalEl)?.hide();
-          showToast('Stock updated', 1200);
-        } else {
-          const msg = (j && j.error) ? j.error : 'Failed to update stock';
-          alert(msg);
-        }
-      } catch (err) {
-        console.error('adjust stock err', err);
-        alert('Failed to update stock');
-      } finally {
-        saveAdjustBtn.disabled = false;
-      }
+  const id = adjustMaterialId.value;
+  if (!id) return;
+
+  const mode = document.querySelector('input[name="adjustMode"]:checked')?.value || 'delta';
+  const rawVal = String(adjustStockInput.value || '').trim();
+  const currentStock = Number(adjustCurrentStock.value || 0);
+
+  let finalStock;
+
+  // ---- validation & computation ----
+  if (mode === 'delta') {
+    const delta = Number(rawVal);
+    if (isNaN(delta)) {
+      alert('Provide a valid delta value (e.g. +5 or -3).');
+      setSavingState(false);
+      return;
+    }
+    finalStock = currentStock + delta;
+  } else {
+    const abs = Number(rawVal);
+    if (isNaN(abs)) {
+      alert('Provide a valid absolute stock value.');
+      setSavingState(false);
+      return;
+    }
+    finalStock = abs;
+  }
+
+  if (finalStock < 0) {
+    alert('Resulting stock cannot be negative.');
+    setSavingState(false);
+    return;
+  }
+
+  // ---- enter saving state ----
+  setSavingState(true);
+
+  try {
+    const body = new URLSearchParams();
+    body.append('stock', String(Math.floor(finalStock)));
+
+    const res = await fetch(`/admin/materials/${encodeURIComponent(id)}/stock`, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+      },
+      body: body.toString()
     });
+
+    const j = await res.json().catch(() => null);
+
+    if (res.ok) {
+      const tr = document.querySelector(`tr[data-id="${id}"]`);
+
+      if (tr) {
+        const stockedCell = tr.querySelector('.stocked-cell');
+        const usedCell = tr.querySelector('.used-cell');
+        const remainingCell = tr.querySelector('.remaining-cell');
+
+        // ---- Prefer server material if provided ----
+        if (j && j.material) {
+          const mat = j.material;
+
+          if (stockedCell && typeof mat.stock === 'number') {
+            stockedCell.textContent = mat.stock;
+          }
+
+          if (usedCell && typeof mat.used === 'number') {
+            usedCell.textContent = mat.used;
+          }
+
+          if (remainingCell) {
+            const rem = (typeof mat.remaining === 'number')
+              ? mat.remaining
+              : ((mat.stock || 0) - (mat.used || 0));
+
+            remainingCell.innerHTML = rem < 0
+              ? `<span class="text-danger">${rem}</span>`
+              : `<span>${rem}</span>`;
+          }
+
+          const adjBtn = tr.querySelector('.adjust-stock-btn');
+          if (adjBtn && typeof mat.stock === 'number') {
+            adjBtn.dataset.stocked = mat.stock;
+          }
+
+        } else {
+          // ---- Client-side fallback ----
+          const used = Number(usedCell?.textContent || 0);
+          const remaining = finalStock - used;
+
+          if (stockedCell) stockedCell.textContent = finalStock;
+
+          if (remainingCell) {
+            remainingCell.innerHTML = remaining < 0
+              ? `<span class="text-danger">${remaining}</span>`
+              : `<span>${remaining}</span>`;
+          }
+
+          const adjBtn = tr.querySelector('.adjust-stock-btn');
+          if (adjBtn) adjBtn.dataset.stocked = finalStock;
+        }
+      }
+
+      bootstrap.Modal.getInstance(adjustModalEl)?.hide();
+      showToast('Stock updated', 1200);
+
+    } else {
+      const msg = (j && j.error) ? j.error : 'Failed to update stock';
+      alert(msg);
+    }
+
+  } catch (err) {
+    console.error('adjust stock err', err);
+    alert('Failed to update stock');
+  } finally {
+    // ---- always restore button ----
+    setSavingState(false);
+  }
+});
   }
 
   document.addEventListener('click', function (e) {
