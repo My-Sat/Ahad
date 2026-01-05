@@ -73,9 +73,9 @@ block content
                       small.text-muted-light
                         - const labels = m.selections.map(s => (s.unit && s.unit.name ? s.unit.name + ': ' + (s.subUnit && s.subUnit.name ? s.subUnit.name : s.subUnit) : ''));
                         = labels.join(' + ')
-                  td.text-center.text-muted-light= stocked
-                  td.text-center.text-muted-light= used
-                  td.text-center
+                  td.text-center.text-muted-light.stocked-cell= stocked
+                  td.text-center.text-muted-light.used-cell= used
+                  td.text-center.remaining-cell
                     if remaining < 0
                       span.text-danger #{remaining}
                     else
@@ -97,12 +97,50 @@ block content
         .modal-body.dark-card-body
           form#adjustStockForm
             input(type='hidden', id='adjustMaterialId')
+            input(type='hidden', id='adjustCurrentStock')
+
+            // Mode selector
             .mb-3
-              label.form-label.text-muted-light(for='adjustStockInput') New stocked quantity
-              input.form-control.form-control-dark(type='number', id='adjustStockInput', min='0', step='1', required)
+              label.form-label.text-muted-light Adjustment mode
+              .form-check
+                input.form-check-input(
+                  type='radio'
+                  name='adjustMode'
+                  id='adjustModeDelta'
+                  value='delta'
+                  checked
+                )
+                label.form-check-label(for='adjustModeDelta')
+                  | Apply Delta ( +5 / -3 )
+
+              .form-check
+                input.form-check-input(
+                  type='radio'
+                  name='adjustMode'
+                  id='adjustModeAbsolute'
+                  value='absolute'
+                )
+                label.form-check-label(for='adjustModeAbsolute')
+                  | Set Absolute Value
+
+            // Value input
+            .mb-3
+              label.form-label.text-muted-light(for='adjustStockInput')
+                | Value
+              input.form-control.form-control-dark(
+                type='text'
+                id='adjustStockInput'
+                placeholder='+5 or -3 (default) / 120 (absolute)'
+                required
+              )
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
-          button.btn.btn-primary(type='button', id='saveAdjustStockBtn') Save
+          button.btn.btn-primary(type='button', id='saveAdjustStockBtn')
+            span.spinner-border.spinner-border-sm.me-2(
+              id='saveAdjustSpinner'
+              style='display:none;'
+            )
+            span#saveAdjustLabel Save
 
   // Delete Confirmation Modal (shared)
   .modal.fade(id='deleteConfirmModal', tabindex='-1', aria-labelledby='deleteConfirmModalLabel', aria-hidden='true')
