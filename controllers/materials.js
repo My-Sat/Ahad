@@ -185,22 +185,47 @@ exports.stock = async (req, res) => {
 exports.setStock = async (req, res) => {
   try {
     const id = req.params.id;
-    if (!id || !mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+
+    // NEW: mode ("delta" | "absolute") coming from the client
+    const mode = (req.body.mode === 'absolute') ? 'absolute' : 'delta';
 
     let { stock } = req.body;
-    stock = stock === undefined || stock === null || String(stock).trim() === '' ? 0 : Number(stock);
+    stock = (stock === undefined || stock === null || String(stock).trim() === '') ? 0 : Number(stock);
     if (isNaN(stock)) return res.status(400).json({ error: 'Invalid stock value' });
 
+    const newStocked = Math.floor(stock);
+
     // update stocked and keep legacy stock in sync
-    const updated = await Material.findByIdAndUpdate(id, { $set: { stocked: Math.floor(stock), stock: Math.floor(stock) } }, { new: true }).lean();
+    const updated = await Material.findByIdAndUpdate(
+      id,
+      { $set: { stocked: newStocked, stock: newStocked } },
+      { new: true }
+    ).lean();
+
     if (!updated) return res.status(404).json({ error: 'Material not found' });
 
-    // attach usage totals
+    // If absolute, reset aggregate used total to 0 (this is what makes the count reset)
+    if (mode === 'absolute') {
+      await MaterialAggregate.findOneAndUpdate(
+        { material: updated._id },
+        { $set: { total: 0 } },
+        { upsert: true, new: true }
+      );
+    }
+
+    // attach usage totals (after potential reset)
     const agg = await MaterialAggregate.findOne({ material: updated._id }).lean();
     const used = agg ? (agg.total || 0) : 0;
+
     const remaining = Math.max(0, (updated.stocked || 0) - used);
 
-    return res.json({ ok: true, material: Object.assign({}, updated, { used, remaining }) });
+    return res.json({
+      ok: true,
+      material: Object.assign({}, updated, { used, remaining })
+    });
   } catch (err) {
     console.error('materials.setStock error', err);
     return res.status(500).json({ error: 'Error updating stock' });

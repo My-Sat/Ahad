@@ -351,6 +351,7 @@ saveAdjustBtn.addEventListener('click', async function (ev) {
   try {
     const body = new URLSearchParams();
     body.append('stock', String(Math.floor(finalStock)));
+    body.append('mode', mode); // NEW: tell server whether absolute reset is intended
 
     const res = await fetch(`/admin/materials/${encodeURIComponent(id)}/stock`, {
       method: 'POST',
@@ -419,6 +420,12 @@ saveAdjustBtn.addEventListener('click', async function (ev) {
       bootstrap.Modal.getInstance(adjustModalEl)?.hide();
       showToast('Stock updated', 1200);
 
+      // Keep hidden "current stock" in sync so subsequent delta math is correct
+      adjustCurrentStock.value = String(
+        (j && j.material && typeof j.material.stocked === 'number')
+          ? j.material.stocked
+          : Math.floor(finalStock)
+      );
     } else {
       const msg = (j && j.error) ? j.error : 'Failed to update stock';
       alert(msg);
