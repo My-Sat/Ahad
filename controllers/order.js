@@ -333,6 +333,92 @@ const selectionsForOrder = (pr.selections || []).map(s => ({
       console.error('Failed to attach handler to order', e);
     }
 
+    // -----------------------------
+// MATERIAL STOCK PRE-CHECK (BLOCK ORDER IF INSUFFICIENT)
+// Uses same matching logic as recording section.
+// Remaining = max(0, stocked - usedAggregate)
+// -----------------------------
+try {
+  const mats = await Material.find().select('_id name stocked stock selections').lean();
+
+  // Helper (same as below)
+  function materialMatchesItem(matSelections, itemSelections) {
+    const itemSet = new Set((itemSelections || []).map(s => `${String(s.unit)}:${String(s.subUnit)}`));
+    for (const ms of (matSelections || [])) {
+      const key = `${String(ms.unit)}:${String(ms.subUnit)}`;
+      if (!itemSet.has(key)) return false;
+    }
+    return true;
+  }
+
+  // 1) Compute required counts per material for THIS order
+  const requiredByMaterial = new Map(); // materialId -> countNeeded
+
+  for (let idx = 0; idx < builtItems.length; idx++) {
+    const it = builtItems[idx];
+    const itemSelections = it.selections || [];
+
+    // Determine count like your recording logic
+    const pages = Number(it.pages) || 1;
+    const isFb = !!it.fb;
+    const baseCount = (!pages || pages <= 0) ? 1 : (isFb ? Math.ceil(pages / 2) : pages);
+    const spoiled = (it.spoiled !== undefined && it.spoiled !== null) ? Math.floor(Number(it.spoiled) || 0) : 0;
+    const countNeeded = Math.max(0, baseCount) + Math.max(0, spoiled);
+
+    if (countNeeded <= 0) continue;
+
+    // match materials
+    for (const m of mats) {
+      if (!m.selections || !m.selections.length) continue;
+      if (!materialMatchesItem(m.selections, itemSelections)) continue;
+
+      const mid = String(m._id);
+      requiredByMaterial.set(mid, (requiredByMaterial.get(mid) || 0) + countNeeded);
+    }
+  }
+
+  // If no materials matched, nothing to check
+  if (requiredByMaterial.size) {
+    // 2) Load aggregates for just matched materials
+    const matIds = Array.from(requiredByMaterial.keys()).map(id => new mongoose.Types.ObjectId(id));
+    const aggDocs = await MaterialAggregate.find({ material: { $in: matIds } }).lean();
+    const aggMap = {};
+    aggDocs.forEach(a => { aggMap[String(a.material)] = Number(a.total || 0); });
+
+    // 3) Validate remaining
+    const blocks = [];
+
+    for (const m of mats) {
+      const mid = String(m._id);
+      if (!requiredByMaterial.has(mid)) continue;
+
+      const used = aggMap[mid] || 0;
+      const stocked =
+        (typeof m.stocked === 'number') ? Number(m.stocked) :
+        ((typeof m.stock === 'number') ? Number(m.stock) : 0);
+
+      const remaining = Math.max(0, stocked - used);
+      const need = requiredByMaterial.get(mid) || 0;
+
+      if (remaining <= 0) {
+        blocks.push(`"${m.name}" is out of stock (Remaining: 0). Contact admin to restock.`);
+      } else if (need > remaining) {
+        blocks.push(`"${m.name}" insufficient stock (Needed: ${need}, Remaining: ${remaining}). Contact admin to restock.`);
+      }
+    }
+
+    if (blocks.length) {
+      // 409 is good for "conflict / stock changed"
+      return res.status(409).json({ error: 'Some materials in this order are out of stock, contact Admin to make stock adjustments at stock page', details: blocks });
+    }
+  }
+} catch (stockCheckErr) {
+  console.error('Material stock pre-check error', stockCheckErr);
+  // If you want to be strict: block order on check failure
+  return res.status(500).json({ error: 'Failed to verify material stock' });
+}
+
+
     await order.save();
 
     // If the order has a customer attached, re-evaluate their 'regular' status.
@@ -402,12 +488,6 @@ try {
               { upsert: true, new: true }
             );
 
-            // decrement stock for the material (allow negative to indicate backorder)
-            try {
-              await Material.findByIdAndUpdate(m._id, { $inc: { stock: -count } });
-            } catch (stockErr) {
-              console.error('Failed to decrement material stock', stockErr, 'materialId=', m._id);
-            }
           }
         }
       }
