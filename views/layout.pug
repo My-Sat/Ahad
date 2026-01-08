@@ -110,6 +110,10 @@ html(lang="en")
                   | #{currentUser.name || currentUser.username}
                 ul.dropdown-menu.dropdown-menu-end(aria-labelledby='userMenu')
                   li
+                    a.dropdown-item(href='/user-settings')
+                      i.bi.bi-gear.me-2
+                      | User Settings
+                  li
                     a.dropdown-item(href='/logout') 
                       i.bi.bi-box-arrow-right.me-2
                       | Logout
@@ -146,6 +150,10 @@ html(lang="en")
                       a.dropdown-item(href='#' data-ajax='true' id='tab-reports-sm') Reports
                     li
                       hr.dropdown-divider
+                    li
+                      a.dropdown-item(href='/user-settings')
+                        i.bi.bi-gear.me-2
+                        | User Settings
                     li
                       a.dropdown-item(href='/logout')
                         i.bi.bi-box-arrow-right.me-2

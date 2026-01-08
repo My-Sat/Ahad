@@ -3,6 +3,9 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/user');
 const bcrypt = require('bcrypt');
+const { ensureAuthenticated } = require('../middlewares/auth');
+const usersController = require('../controllers/users');
+
 
 // show login page
 router.get('/login', (req, res) => {
@@ -52,6 +55,11 @@ router.post('/login', async (req, res, next) => {
     next(err);
   }
 });
+
+// User settings (authenticated users only)
+router.get('/user-settings', ensureAuthenticated, usersController.userSettingsForm);
+router.post('/user-settings/password', ensureAuthenticated, usersController.updateMyPassword);
+
 
 // logout
 router.get('/logout', (req, res) => {

@@ -1,0 +1,70 @@
+extends ../layout
+
+block content
+  .container
+    .row.justify-content-center
+      .col-12.col-md-7.col-lg-5
+        .card.shadow-sm.dark-surface
+          .card-body.p-4.dark-card-body
+            h4.text-white.mb-3 User Settings
+            p.text-muted-light.small.mb-4 Change your password below.
+
+            if error
+              .alert.alert-danger= error
+
+            form(method='post', action='/user-settings/password', novalidate)
+              .mb-3
+                label.form-label.text-muted-light(for='oldPassword') Old password
+                input#oldPassword.form-control.form-control-dark(type='password', name='oldPassword', required)
+
+              .mb-3
+                label.form-label.text-muted-light(for='newPassword') New password
+                input#newPassword.form-control.form-control-dark(type='password', name='newPassword', required)
+
+              .mb-3
+                label.form-label.text-muted-light(for='confirmPassword') Confirm new password
+                input#confirmPassword.form-control.form-control-dark(type='password', name='confirmPassword', required)
+
+              button.btn.btn-primary.w-100(type='submit')
+                i.bi.bi-check2-circle.me-2
+                | Update Password
+
+  // Success modal (shown after password update)
+  if success
+    .modal.fade#passwordSuccessModal(tabindex='-1' aria-labelledby='passwordSuccessModalLabel' aria-hidden='true')
+      .modal-dialog.modal-dialog-centered
+        .modal-content.dark-surface
+          .modal-header
+            h5.modal-title.text-white#passwordSuccessModalLabel Password Updated
+            button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+          .modal-body.text-muted-light
+            | Your password has been updated successfully. Redirecting...
+          .modal-footer
+            button.btn.btn-primary(type='button', data-bs-dismiss='modal') OK
+
+block scripts
+  if success
+    script.
+      (function () {
+        try {
+          const modalEl = document.getElementById('passwordSuccessModal');
+          if (!modalEl || !window.bootstrap) return;
+
+          const m = new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false });
+          m.show();
+
+          const redirectTo = "#{redirectTo || '/'}";
+
+          // Auto-redirect shortly after showing
+          setTimeout(function () {
+            window.location.href = redirectTo;
+          }, 1400);
+
+          // If user closes modal, redirect immediately
+          modalEl.addEventListener('hidden.bs.modal', function () {
+            window.location.href = redirectTo;
+          }, { once: true });
+        } catch (e) {
+          window.location.href = "#{redirectTo || '/'}";
+        }
+      })();
