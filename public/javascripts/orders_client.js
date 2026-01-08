@@ -47,8 +47,9 @@ document.addEventListener('DOMContentLoaded', function () {
   let books = [];    // list of available books (basic metadata)
 
     // ---- materials stock cache (for Apply-time validation) ----
-  let materials = [];          // [{ _id, name, stocked, used, remaining, selections:[{unit,subUnit},...] }, ...]
-  let materialsLoaded = false;
+let materials = [];          // [{ _id, name, stocked, used, remaining, selections:[{unit,subUnit},...] }, ...]
+let materialsLoaded = false;
+let materialsFetchedAt = 0;  // ms timestamp when materials were last fetched
 
 
     // ---------- Service categories (populate category select + filter services) ----------
@@ -196,6 +197,7 @@ async function loadServicesForCategory(catId) {
         return Object.assign({}, m, { selections: normSelections });
       });
       materialsLoaded = true;
+      materialsFetchedAt = Date.now();
     } catch (e) {
       // Don’t break ordering if materials can’t load; just skip checks.
       console.warn('loadMaterialsForStockChecks failed', e);
@@ -203,6 +205,18 @@ async function loadServicesForCategory(catId) {
       materialsLoaded = false;
     }
   }
+
+  async function refreshMaterialsIfStale(force = false) {
+  // If not loaded yet, always fetch
+  if (!materialsLoaded) return loadMaterialsForStockChecks();
+
+  // Refresh if older than 10 seconds (tune if you want)
+  const age = Date.now() - (materialsFetchedAt || 0);
+  if (force || age > 10000) {
+    return loadMaterialsForStockChecks();
+  }
+}
+
 
 
 
@@ -793,7 +807,7 @@ function addToCart({
   }
 
   // ---------- Event delegation: Apply / Add buttons ----------
-  pricesList.addEventListener('click', function (e) {
+  pricesList.addEventListener('click', async function (e) {
     const btn = e.target.closest('.apply-price-btn');
     if (!btn) return;
     const prId = btn.dataset.prId;
@@ -839,6 +853,9 @@ function addToCart({
     // Only for normal service price rules (not book preview synthetic rules)
     // because only normal rules have selections coming from /admin/services/:id/prices
     if (!priceObj.__bookItem) {
+      // Always refresh material stock occasionally so we don't rely on stale remaining values
+      await refreshMaterialsIfStale(false);
+
       // compute count exactly like controllers/orders.js material logic:
       // baseCount = fb ? ceil(pages/2) : pages; count = baseCount + spoiled
       const pgs = Math.max(1, Math.floor(Number(pages) || 1));
@@ -1121,15 +1138,20 @@ async function placeOrderFlow() {
     });
 
     const j = await res.json().catch(() => null);
-    if (!res.ok) {
-      showAlertModal((j && j.error) ? j.error : 'Order creation failed');
-      return;
-    }
+if (!res.ok) {
+  // If order failed due to stock, refresh materials so user sees correct state immediately
+  await refreshMaterialsIfStale(true);
+  showAlertModal((j && j.error) ? j.error : 'Order creation failed');
+  return;
+}
 
     showOrderSuccessModal(j.orderId, j.total);
     if (typeof showGlobalToast === 'function') {
       showGlobalToast(`Order created: ${j.orderId}`, 3200);
     }
+    // Stock just changed on the server — force refresh so next Apply uses updated remaining
+    await refreshMaterialsIfStale(true);
+
 
     cart = [];
     renderCart();
