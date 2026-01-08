@@ -878,12 +878,12 @@ function addToCart({
             const remaining = Number(m.remaining || 0);
 
             if (remaining <= 0) {
-              blocks.push(`"${m.name}" is out of stock (Remaining: 0).`);
+              blocks.push(`"${m.name}" is out of stock (Remaining: 0).Contact admin to restock.`);
               return;
             }
 
             if (countNeeded > remaining) {
-              blocks.push(`"${m.name}" insufficient stock (Needed: ${countNeeded}, Remaining: ${remaining}).`);
+              blocks.push(`"${m.name}" insufficient stock (Needed: ${countNeeded}, Remaining: ${remaining}). Contact admin to restock.`);
               return;
             }
 
