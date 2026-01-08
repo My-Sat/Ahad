@@ -46,6 +46,11 @@ document.addEventListener('DOMContentLoaded', function () {
   let printers = []; // list of printers for the currently loaded service
   let books = [];    // list of available books (basic metadata)
 
+    // ---- materials stock cache (for Apply-time validation) ----
+  let materials = [];          // [{ _id, name, stocked, used, remaining, selections:[{unit,subUnit},...] }, ...]
+  let materialsLoaded = false;
+
+
     // ---------- Service categories (populate category select + filter services) ----------
   const serviceCategorySelect = document.getElementById('serviceCategorySelect');
 
@@ -155,6 +160,50 @@ async function loadServicesForCategory(catId) {
 
   // initial categories load
   loadServiceCategories();
+  loadMaterialsForStockChecks();
+
+
+    function computeKeyFromSelections(selections) {
+    const parts = (selections || []).map(s => `${String(s.unit)}:${String(s.subUnit)}`);
+    parts.sort();
+    return parts.join('|');
+  }
+
+  // Matches server logic in controllers/orders.js:
+  // materialMatchesItem(m.selections, itemSelections)
+  function materialMatchesPriceRule(materialSelections, ruleSelections) {
+    const ruleSet = new Set((ruleSelections || []).map(s => `${String(s.unit)}:${String(s.subUnit)}`));
+    for (const ms of (materialSelections || [])) {
+      const key = `${String(ms.unit)}:${String(ms.subUnit)}`;
+      if (!ruleSet.has(key)) return false;
+    }
+    return true;
+  }
+
+  async function loadMaterialsForStockChecks() {
+    try {
+      const res = await fetch('/admin/materials', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j || !j.ok) throw new Error((j && j.error) || 'Failed to load materials');
+      materials = Array.isArray(j.materials) ? j.materials : [];
+      // normalize populated selections -> ids so matching works
+      materials = materials.map(m => {
+        const sels = Array.isArray(m.selections) ? m.selections : [];
+        const normSelections = sels.map(s => ({
+          unit: (s.unit && s.unit._id) ? String(s.unit._id) : String(s.unit),
+          subUnit: (s.subUnit && s.subUnit._id) ? String(s.subUnit._id) : String(s.subUnit)
+        }));
+        return Object.assign({}, m, { selections: normSelections });
+      });
+      materialsLoaded = true;
+    } catch (e) {
+      // Don’t break ordering if materials can’t load; just skip checks.
+      console.warn('loadMaterialsForStockChecks failed', e);
+      materials = [];
+      materialsLoaded = false;
+    }
+  }
+
 
 
   // ---------- helpers ----------
@@ -233,7 +282,10 @@ async function loadServicesForCategory(catId) {
       const titleEl = modalEl.querySelector('#genericAlertModalLabel');
       const bodyEl = modalEl.querySelector('#genericAlertModalBody');
       if (titleEl) titleEl.textContent = title || 'Notice';
-      if (bodyEl) bodyEl.innerHTML = escapeHtml(String(message || ''));
+      if (bodyEl) {
+        bodyEl.textContent = String(message || '');
+        bodyEl.style.whiteSpace = 'pre-line';
+      }
       const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
       inst.show();
     } catch (err) {
@@ -522,6 +574,8 @@ function renderPrices(bookMode = false) {
       if (!j.ok) throw new Error(j.error || 'No data returned');
       prices = (j.prices || []).map(x => ({
         _id: x._id,
+        key: x.key || null,                  // ✅ new
+        selections: Array.isArray(x.selections) ? x.selections : [], // ✅ new
         selectionLabel: x.selectionLabel,
         unitPrice: Number(x.unitPrice),
         price2: (x.price2 !== null && x.price2 !== undefined) ? Number(x.price2) : null
@@ -780,6 +834,64 @@ function addToCart({
       const n = Number(spoiledInput.value);
       spoiled = (isNaN(n) || n < 0) ? 0 : Math.floor(n);
     }
+
+        // ---------- MATERIAL STOCK CHECKS (Apply-time) ----------
+    // Only for normal service price rules (not book preview synthetic rules)
+    // because only normal rules have selections coming from /admin/services/:id/prices
+    if (!priceObj.__bookItem) {
+      // compute count exactly like controllers/orders.js material logic:
+      // baseCount = fb ? ceil(pages/2) : pages; count = baseCount + spoiled
+      const pgs = Math.max(1, Math.floor(Number(pages) || 1));
+      const baseCount = fbChecked ? Math.ceil(pgs / 2) : pgs;
+      const countNeeded = Math.max(0, baseCount) + Math.max(0, Math.floor(Number(spoiled) || 0));
+
+      // If materials cache isn't loaded, skip checks (don’t block order flow)
+      if (materialsLoaded && Array.isArray(materials) && materials.length) {
+        const ruleSelections = Array.isArray(priceObj.selections) ? priceObj.selections : [];
+
+        // Find all materials whose selection-set is a subset of this rule selections
+        const matched = materials.filter(m => materialMatchesPriceRule(m.selections || [], ruleSelections));
+
+        if (matched.length) {
+          const blocks = [];
+          const warns = [];
+
+          matched.forEach(m => {
+            const stocked = Number(m.stocked || 0);
+            const remaining = Number(m.remaining || 0);
+
+            if (remaining <= 0) {
+              blocks.push(`"${m.name}" is out of stock (Remaining: 0).`);
+              return;
+            }
+
+            if (countNeeded > remaining) {
+              blocks.push(`"${m.name}" insufficient stock (Needed: ${countNeeded}, Remaining: ${remaining}).`);
+              return;
+            }
+
+            // warn when remaining < 10% of stocked (only if stocked > 0)
+            if (stocked > 0) {
+              const ratio = remaining / stocked;
+              if (ratio < 0.10) {
+                warns.push(`Low stock warning: "${m.name}" remaining is below 10% (Remaining: ${remaining} of ${stocked}).`);
+              }
+            }
+          });
+
+          if (blocks.length) {
+            showAlertModal(blocks.join('\n'), 'Stock unavailable');
+            return; // ✅ block adding to cart
+          }
+
+          if (warns.length) {
+            showAlertModal(warns.join('\n'), 'Low stock');
+            // ✅ allow add to cart after warning
+          }
+        }
+      }
+    }
+
 
     // If a book preview item (bookMode) has __bookItem metadata, add either an underlying item or treat specially.
     if (priceObj.__bookItem) {

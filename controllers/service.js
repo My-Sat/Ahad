@@ -65,21 +65,30 @@ exports.apiGetPricesForService = async (req, res) => {
 
     const out = prices.map(p => ({
       _id: p._id,
+      key: p.key, // ✅ add this
+
+      // ✅ add selections as ids (browser will use this to match materials)
+      selections: (p.selections || []).map(s => ({
+        unit: (s.unit && s.unit._id) ? String(s.unit._id) : String(s.unit),
+        subUnit: (s.subUnit && s.subUnit._id) ? String(s.subUnit._id) : String(s.subUnit)
+      })),
+
       selectionLabel: p.selectionLabel || ((p.selections || []).map(s => {
         const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
         const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
         return `${u}: ${su}`;
       }).join(' + ')),
+
       unitPrice: p.price,
       price2: (p.price2 !== undefined && p.price2 !== null) ? p.price2 : null
     }));
 
-    return res.json({ ok: true, prices: out, serviceRequiresPrinter, printers });
-  } catch (err) {
-    console.error('apiGetPricesForService error', err);
-    return res.status(500).json({ error: 'Error fetching prices' });
-  }
-};
+        return res.json({ ok: true, prices: out, serviceRequiresPrinter, printers });
+      } catch (err) {
+        console.error('apiGetPricesForService error', err);
+        return res.status(500).json({ error: 'Error fetching prices' });
+      }
+    };
 
 
 // get service detail — show all units and their subUnits; fetch composite prices

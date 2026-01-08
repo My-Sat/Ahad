@@ -230,7 +230,9 @@ document.addEventListener('DOMContentLoaded', function () {
       const remaining = (typeof mat.remaining === 'number') ? mat.remaining : (stocked - used);
 
       const labels = (mat.selections || []).map(s => {
-        const unitName = s.unit && s.unit.name ? s.unit.name : (s.unit ? String(s.unit) : '');
+      const stocked =
+        (typeof mat.stocked === 'number') ? mat.stocked :
+        ((typeof mat.stock === 'number') ? mat.stock : 0);
         const subName = s.subUnit && s.subUnit.name ? s.subUnit.name : (s.subUnit ? String(s.subUnit) : '');
         return `${unitName}: ${subName}`;
       }).join(' + ');
@@ -373,9 +375,11 @@ saveAdjustBtn.addEventListener('click', async function (ev) {
         if (j && j.material) {
           const mat = j.material;
 
-          if (stockedCell && typeof mat.stock === 'number') {
-            stockedCell.textContent = mat.stock;
-          }
+          const newStocked =
+            (typeof mat.stocked === 'number') ? mat.stocked :
+            ((typeof mat.stock === 'number') ? mat.stock : finalStock);
+
+          if (stockedCell) stockedCell.textContent = newStocked;
 
           if (usedCell && typeof mat.used === 'number') {
             usedCell.textContent = mat.used;
@@ -384,7 +388,7 @@ saveAdjustBtn.addEventListener('click', async function (ev) {
           if (remainingCell) {
             const rem = (typeof mat.remaining === 'number')
               ? mat.remaining
-              : ((mat.stock || 0) - (mat.used || 0));
+              : (newStocked - (Number(mat.used || 0)));
 
             remainingCell.innerHTML = rem < 0
               ? `<span class="text-danger">${rem}</span>`
@@ -392,9 +396,7 @@ saveAdjustBtn.addEventListener('click', async function (ev) {
           }
 
           const adjBtn = tr.querySelector('.adjust-stock-btn');
-          if (adjBtn && typeof mat.stock === 'number') {
-            adjBtn.dataset.stocked = mat.stock;
-          }
+          if (adjBtn) adjBtn.dataset.stocked = newStocked;
 
         } else {
           // ---- Client-side fallback ----
