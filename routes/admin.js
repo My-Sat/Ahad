@@ -12,6 +12,8 @@ const printersController = require('../controllers/printers');
 const usersController = require('../controllers/users');
 const { ensureAdmin } = require('../middlewares/auth');
 const serviceCategoryController = require('../controllers/serviceCategory');
+const { ensureHasPermission } = require('../middlewares/auth');
+
 
 
 // Units
@@ -65,6 +67,7 @@ router.put('/service-categories/:id', ensureAdmin, serviceCategoryController.upd
 router.delete('/service-categories/:id', ensureAdmin, serviceCategoryController.remove);
 
 // Materials
+router.get('/materials/for-orders', ensureHasPermission('/orders/new'), materialsController.listForOrders);
 router.get('/materials', ensureAdmin, materialsController.list);
 router.post('/materials', ensureAdmin, materialsController.create);
 router.delete('/materials/:id', ensureAdmin, materialsController.remove);

@@ -183,19 +183,14 @@ async function loadServicesForCategory(catId) {
 
   async function loadMaterialsForStockChecks() {
     try {
-      const res = await fetch('/admin/materials', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const res = await fetch('/admin/materials/for-orders', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
       const j = await res.json().catch(() => null);
       if (!res.ok || !j || !j.ok) throw new Error((j && j.error) || 'Failed to load materials');
       materials = Array.isArray(j.materials) ? j.materials : [];
       // normalize populated selections -> ids so matching works
-      materials = materials.map(m => {
-        const sels = Array.isArray(m.selections) ? m.selections : [];
-        const normSelections = sels.map(s => ({
-          unit: (s.unit && s.unit._id) ? String(s.unit._id) : String(s.unit),
-          subUnit: (s.subUnit && s.subUnit._id) ? String(s.subUnit._id) : String(s.subUnit)
-        }));
-        return Object.assign({}, m, { selections: normSelections });
-      });
+      materials = Array.isArray(j.materials) ? j.materials : [];
+      materialsLoaded = true;
+      materialsFetchedAt = Date.now();
       materialsLoaded = true;
       materialsFetchedAt = Date.now();
     } catch (e) {

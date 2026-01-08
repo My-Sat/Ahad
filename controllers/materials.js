@@ -231,3 +231,35 @@ exports.setStock = async (req, res) => {
     return res.status(500).json({ error: 'Error updating stock' });
   }
 };
+
+// List materials for orders page (JSON) — minimal fields + selections normalized to ids
+exports.listForOrders = async (req, res) => {
+  try {
+    const mats = await Material.find().select('_id name stocked stock selections').lean();
+
+    const matIds = mats.map(m => m._id);
+    const aggDocs = await MaterialAggregate.find({ material: { $in: matIds } }).lean();
+    const aggMap = {};
+    aggDocs.forEach(a => { aggMap[String(a.material)] = a.total || 0; });
+
+    const out = mats.map(m => {
+      const used = aggMap[String(m._id)] || 0;
+      const stocked = (typeof m.stocked === 'number') ? Number(m.stocked) : ((typeof m.stock === 'number') ? Number(m.stock) : 0);
+      const remaining = Math.max(0, stocked - used);
+
+      // IMPORTANT: selections as ids (strings)
+      const selections = (m.selections || []).map(s => ({
+        unit: String(s.unit),
+        subUnit: String(s.subUnit)
+      }));
+
+      return { _id: m._id, name: m.name, stocked, used, remaining, selections };
+    });
+
+    return res.json({ ok: true, materials: out });
+  } catch (err) {
+    console.error('materials.listForOrders error', err);
+    return res.status(500).json({ ok: false, error: 'Error fetching materials' });
+  }
+};
+
