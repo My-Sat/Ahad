@@ -1,3 +1,4 @@
+// controllers/discounts.js
 const DiscountConfig = require('../models/discount');
 const Service = require('../models/service');
 const ServiceCategory = require('../models/service_category');

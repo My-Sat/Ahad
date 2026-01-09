@@ -1,5 +1,4 @@
 extends ../layout
-
 block content
   .container
     .row.justify-content-center
@@ -11,27 +10,26 @@ block content
               .btn-group
                 a.btn.btn-outline-secondary.btn-sm(href='/orders/new')
                   | Back to Orders
-
             // Order meta
             .mb-3
               if handler
                 p.mb-1
                   strong Handled by:
-                  |  #{handler.name || handler.username || handler._id}
+                  | #{handler.name || handler.username || handler._id}
               if customer
                 p.mb-1
                   strong Customer:
-                  |  #{customer.category === 'artist' ? (customer.businessName || customer.phone) : (customer.firstName || customer.businessName || customer.phone)}
+                  | #{customer.category === 'artist' ? (customer.businessName || customer.phone) : (customer.firstName || customer.businessName || customer.phone)}
               p.mb-1
                 strong Order ID:
-                |  #{order.orderId}
+                | #{order.orderId}
               p.mb-1
                 strong Status:
-                |  #{order.status}
+                | #{order.status}
               p.mb-1
                 strong Created:
-                |  #{order.createdAt ? new Date(order.createdAt).toLocaleString() : ''}
-                
+                | #{order.createdAt ? new Date(order.createdAt).toLocaleString() : ''}
+               
             // Items
             h6.mb-2.text-white Items
             if order.items && order.items.length
@@ -47,36 +45,36 @@ block content
                       // Price rule / selection (PRIMARY label – restored)
                       div(style='white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:480px;')
                         span.text-white #{subs}
-
-                      if it.fb
-
                       if it.spoiled
                         span.text-danger.ms-2 Spoiled: #{it.spoiled}
-
                     .text-end(style='min-width:200px;')
                       - const rawPages = Number(it.pages || 1);
                       - const qty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (it.fb ? Math.ceil(rawPages / 2) : rawPages);
                       - const factor = Number(it.factor || 1);
                       - const qtyLabel = it.printer ? 'Sheets' : 'QTY'
                       div #{qtyLabel}: #{qty}
-
                       if it.printer
                         div Pages: #{rawPages}
-
                       if factor > 1
                         div QTY ×#{factor}
-
                       div Unit: GH₵ #{(it.unitPrice || 0).toFixed(2)}
                       div Subtotal: GH₵ #{(it.subtotal || 0).toFixed(2)}
-
                       if it.printerName
                         div.small.text-muted-light Printer: #{it.printerName}
-
             else
               p.text-muted-light No items listed.
-
             // Totals + payments summary
+            - const hasDiscount = Number(order.discountAmount || 0) > 0;
+            - const totalBeforeDiscount = (typeof order.totalBeforeDiscount !== 'undefined' && order.totalBeforeDiscount !== null) ? Number(order.totalBeforeDiscount || 0) : Number((Number(order.total || 0) + Number(order.discountAmount || 0)).toFixed(2));
+            - const discountLabel = (order.discountBreakdown && order.discountBreakdown.label) ? String(order.discountBreakdown.label) : 'Discount';
             .d-flex.justify-content-end.mb-2
+              if hasDiscount
+                .me-3
+                  div.text-white Total before discount:
+                  strong GH₵ #{totalBeforeDiscount.toFixed(2)}
+                .me-3
+                  div.text-white #{discountLabel}:
+                  strong.text-success - GH₵ #{Number(order.discountAmount || 0).toFixed(2)}
               .me-3
                 div.text-white Total:
                 strong GH₵ #{(order.total || 0).toFixed(2)}
@@ -89,7 +87,6 @@ block content
                   strong GH₵ #{outstanding.toFixed(2)}
                 else
                   strong GH₵ 0.00
-
             // Payment history
             h6.mb-2.text-white Payment History
             if order.payments && order.payments.length
@@ -113,7 +110,6 @@ block content
                         - // build extraMeta containing only keys not in knownKeys
                         - const extraMeta = {}
                         - Object.keys(meta || {}).forEach(function(k){ if (knownKeys.indexOf(k) === -1) extraMeta[k] = meta[k]; })
-
                         tr
                         td #{dt}
                         td #{method.toUpperCase()}
@@ -140,7 +136,6 @@ block content
                                   div
                                     small.text-muted-light #{key}:
                                     span.ms-2 #{val}
-
                             // NEW: show who recorded this payment (if available)
                             if p.recordedBy && (typeof p.recordedBy === 'object') && (p.recordedBy.name || p.recordedBy.username)
                               div.mt-2
@@ -150,10 +145,8 @@ block content
                               div.mt-2
                                 small.text-muted-light Recorded by:
                                 span.ms-2 #{p.recordedByName}
-
                         td #{p.note || ''}
             else
               p.text-muted-light No payments recorded.
-
             // Actions (record payment -> jumps to /orders/pay with id)
             .d-flex.justify-content-end.mt-3

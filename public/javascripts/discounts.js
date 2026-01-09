@@ -1,3 +1,4 @@
+// public/javascripts/discounts.js
 document.addEventListener('DOMContentLoaded', function () {
   'use strict';
 
