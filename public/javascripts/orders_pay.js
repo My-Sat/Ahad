@@ -347,13 +347,31 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
     }
     // ------------------------------------------------------------
 
+    const hasDiscount = Number(order.discountAmount || 0) > 0;
+
+    let discountHtml = '';
+    if (hasDiscount) {
+      const before = (typeof order.totalBeforeDiscount !== 'undefined' && order.totalBeforeDiscount !== null)
+        ? Number(order.totalBeforeDiscount)
+        : Number(order.total || 0) + Number(order.discountAmount || 0);
+
+      const label = order.discountBreakdown && order.discountBreakdown.label ? String(order.discountBreakdown.label) : 'Discount';
+      discountHtml = `
+        <div class="mt-2">
+          <p class="text-end mb-1"><span class="text-muted">Total before discount:</span> <strong>GH₵ ${fmt(before)}</strong></p>
+          <p class="text-end mb-1"><span class="text-muted">${escapeHtml(label)}:</span> <strong class="text-success">- GH₵ ${fmt(order.discountAmount)}</strong></p>
+        </div>
+      `;
+    }
+
     orderInfo.innerHTML = `
       ${ handlerDisplay ? `<p><strong>Handled by:</strong> ${escapeHtml(handlerDisplay)}</p>` : '' }
       ${ customerDisplay ? `<p><strong>Customer:</strong> ${escapeHtml(customerDisplay)}</p>` : '' }
       <p><strong>Order ID:</strong> ${escapeHtml(order.orderId)}</p>
       <p><strong>Status:</strong> ${statusLabel}</p>
       ${itemsHtml}
-      <p class="text-end"><strong>Total: GH₵ ${fmt(order.total)}</strong></p>
+      ${discountHtml}
+      <p class="text-end"><strong>Total to pay: GH₵ ${fmt(order.total)}</strong></p>
       ${ (outstanding !== null && outstanding > 0) ? `<p class="text-end"><strong>Remaining: GH₵ ${fmt(outstanding)}</strong></p>` : '' }
     `;
 

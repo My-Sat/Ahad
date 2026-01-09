@@ -1,0 +1,106 @@
+extends ../layout
+
+block content
+  .container
+    .row.justify-content-center
+      .col-12.col-lg-10
+        .card.shadow-sm.dark-surface
+          .card-body.dark-card-body
+            .d-flex.justify-content-between.align-items-center.mb-3
+              h4.mb-0.text-white Discounts Setup
+              a.btn.btn-secondary.btn-sm(href='/orders/pay') Back to Pay
+
+            p.text-muted-light.small Configure discounts. Only ONE discount is applied per order (best match). Orders keep a snapshot at creation time.
+
+            hr
+
+            // General
+            h6.text-white General Discount (applies to all orders)
+            .row.g-2.mb-3
+              .col-md-3
+                select.form-select.form-select-sm.form-select-dark#generalMode
+                  option(value='amount') Amount (GH₵)
+                  option(value='percent') Percentage (%)
+              .col-md-3
+                input.form-control.form-control-sm.form-control-dark#generalValue(type='number', min='0', step='0.01', placeholder='Value')
+              .col-md-3
+                .form-check.mt-1
+                  input.form-check-input#generalEnabled(type='checkbox', checked)
+                  label.form-check-label(for='generalEnabled') Enabled
+
+            hr
+
+            // Customer Type
+            h6.text-white Discount by Customer Type
+            .row.g-2.mb-2
+              .col-md-6
+                label.form-label.small.text-muted-light Customer types
+                select.form-select.form-select-sm.form-select-dark#custTargets(multiple)
+                  each ct in customerTypes
+                    option(value=ct)= ct
+              .col-md-3
+                label.form-label.small.text-muted-light Mode
+                select.form-select.form-select-sm.form-select-dark#custMode
+                  option(value='amount') Amount (GH₵)
+                  option(value='percent') Percentage (%)
+              .col-md-3
+                label.form-label.small.text-muted-light Value
+                input.form-control.form-control-sm.form-control-dark#custValue(type='number', min='0', step='0.01')
+            .form-check.mb-3
+              input.form-check-input#custEnabled(type='checkbox', checked)
+              label.form-check-label(for='custEnabled') Enabled
+
+            hr
+
+            // Service Type
+            h6.text-white Discount by Service
+            .row.g-2.mb-2
+              .col-md-6
+                label.form-label.small.text-muted-light Services
+                select.form-select.form-select-sm.form-select-dark#svcTargets(multiple)
+                  each s in services
+                    option(value=String(s._id))= s.name
+              .col-md-3
+                label.form-label.small.text-muted-light Mode
+                select.form-select.form-select-sm.form-select-dark#svcMode
+                  option(value='amount') Amount (GH₵)
+                  option(value='percent') Percentage (%)
+              .col-md-3
+                label.form-label.small.text-muted-light Value
+                input.form-control.form-control-sm.form-control-dark#svcValue(type='number', min='0', step='0.01')
+            .form-check.mb-3
+              input.form-check-input#svcEnabled(type='checkbox', checked)
+              label.form-check-label(for='svcEnabled') Enabled
+
+            hr
+
+            // Service Category
+            h6.text-white Discount by Service Category
+            .row.g-2.mb-2
+              .col-md-6
+                label.form-label.small.text-muted-light Categories
+                select.form-select.form-select-sm.form-select-dark#catTargets(multiple)
+                  each c in categories
+                    option(value=String(c._id))= c.name
+              .col-md-3
+                label.form-label.small.text-muted-light Mode
+                select.form-select.form-select-sm.form-select-dark#catMode
+                  option(value='amount') Amount (GH₵)
+                  option(value='percent') Percentage (%)
+              .col-md-3
+                label.form-label.small.text-muted-light Value
+                input.form-control.form-control-sm.form-control-dark#catValue(type='number', min='0', step='0.01')
+            .form-check.mb-3
+              input.form-check-input#catEnabled(type='checkbox', checked)
+              label.form-check-label(for='catEnabled') Enabled
+
+            hr
+
+            .d-flex.justify-content-end.gap-2
+              button.btn.btn-outline-light-custom#loadDiscounts(type='button') Reload
+              button.btn.btn-primary#saveDiscounts(type='button') Save
+
+            p.small.text-muted-light.mt-2#discountSaveStatus
+
+block append scripts
+  script(src='/public/javascripts/discounts.js')

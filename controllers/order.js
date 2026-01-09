@@ -3,13 +3,80 @@ const crypto = require('crypto');
 const Service = require('../models/service');
 const ServicePrice = require('../models/service_price');
 const Order = require('../models/order');
+const Customer = require('../models/customer');
 const Printer = require('../models/printer');
 const mongoose = require('mongoose');
 const Material = require('../models/material');
 const { MaterialUsage, MaterialAggregate } = require('../models/material_usage');
 const { ObjectId } = require('mongoose').Types;
+const DiscountConfig = require('../models/discount');
 
 
+async function getActiveDiscountRules() {
+  const cfg = await DiscountConfig.findOne().sort({ updatedAt: -1 }).lean();
+  const rules = (cfg && Array.isArray(cfg.rules)) ? cfg.rules : [];
+  return rules.filter(r => r && r.enabled);
+}
+
+function computeDiscountAmount(baseTotal, rule) {
+  if (!rule) return 0;
+  if (rule.mode === 'amount') return Math.max(0, Number(rule.value || 0));
+  if (rule.mode === 'percent') {
+    const pct = Math.max(0, Math.min(100, Number(rule.value || 0)));
+    return Number((baseTotal * (pct / 100)).toFixed(2));
+  }
+  return 0;
+}
+
+// Choose best single discount among applicable rules
+async function pickBestDiscount({ baseTotal, customerCategory, serviceIds, serviceCategoryIds }) {
+  const rules = await getActiveDiscountRules();
+  if (!rules.length) return null;
+
+  const candidates = [];
+
+  for (const r of rules) {
+    if (!r || !r.scope) continue;
+
+    if (r.scope === 'general') {
+      candidates.push({ rule: r, label: 'General' });
+      continue;
+    }
+
+    if (r.scope === 'customer_type') {
+      if (customerCategory && (r.targets || []).includes(String(customerCategory))) {
+        candidates.push({ rule: r, label: `Customer Type: ${customerCategory}` });
+      }
+      continue;
+    }
+
+    if (r.scope === 'service') {
+      const hit = (r.targets || []).some(t => serviceIds.has(String(t)));
+      if (hit) candidates.push({ rule: r, label: 'Service match' });
+      continue;
+    }
+
+    if (r.scope === 'service_category') {
+      const hit = (r.targets || []).some(t => serviceCategoryIds.has(String(t)));
+      if (hit) candidates.push({ rule: r, label: 'Category match' });
+      continue;
+    }
+  }
+
+  if (!candidates.length) return null;
+
+  // compute amounts, pick highest benefit (capped at baseTotal)
+  let best = null;
+  for (const c of candidates) {
+    const amt = computeDiscountAmount(baseTotal, c.rule);
+    const capped = Math.min(baseTotal, Math.max(0, amt));
+    if (!best || capped > best.amount) {
+      best = { ...c, amount: Number(capped.toFixed(2)) };
+    }
+  }
+
+  return best;
+}
 
 function makeOrderId() {
   // short, human-readable id: 8 chars base36
@@ -129,12 +196,33 @@ let handler = null;
     }
 
     // render server-side page
+    // -----------------------------
+    // DISCOUNT DISPLAY (view page)
+    // -----------------------------
+    const totalBeforeDiscount =
+      (orderDoc.totalBeforeDiscount !== undefined && orderDoc.totalBeforeDiscount !== null)
+        ? Number(orderDoc.totalBeforeDiscount)
+        : (Number(orderDoc.total || 0) + Number(orderDoc.discountAmount || 0));
+
+    const discountAmount = Number(orderDoc.discountAmount || 0);
+
+    const discountLabel =
+      (orderDoc.discountBreakdown && orderDoc.discountBreakdown.label)
+        ? String(orderDoc.discountBreakdown.label)
+        : 'Discount';
+
     return res.render('orders/view', {
       order: orderDoc,
       paidSoFar,
       outstanding,
-      customer,  // pass separately to mirror new.pug logic
-      handler    // <-- pass handler to template
+      customer,
+      handler,
+
+      // ✅ expose discount info to template
+      totalBeforeDiscount,
+      discountAmount,
+      discountLabel,
+      discountBreakdown: orderDoc.discountBreakdown || null
     });
     } catch (err) {
     console.error('viewOrderPage error', err);
@@ -418,6 +506,72 @@ try {
   return res.status(500).json({ error: 'Failed to verify material stock' });
 }
 
+// -----------------------------
+// DISCOUNT (server-authoritative) - FIXED
+// -----------------------------
+const baseTotal = Number(total || 0);
+
+// determine customer category (if attached to this order)
+let customerCategory = null;
+try {
+  if (order.customer) {
+    const c = await Customer.findById(order.customer).select('_id category').lean();
+    if (c && c.category) customerCategory = String(c.category);
+  }
+} catch (e) {
+  console.error('Discount: failed to load customer category', e);
+}
+
+// collect service ids and service category ids involved in THIS order
+const serviceIds = new Set();
+for (const bi of (builtItems || [])) {
+  if (bi && bi.service) serviceIds.add(String(bi.service));
+}
+
+const serviceCategoryIds = new Set();
+try {
+  const svcDocs = await Service.find({ _id: { $in: Array.from(serviceIds) } })
+    .select('_id category')
+    .lean();
+
+  (svcDocs || []).forEach(s => {
+    if (s && s.category) serviceCategoryIds.add(String(s.category));
+  });
+} catch (e) {
+  console.error('Discount: failed to load service categories', e);
+}
+
+const best = await pickBestDiscount({
+  baseTotal,
+  customerCategory,
+  serviceIds,
+  serviceCategoryIds
+});
+
+let discountAmount = 0;
+let discountBreakdown = null;
+
+if (best && best.amount > 0) {
+  discountAmount = Number(best.amount || 0);
+  discountBreakdown = {
+    scope: best.rule.scope,
+    mode: best.rule.mode,
+    value: best.rule.value,
+    computed: discountAmount,
+    label: best.label
+  };
+}
+
+// apply discount
+const finalTotal = Number(Math.max(0, baseTotal - discountAmount).toFixed(2));
+
+// store snapshot on the order doc before saving
+order.totalBeforeDiscount = baseTotal;
+order.discountAmount = discountAmount;
+order.discountBreakdown = discountBreakdown;
+
+// IMPORTANT: total becomes final payable total
+order.total = finalTotal;
 
     await order.save();
 
@@ -541,7 +695,7 @@ for (let idx = 0; idx < builtItems.length; idx++) {
   console.error('Printer usage recording error', puErr);
 }
     // return order info
-    return res.json({ ok: true, orderId: order.orderId, total });
+    return res.json({ ok: true, orderId: order.orderId, total: order.total });
   } catch (err) {
     console.error('apiCreateOrder error', err);
     return res.status(500).json({ error: 'Error creating order' });
@@ -693,22 +847,30 @@ try {
     }
 
     // return minimal data plus payments summary
-    return res.json({
-      ok: true,
-      order: {
-        orderId: order.orderId,
-        total: order.total,
-        status: order.status,
-        items: order.items,
-        createdAt: order.createdAt,
-        paidAt: order.paidAt,
-        paidSoFar,
-        outstanding,
-        payments: order.payments || [],
-        customer: customerInfo,
-        handledBy: handlerInfo   // <-- include handler info for clients that want to display
-      }
-    });
+  return res.json({
+    ok: true,
+    order: {
+      orderId: order.orderId,
+
+      // totals
+      total: order.total,
+
+      // ✅ add discount fields needed by pay page
+      totalBeforeDiscount: order.totalBeforeDiscount,
+      discountAmount: order.discountAmount,
+      discountBreakdown: order.discountBreakdown,
+
+      status: order.status,
+      items: order.items,
+      createdAt: order.createdAt,
+      paidAt: order.paidAt,
+      paidSoFar,
+      outstanding,
+      payments: order.payments || [],
+      customer: customerInfo,
+      handledBy: handlerInfo
+    }
+  });
   } catch (err) {
     console.error('apiGetOrderById error', err);
     return res.status(500).json({ error: 'Error fetching order' });

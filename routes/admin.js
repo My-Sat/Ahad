@@ -13,6 +13,8 @@ const usersController = require('../controllers/users');
 const { ensureAdmin } = require('../middlewares/auth');
 const serviceCategoryController = require('../controllers/serviceCategory');
 const { ensureHasPermission } = require('../middlewares/auth');
+const discountsController = require('../controllers/discounts');
+
 
 
 
@@ -102,5 +104,11 @@ router.post('/users/:id/permissions', ensureAdmin, usersController.setPermission
 
 // also expose simple API endpoint for client-side listing if needed
 router.get('/api/printers', printersController.listAll);
+
+// Discounts (ADMIN)
+router.get('/discounts', ensureAdmin, discountsController.page);
+router.get('/discounts/api', ensureAdmin, discountsController.apiGet);
+router.post('/discounts', ensureAdmin, discountsController.apiSave);
+
 
 module.exports = router;

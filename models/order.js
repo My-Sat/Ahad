@@ -44,6 +44,14 @@ const PaymentSchema = new mongoose.Schema({
 const OrderSchema = new mongoose.Schema({
   orderId: { type: String, unique: true, index: true }, // generated human-friendly ID
   items: [OrderItemSchema],
+    // --- Discounts snapshot (applied at creation time) ---
+  totalBeforeDiscount: { type: Number, default: 0 },
+  discountAmount: { type: Number, default: 0 },
+  discountBreakdown: {
+    // e.g. { scope:'customer_type', mode:'percent', value:10, computed: 5.20, label:'Customer Type: artist' }
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
   total: { type: Number, required: true, default: 0 },
   status: { type: String, enum: ['pending', 'paid', 'cancelled'], default: 'pending' },
   createdAt: { type: Date, default: Date.now },
