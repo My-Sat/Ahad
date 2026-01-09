@@ -30,6 +30,23 @@ html(lang="en")
           //- Only render desktop navigation & user menu when a user is logged in
           if currentUser
             - const role = (currentUser.role || '').toString().toLowerCase();
+            - const perms = Array.isArray(currentUser.permissions) ? currentUser.permissions : [];
+            - const hasAny = (arr) => arr.some(p => perms.includes(p));
+
+            // Clerk “Orders” permissions (front desk)
+            - const clerkRoutes = ['/orders/new','/orders/list','/orders/view/:orderId','/customers','/lookup','/search'];
+
+            // Cashier “Payment” permissions
+            - const cashierRoutes = ['/orders/pay','/orders/debtors','/orders/:orderId','/orders/:orderId/pay'];
+
+            // What should appear in the Orders dropdown?
+            // Default behavior is preserved:
+            // - clerks see Orders (new) by default
+            // - cashiers see Payment by default
+            // Extra visibility comes from cross-assigned permissions.
+            - const canSeeOrdersNew = (role === 'admin') || (role === 'clerk') || (role === 'cashier' && hasAny(clerkRoutes));
+            - const canSeeOrdersPay = (role === 'admin') || (role === 'cashier') || (role === 'clerk' && hasAny(cashierRoutes));
+
 
             // Desktop nav
             nav#topTabs.nav.d-none.d-md-block
@@ -89,8 +106,12 @@ html(lang="en")
                       i.bi.bi-basket2.me-2(aria-hidden='true')
                       | Orders
                     ul.dropdown-menu
-                      li
-                        a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
+                      if canSeeOrdersNew
+                        li
+                          a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Orders
+                      if canSeeOrdersPay
+                        li
+                          a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
 
                 else if role === 'clerk'
                   // Clerk: only Orders -> Orders (front desk)
@@ -99,8 +120,12 @@ html(lang="en")
                       i.bi.bi-basket2.me-2(aria-hidden='true')
                       | Orders
                     ul.dropdown-menu
-                      li
-                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Orders
+                      if canSeeOrdersNew
+                        li
+                          a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Orders
+                      if canSeeOrdersPay
+                        li
+                          a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
 
             // Desktop user menu (show name + logout)
             .d-none.d-md-flex.align-items-center.gap-2
@@ -131,6 +156,13 @@ html(lang="en")
               ul.dropdown-menu
                 if currentUser
                   - const roleSm = (currentUser.role || '').toString().toLowerCase();
+                  - const permsSm = Array.isArray(currentUser.permissions) ? currentUser.permissions : [];
+                  - const hasAnySm = (arr) => arr.some(p => permsSm.includes(p));
+                  - const clerkRoutesSm = ['/orders/new','/orders/list','/orders/view/:orderId','/customers','/lookup','/search'];
+                  - const cashierRoutesSm = ['/orders/pay','/orders/debtors','/orders/:orderId','/orders/:orderId/pay'];
+                  - const canSeeOrdersNewSm = (roleSm === 'admin') || (roleSm === 'clerk') || (roleSm === 'cashier' && hasAnySm(clerkRoutesSm));
+                  - const canSeeOrdersPaySm = (roleSm === 'admin') || (roleSm === 'cashier') || (roleSm === 'clerk' && hasAnySm(cashierRoutesSm));
+
                   if roleSm === 'admin'
                     li
                       a.dropdown-item(href='/admin/services', data-ajax='true', id='tab-services-sm') Services
@@ -160,8 +192,12 @@ html(lang="en")
                         | Logout
 
                   else if roleSm === 'cashier'
-                    li
-                      a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Payment
+                    if canSeeOrdersNewSm
+                      li
+                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — New
+                    if canSeeOrdersPaySm
+                      li
+                        a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Payment
                     li
                       hr.dropdown-divider
                     li
@@ -170,8 +206,12 @@ html(lang="en")
                         | Logout
 
                   else if roleSm === 'clerk'
-                    li
-                      a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — New
+                    if canSeeOrdersNewSm
+                      li
+                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — New
+                    if canSeeOrdersPaySm
+                      li
+                        a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Orders — Pay
                     li
                       hr.dropdown-divider
                     li
