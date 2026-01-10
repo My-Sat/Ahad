@@ -13,6 +13,8 @@ function sanitizeRule(r) {
   const value = Number(r.value);
 
   const targets = Array.isArray(r.targets) ? r.targets.map(x => String(x)) : [];
+  if (scope !== 'general' && (!targets.length || !targets[0])) return null;
+
 
   if (!['general','customer_type','service','service_category'].includes(scope)) return null;
   if (!['amount','percent'].includes(mode)) return null;

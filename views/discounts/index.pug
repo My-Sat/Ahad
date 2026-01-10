@@ -32,67 +32,101 @@ block content
 
             // Customer Type
             h6.text-white Discount by Customer Type
-            .row.g-2.mb-2
-              .col-md-6
-                label.form-label.small.text-muted-light Customer types
-                select.form-select.form-select-sm.form-select-dark#custTargets(multiple)
-                  each ct in customerTypes
-                    option(value=ct)= ct
-              .col-md-3
-                label.form-label.small.text-muted-light Mode
-                select.form-select.form-select-sm.form-select-dark#custMode
-                  option(value='amount') Amount (GH₵)
-                  option(value='percent') Percentage (%)
-              .col-md-3
-                label.form-label.small.text-muted-light Value
-                input.form-control.form-control-sm.form-control-dark#custValue(type='number', min='0', step='0.01')
-            .form-check.mb-3
-              input.form-check-input#custEnabled(type='checkbox', checked)
-              label.form-check-label(for='custEnabled') Enabled
+            p.small.text-muted-light.mb-2 Add multiple rules (one per customer type). Duplicate targets are blocked.
+
+            #custRulesContainer
+
+            .d-flex.justify-content-end.mb-3
+              button.btn.btn-outline-light-custom.btn-sm#addCustRule(type='button') + Add customer type rule
+
+            // row template (hidden)
+            template#custRuleTemplate
+              .row.g-2.align-items-end.mb-2.discount-rule-row(data-scope='customer_type')
+                .col-md-5
+                  label.form-label.small.text-muted-light Customer type
+                  select.form-select.form-select-sm.form-select-dark.rule-target
+                    option(value='') -- Select --
+                    each ct in customerTypes
+                      option(value=ct)= ct
+                .col-md-3
+                  label.form-label.small.text-muted-light Mode
+                  select.form-select.form-select-sm.form-select-dark.rule-mode
+                    option(value='amount') Amount (GH₵)
+                    option(value='percent') Percentage (%)
+                .col-md-2
+                  label.form-label.small.text-muted-light Value
+                  input.form-control.form-control-sm.form-control-dark.rule-value(type='number', min='0', step='0.01')
+                .col-md-1
+                  .form-check.mt-4
+                    input.form-check-input.rule-enabled(type='checkbox', checked)
+                .col-md-1.text-end
+                  button.btn.btn-sm.btn-danger.rule-remove(type='button') ✕
 
             hr
 
             // Service Type
             h6.text-white Discount by Service
-            .row.g-2.mb-2
-              .col-md-6
-                label.form-label.small.text-muted-light Services
-                select.form-select.form-select-sm.form-select-dark#svcTargets(multiple)
-                  each s in services
-                    option(value=String(s._id))= s.name
-              .col-md-3
-                label.form-label.small.text-muted-light Mode
-                select.form-select.form-select-sm.form-select-dark#svcMode
-                  option(value='amount') Amount (GH₵)
-                  option(value='percent') Percentage (%)
-              .col-md-3
-                label.form-label.small.text-muted-light Value
-                input.form-control.form-control-sm.form-control-dark#svcValue(type='number', min='0', step='0.01')
-            .form-check.mb-3
-              input.form-check-input#svcEnabled(type='checkbox', checked)
-              label.form-check-label(for='svcEnabled') Enabled
+            p.small.text-muted-light.mb-2 Add multiple rules (one per service). Duplicate targets are blocked.
+
+            #svcRulesContainer
+
+            .d-flex.justify-content-end.mb-3
+              button.btn.btn-outline-light-custom.btn-sm#addSvcRule(type='button') + Add service rule
+
+            template#svcRuleTemplate
+              .row.g-2.align-items-end.mb-2.discount-rule-row(data-scope='service')
+                .col-md-5
+                  label.form-label.small.text-muted-light Service
+                  select.form-select.form-select-sm.form-select-dark.rule-target
+                    option(value='') -- Select --
+                    each s in services
+                      option(value=String(s._id))= s.name
+                .col-md-3
+                  label.form-label.small.text-muted-light Mode
+                  select.form-select.form-select-sm.form-select-dark.rule-mode
+                    option(value='amount') Amount (GH₵)
+                    option(value='percent') Percentage (%)
+                .col-md-2
+                  label.form-label.small.text-muted-light Value
+                  input.form-control.form-control-sm.form-control-dark.rule-value(type='number', min='0', step='0.01')
+                .col-md-1
+                  .form-check.mt-4
+                    input.form-check-input.rule-enabled(type='checkbox', checked)
+                .col-md-1.text-end
+                  button.btn.btn-sm.btn-danger.rule-remove(type='button') ✕
 
             hr
 
             // Service Category
             h6.text-white Discount by Service Category
-            .row.g-2.mb-2
-              .col-md-6
-                label.form-label.small.text-muted-light Categories
-                select.form-select.form-select-sm.form-select-dark#catTargets(multiple)
-                  each c in categories
-                    option(value=String(c._id))= c.name
-              .col-md-3
-                label.form-label.small.text-muted-light Mode
-                select.form-select.form-select-sm.form-select-dark#catMode
-                  option(value='amount') Amount (GH₵)
-                  option(value='percent') Percentage (%)
-              .col-md-3
-                label.form-label.small.text-muted-light Value
-                input.form-control.form-control-sm.form-control-dark#catValue(type='number', min='0', step='0.01')
-            .form-check.mb-3
-              input.form-check-input#catEnabled(type='checkbox', checked)
-              label.form-check-label(for='catEnabled') Enabled
+            p.small.text-muted-light.mb-2 Add multiple rules (one per category). Duplicate targets are blocked.
+
+            #catRulesContainer
+
+            .d-flex.justify-content-end.mb-3
+              button.btn.btn-outline-light-custom.btn-sm#addCatRule(type='button') + Add category rule
+
+            template#catRuleTemplate
+              .row.g-2.align-items-end.mb-2.discount-rule-row(data-scope='service_category')
+                .col-md-5
+                  label.form-label.small.text-muted-light Category
+                  select.form-select.form-select-sm.form-select-dark.rule-target
+                    option(value='') -- Select --
+                    each c in categories
+                      option(value=String(c._id))= c.name
+                .col-md-3
+                  label.form-label.small.text-muted-light Mode
+                  select.form-select.form-select-sm.form-select-dark.rule-mode
+                    option(value='amount') Amount (GH₵)
+                    option(value='percent') Percentage (%)
+                .col-md-2
+                  label.form-label.small.text-muted-light Value
+                  input.form-control.form-control-sm.form-control-dark.rule-value(type='number', min='0', step='0.01')
+                .col-md-1
+                  .form-check.mt-4
+                    input.form-check-input.rule-enabled(type='checkbox', checked)
+                .col-md-1.text-end
+                  button.btn.btn-sm.btn-danger.rule-remove(type='button') ✕
 
             hr
 
