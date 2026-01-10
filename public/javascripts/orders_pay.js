@@ -73,6 +73,60 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
     });
   }
 
+  function titleCaseFromKey(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/_/g, ' ')
+    .trim()
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function discountAppliedLabel(order) {
+  const db = (order && order.discountBreakdown && typeof order.discountBreakdown === 'object')
+    ? order.discountBreakdown
+    : {};
+
+  // If backend already provides a friendly label, prefer it
+  if (db.appliedLabel) return String(db.appliedLabel);
+  if (db.appliedName) return String(db.appliedName);
+
+  const scope = String(db.scope || '').trim();
+
+  // CUSTOMER TYPE: regular / one_time / organisation / artist
+  if (scope === 'customer_type') {
+    const raw =
+      db.customerType ||
+      db.target ||
+      (Array.isArray(db.targets) ? db.targets[0] : null) ||
+      db.key ||
+      db.label || '';
+
+    const map = {
+      regular: 'Regular',
+      one_time: 'One-Time',
+      organisation: 'Organisation',
+      artist: 'Artist'
+    };
+    const key = String(raw || '').toLowerCase().trim();
+    return map[key] || titleCaseFromKey(raw);
+  }
+
+  // SERVICE / CATEGORY: show actual name if provided
+  if (scope === 'service' || scope === 'service_category') {
+    const raw =
+      db.serviceName ||
+      db.categoryName ||
+      db.targetName ||
+      db.name ||
+      db.label || '';
+    return String(raw || '').trim();
+  }
+
+  // GENERAL / unknown: fallback
+  return String(db.label || 'Discount').trim();
+}
+
+
   // Extract sub-unit names from a selectionLabel like "Unit: Sub + Unit2: Sub2"
   function subUnitsOnlyFromLabel(selectionLabel) {
     if (!selectionLabel) return '';
@@ -347,22 +401,33 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
     }
     // ------------------------------------------------------------
 
-    const hasDiscount = Number(order.discountAmount || 0) > 0;
+const hasDiscount = Number(order.discountAmount || 0) > 0;
 
-    let discountHtml = '';
-    if (hasDiscount) {
-      const before = (typeof order.totalBeforeDiscount !== 'undefined' && order.totalBeforeDiscount !== null)
-        ? Number(order.totalBeforeDiscount)
-        : Number(order.total || 0) + Number(order.discountAmount || 0);
+let discountHtml = '';
+if (hasDiscount) {
+  const before = (typeof order.totalBeforeDiscount !== 'undefined' && order.totalBeforeDiscount !== null)
+    ? Number(order.totalBeforeDiscount)
+    : Number(order.total || 0) + Number(order.discountAmount || 0);
 
-      const label = order.discountBreakdown && order.discountBreakdown.label ? String(order.discountBreakdown.label) : 'Discount';
-      discountHtml = `
-        <div class="mt-2">
-          <p class="text-end mb-1"><span class="text-muted">Total before discount:</span> <strong>GH₵ ${fmt(before)}</strong></p>
-          <p class="text-end mb-1"><span class="text-muted">${escapeHtml(label)}:</span> <strong class="text-success">- GH₵ ${fmt(order.discountAmount)}</strong></p>
-        </div>
-      `;
-    }
+  const applied = discountAppliedLabel(order);
+
+  discountHtml = `
+    <div class="mt-2">
+      <p class="text-end mb-1">
+        <span class="text-muted">Discount Applied:</span>
+        <strong>${escapeHtml(applied || 'Discount')}</strong>
+      </p>
+      <p class="text-end mb-1">
+        <span class="text-muted">Total before discount:</span>
+        <strong>GH₵ ${fmt(before)}</strong>
+      </p>
+      <p class="text-end mb-1">
+        <span class="text-muted">Discount:</span>
+        <strong class="text-white">- GH₵ ${fmt(order.discountAmount)}</strong>
+      </p>
+    </div>
+  `;
+}
 
     orderInfo.innerHTML = `
       ${ handlerDisplay ? `<p><strong>Handled by:</strong> ${escapeHtml(handlerDisplay)}</p>` : '' }

@@ -1,4 +1,5 @@
 extends ../layout
+
 block content
   .container
     .row.justify-content-center
@@ -10,83 +11,152 @@ block content
               .btn-group
                 a.btn.btn-outline-secondary.btn-sm(href='/orders/new')
                   | Back to Orders
+
             // Order meta
             .mb-3
               if handler
                 p.mb-1
                   strong Handled by:
-                  | #{handler.name || handler.username || handler._id}
+                  |  #{handler.name || handler.username || handler._id}
+
               if customer
+                - var custLabel = ''
+                - if (customer.category === 'artist') { custLabel = customer.businessName || customer.phone || ''; }
+                - else { custLabel = customer.firstName || customer.businessName || customer.phone || ''; }
                 p.mb-1
                   strong Customer:
-                  | #{customer.category === 'artist' ? (customer.businessName || customer.phone) : (customer.firstName || customer.businessName || customer.phone)}
+                  |  #{custLabel}
+
               p.mb-1
                 strong Order ID:
-                | #{order.orderId}
+                |  #{order.orderId}
+
               p.mb-1
                 strong Status:
-                | #{order.status}
+                |  #{order.status}
+
               p.mb-1
                 strong Created:
-                | #{order.createdAt ? new Date(order.createdAt).toLocaleString() : ''}
-               
+                - var createdStr = ''
+                - try { createdStr = order.createdAt ? new Date(order.createdAt).toLocaleString() : ''; } catch (e) { createdStr = ''; }
+                |  #{createdStr}
+
             // Items
             h6.mb-2.text-white Items
             if order.items && order.items.length
               .list-group.mb-3
                 each it in order.items
                   - var rawLabel = it.selectionLabel || ''
-                  - var subs = (rawLabel && rawLabel.length) ? rawLabel.split(/\s*\+\s*/).map(p => {const idx = p.indexOf(':'); return idx >= 0 ? p.slice(idx + 1).trim() : p.trim();}).filter(Boolean).join(', ') : '(no label)';
+                  - var subs = '(no label)'
+                  - if (rawLabel && rawLabel.length) {
+                  -   var parts = String(rawLabel).split(' + ')
+                  -   var out = []
+                  -   for (var i = 0; i < parts.length; i++) {
+                  -     var part = parts[i]
+                  -     var idx = part.indexOf(':')
+                  -     var s = (idx >= 0) ? part.slice(idx + 1) : part
+                  -     s = String(s || '').trim()
+                  -     if (s) out.push(s)
+                  -   }
+                  -   if (out.length) subs = out.join(', ')
+                  - }
+
                   .list-group-item.d-flex.justify-content-between.align-items-center
                     .me-2(style='min-width:0;flex:1;')
-                      // Service name (context / category)
                       div.small.text-muted-light.mb-1 #{it.serviceName || 'Service'}
 
-                      // Price rule / selection (PRIMARY label – restored)
                       div(style='white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:480px;')
                         span.text-white #{subs}
+
                       if it.spoiled
                         span.text-danger.ms-2 Spoiled: #{it.spoiled}
+
                     .text-end(style='min-width:200px;')
-                      - const rawPages = Number(it.pages || 1);
-                      - const qty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (it.fb ? Math.ceil(rawPages / 2) : rawPages);
-                      - const factor = Number(it.factor || 1);
-                      - const qtyLabel = it.printer ? 'Sheets' : 'QTY'
+                      - var rawPages = Number(it.pages || 1)
+                      - var qty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (it.fb ? Math.ceil(rawPages / 2) : rawPages)
+                      - var factor = Number(it.factor || 1)
+                      - var qtyLabel = it.printer ? 'Sheets' : 'QTY'
+
                       div #{qtyLabel}: #{qty}
+
                       if it.printer
                         div Pages: #{rawPages}
+
                       if factor > 1
                         div QTY ×#{factor}
-                      div Unit: GH₵ #{(it.unitPrice || 0).toFixed(2)}
-                      div Subtotal: GH₵ #{(it.subtotal || 0).toFixed(2)}
+
+                      div Unit: GH₵ #{Number(it.unitPrice || 0).toFixed(2)}
+                      div Subtotal: GH₵ #{Number(it.subtotal || 0).toFixed(2)}
+
                       if it.printerName
                         div.small.text-muted-light Printer: #{it.printerName}
             else
               p.text-muted-light No items listed.
-            // Totals + payments summary
-            - const hasDiscount = Number(order.discountAmount || 0) > 0;
-            - const totalBeforeDiscount = (typeof order.totalBeforeDiscount !== 'undefined' && order.totalBeforeDiscount !== null) ? Number(order.totalBeforeDiscount || 0) : Number((Number(order.total || 0) + Number(order.discountAmount || 0)).toFixed(2));
-            - const discountLabel = (order.discountBreakdown && order.discountBreakdown.label) ? String(order.discountBreakdown.label) : 'Discount';
+
+            // Totals + payments summary (DISCOUNT INCLUDED)
+            - var hasDiscount = Number(order.discountAmount || 0) > 0
+            - var totalBeforeDiscount = 0
+            - if (typeof order.totalBeforeDiscount !== 'undefined' && order.totalBeforeDiscount !== null) {
+            -   totalBeforeDiscount = Number(order.totalBeforeDiscount || 0)
+            - } else {
+            -   totalBeforeDiscount = Number((Number(order.total || 0) + Number(order.discountAmount || 0)).toFixed(2))
+            - }
+            - var db = (order.discountBreakdown && typeof order.discountBreakdown === 'object') ? order.discountBreakdown : {}
+            - var scope = String(db.scope || '').trim()
+            - var discountApplied = ''
+            - if (hasDiscount) {
+            -   if (db.appliedLabel) discountApplied = String(db.appliedLabel)
+            -   else if (db.appliedName) discountApplied = String(db.appliedName)
+            -   else if (scope === 'customer_type') {
+            -     var raw = db.customerType || db.target || (Array.isArray(db.targets) ? db.targets[0] : '') || db.key || db.label || ''
+            -     var key = String(raw || '').toLowerCase().trim()
+            -     if (key === 'regular') discountApplied = 'Regular'
+            -     else if (key === 'one_time') discountApplied = 'One-Time'
+            -     else if (key === 'organisation') discountApplied = 'Organisation'
+            -     else if (key === 'artist') discountApplied = 'Artist'
+            -     else {
+            -       var parts2 = String(raw || '').split('_')
+            -       var tmp = []
+            -       for (var j = 0; j < parts2.length; j++) {
+            -         var p2 = parts2[j]
+            -         if (p2 && p2.length) tmp.push(p2.charAt(0).toUpperCase() + p2.slice(1))
+            -       }
+            -       discountApplied = tmp.join(' ')
+            -     }
+            -   } else if (scope === 'service') {
+            -     discountApplied = String(db.serviceName || db.targetName || db.name || db.label || '').trim()
+            -   } else if (scope === 'service_category') {
+            -     discountApplied = String(db.categoryName || db.targetName || db.name || db.label || '').trim()
+            -   } else {
+            -     discountApplied = String(db.label || 'Discount').trim()
+            -   }
+            - }
+
             .d-flex.justify-content-end.mb-2
               if hasDiscount
                 .me-3
-                  div.text-white Total before discount:
-                  strong GH₵ #{totalBeforeDiscount.toFixed(2)}
+                  div.text-white Discount Applied:
+                  strong #{discountApplied || 'Discount'}
                 .me-3
-                  div.text-white #{discountLabel}:
-                  strong.text-success - GH₵ #{Number(order.discountAmount || 0).toFixed(2)}
+                  div.text-white Total before discount:
+                  strong GH₵ #{Number(totalBeforeDiscount || 0).toFixed(2)}
+                .me-3
+                  div.text-white Discount:
+                  strong.text-white - GH₵ #{Number(order.discountAmount || 0).toFixed(2)}
+
               .me-3
                 div.text-white Total:
-                strong GH₵ #{(order.total || 0).toFixed(2)}
+                strong GH₵ #{Number(order.total || 0).toFixed(2)}
               .me-3
                 div.text-white Paid so far:
-                strong GH₵ #{paidSoFar.toFixed(2)}
+                strong GH₵ #{Number(paidSoFar || 0).toFixed(2)}
               .me-3
                 div.text-white Remaining:
                 if outstanding > 0
-                  strong GH₵ #{outstanding.toFixed(2)}
+                  strong GH₵ #{Number(outstanding || 0).toFixed(2)}
                 else
                   strong GH₵ 0.00
+
             // Payment history
             h6.mb-2.text-white Payment History
             if order.payments && order.payments.length
@@ -101,52 +171,59 @@ block content
                       th Note
                   tbody
                     each p in order.payments
-                        - const dt = p.createdAt ? new Date(p.createdAt).toLocaleString() : ''
-                        - const method = (p.method || 'unknown').toLowerCase()
-                        - const amount = Number(p.amount || 0).toFixed(2)
-                        - const meta = p.meta && typeof p.meta === 'object' ? p.meta : {}
-                        - // known meta keys that we show explicitly
-                        - const knownKeys = ['momoNumber','momoTxId','chequeNumber']
-                        - // build extraMeta containing only keys not in knownKeys
-                        - const extraMeta = {}
-                        - Object.keys(meta || {}).forEach(function(k){ if (knownKeys.indexOf(k) === -1) extraMeta[k] = meta[k]; })
-                        tr
+                      - var dt = ''
+                      - try { dt = p.createdAt ? new Date(p.createdAt).toLocaleString() : '' } catch (e) { dt = '' }
+                      - var method = String(p.method || 'unknown').toLowerCase()
+                      - var amount = Number(p.amount || 0).toFixed(2)
+                      - var meta = (p.meta && typeof p.meta === 'object') ? p.meta : {}
+                      - var knownKeys = ['momoNumber','momoTxId','chequeNumber']
+                      - var extraMeta = {}
+                      - var keys = Object.keys(meta || {})
+                      - for (var k = 0; k < keys.length; k++) {
+                      -   var kk = keys[k]
+                      -   if (knownKeys.indexOf(kk) === -1) extraMeta[kk] = meta[kk]
+                      - }
+
+                      tr
                         td #{dt}
-                        td #{method.toUpperCase()}
+                        td #{String(method).toUpperCase()}
                         td.text-end GH₵ #{amount}
                         td
-                            if method === 'momo'
-                              if meta.momoNumber
-                                div.mb-1
-                                  small.text-muted-light Number:
-                                  span.ms-2 #{meta.momoNumber}
-                              if meta.momoTxId
+                          if method === 'momo'
+                            if meta.momoNumber
+                              div.mb-1
+                                small.text-muted-light Number:
+                                span.ms-2 #{meta.momoNumber}
+                            if meta.momoTxId
+                              div
+                                small.text-muted-light TxID:
+                                span.ms-2 #{meta.momoTxId}
+                          else if method === 'cheque'
+                            if meta.chequeNumber
+                              div
+                                small.text-muted-light Cheque:
+                                span.ms-2 #{meta.chequeNumber}
+
+                          - var extraKeys = Object.keys(extraMeta)
+                          if extraKeys.length
+                            div.mt-1
+                              each val, key in extraMeta
                                 div
-                                  small.text-muted-light TxID:
-                                  span.ms-2 #{meta.momoTxId}
-                            else if method === 'cheque'
-                              if meta.chequeNumber
-                                div
-                                  small.text-muted-light Cheque:
-                                  span.ms-2 #{meta.chequeNumber}
-                            // print any extra meta keys (only those not shown above)
-                            if Object.keys(extraMeta).length
-                              div.mt-1
-                                each val, key in extraMeta
-                                  div
-                                    small.text-muted-light #{key}:
-                                    span.ms-2 #{val}
-                            // NEW: show who recorded this payment (if available)
-                            if p.recordedBy && (typeof p.recordedBy === 'object') && (p.recordedBy.name || p.recordedBy.username)
-                              div.mt-2
-                                small.text-muted-light Recorded by:
-                                span.ms-2 #{p.recordedBy.name || p.recordedBy.username}
-                            else if p.recordedByName
-                              div.mt-2
-                                small.text-muted-light Recorded by:
-                                span.ms-2 #{p.recordedByName}
+                                  small.text-muted-light #{key}:
+                                  span.ms-2 #{val}
+
+                          if p.recordedBy && (typeof p.recordedBy === 'object') && (p.recordedBy.name || p.recordedBy.username)
+                            div.mt-2
+                              small.text-muted-light Recorded by:
+                              span.ms-2 #{p.recordedBy.name || p.recordedBy.username}
+                          else if p.recordedByName
+                            div.mt-2
+                              small.text-muted-light Recorded by:
+                              span.ms-2 #{p.recordedByName}
+
                         td #{p.note || ''}
             else
               p.text-muted-light No payments recorded.
+
             // Actions (record payment -> jumps to /orders/pay with id)
             .d-flex.justify-content-end.mt-3
