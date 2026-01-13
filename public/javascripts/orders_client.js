@@ -775,11 +775,18 @@ function addToCart({
         factorCell = '';
         pagesCell = '';
       } else if (it.printerId) {
-        // printer service → reverse display
-        qtyCell = it.factor ? String(it.factor) : '';
-        factorCell = String(it.pages);
-        pagesCell = String(it.pagesOriginal);
-      } else {
+  // printer service:
+  // - QTY column shows factor (copies)
+  // - Sheets column should be effective sheets = effectiveQty * factor
+  // - Pages column shows raw pages entered
+  const f = it.factor ? Number(it.factor) : 1;
+  const effectiveQty = Number(it.pages) || 0;           // this is already "effectiveQty" (FB aware)
+  const sheets = Math.max(0, Math.floor(effectiveQty * (isNaN(f) ? 1 : f)));
+
+  qtyCell = String(isNaN(f) ? 1 : f);
+  factorCell = String(sheets);                          // ✅ Sheets
+  pagesCell = String(it.pagesOriginal);                 // raw pages
+} else {
         // normal service
         qtyCell = String(it.pages);
         factorCell = '';
@@ -855,7 +862,13 @@ function addToCart({
       // baseCount = fb ? ceil(pages/2) : pages; count = baseCount + spoiled
       const pgs = Math.max(1, Math.floor(Number(pages) || 1));
       const baseCount = fbChecked ? Math.ceil(pgs / 2) : pgs;
-      const countNeeded = Math.max(0, baseCount) + Math.max(0, Math.floor(Number(spoiled) || 0));
+      const spoiledCount = Math.max(0, Math.floor(Number(spoiled) || 0));
+
+      // factor only meaningful for printing services
+      const factorMul = serviceRequiresPrinter ? Math.max(1, Math.floor(Number(factor) || 1)) : 1;
+
+      // ✅ match server: (baseCount + spoiled) × factor
+      const countNeeded = (Math.max(0, baseCount) + spoiledCount) * factorMul;
 
       // If materials cache isn't loaded, skip checks (don’t block order flow)
       if (materialsLoaded && Array.isArray(materials) && materials.length) {

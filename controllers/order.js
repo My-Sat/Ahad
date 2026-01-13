@@ -450,8 +450,18 @@ try {
     const pages = Number(it.pages) || 1;
     const isFb = !!it.fb;
     const baseCount = (!pages || pages <= 0) ? 1 : (isFb ? Math.ceil(pages / 2) : pages);
-    const spoiled = (it.spoiled !== undefined && it.spoiled !== null) ? Math.floor(Number(it.spoiled) || 0) : 0;
-    const countNeeded = Math.max(0, baseCount) + Math.max(0, spoiled);
+
+    const spoiled = (it.spoiled !== undefined && it.spoiled !== null)
+      ? Math.floor(Number(it.spoiled) || 0)
+      : 0;
+
+    // ✅ apply factor for printing services (when printer exists on this item)
+    const factorMul = (it.printer && it.factor !== undefined && it.factor !== null)
+      ? Math.max(1, Math.floor(Number(it.factor) || 1))
+      : 1;
+
+    // ✅ count materials as sheets consumed = (baseCount + spoiled) × factor
+    const countNeeded = (Math.max(0, baseCount) + Math.max(0, spoiled)) * factorMul;
 
     if (countNeeded <= 0) continue;
 
@@ -613,18 +623,24 @@ try {
           if (!m.selections || !m.selections.length) continue;
           if (materialMatchesItem(m.selections, itemSelections)) {
             // Determine final count using pages & fb detection:
-            let pages = Number(it.pages) || 1;
-            const isFb = !!it.fb; // rely on stored flag, not text parsing
-            let baseCount;
-            if (!pages || pages <= 0) {
-              baseCount = 1;
-            } else {
-              baseCount = isFb ? Math.ceil(pages / 2) : pages;
-            }
+        let pages = Number(it.pages) || 1;
+        const isFb = !!it.fb;
 
-            // ensure spoiled is integer >= 0
-            const spoiled = (it.spoiled !== undefined && it.spoiled !== null) ? Math.floor(Number(it.spoiled) || 0) : 0;
-            const count = Math.max(0, baseCount) + Math.max(0, spoiled);
+        let baseCount;
+        if (!pages || pages <= 0) baseCount = 1;
+        else baseCount = isFb ? Math.ceil(pages / 2) : pages;
+
+        const spoiled = (it.spoiled !== undefined && it.spoiled !== null)
+          ? Math.floor(Number(it.spoiled) || 0)
+          : 0;
+
+        // ✅ apply factor for printing services (when printer exists)
+        const factorMul = (it.printer && it.factor !== undefined && it.factor !== null)
+          ? Math.max(1, Math.floor(Number(it.factor) || 1))
+          : 1;
+
+        // ✅ sheets consumed = (baseCount + spoiled) × factor
+        const count = (Math.max(0, baseCount) + Math.max(0, spoiled)) * factorMul;
 
             // create usage record
             await MaterialUsage.create({
