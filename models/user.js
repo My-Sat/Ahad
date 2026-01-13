@@ -9,8 +9,15 @@ const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true },
   role: { type: String, enum: ['admin','clerk','cashier'], default: 'clerk' },
-  permissions: { type: [String], default: [] }, // route strings
-  createdAt: { type: Date, default: Date.now }
+  permissions: { type: [String], default: [] },
+  createdAt: { type: Date, default: Date.now },
+
+  // NEW: OTP reset fields
+  resetOtpHash: { type: String, default: null },
+  resetOtpExpiresAt: { type: Date, default: null },
+  resetOtpLastSentAt: { type: Date, default: null },
+  resetOtpAttempts: { type: Number, default: 0 },
+  resetOtpLockUntil: { type: Date, default: null },
 });
 
 // convenience methods

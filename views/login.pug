@@ -14,6 +14,10 @@ block content
             if error
               .alert.alert-danger.mt-3= error
 
+            if success
+              .alert.alert-success.mt-3= success
+  
+
             // form: uses 'next' because your auth controller reads req.body.next
             form#loginForm.mt-3(method='post', action='/login', novalidate)
               input(type='hidden', name='next', value=(typeof next !== 'undefined' ? next : '/'))
@@ -27,7 +31,7 @@ block content
                 .form-check
                   input.form-check-input(type='checkbox', id='rememberMe', name='remember')
                   label.form-check-label.text-muted-light(for='rememberMe') Remember me
-                a(href='#', class='small text-muted') Forgot?
+                a(href='/forgot-password', class='small text-muted') Forgot password?
               button.btn.btn-primary.w-100(type='submit') Sign in
 
             .text-center.mt-3
