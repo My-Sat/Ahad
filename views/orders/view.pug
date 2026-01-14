@@ -73,16 +73,26 @@ block content
 
                     .text-end(style='min-width:200px;')
                       - var rawPages = Number(it.pages || 1)
+
+                      // qty = effective quantity used for pricing (FB-aware)
                       - var qty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (it.fb ? Math.ceil(rawPages / 2) : rawPages)
+
+                      // factor (copies/QTY multiplier) — only meaningful when printer exists
                       - var factor = Number(it.factor || 1)
+                      - if (isNaN(factor) || factor < 1) factor = 1
+
+                      // sheets = qty × factor for printing services
+                      - var sheets = it.printer ? (qty * factor) : qty
+                      - if (isNaN(sheets) || sheets < 0) sheets = 0
+
                       - var qtyLabel = it.printer ? 'Sheets' : 'QTY'
 
-                      div #{qtyLabel}: #{qty}
+                      div #{qtyLabel}: #{sheets}
 
                       if it.printer
                         div Pages: #{rawPages}
 
-                      if factor > 1
+                      if it.printer && factor > 1
                         div QTY ×#{factor}
 
                       div Unit: GH₵ #{Number(it.unitPrice || 0).toFixed(2)}

@@ -285,20 +285,34 @@ function discountAppliedLabel(order) {
         const isFb = (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
         const fbBadge = isFb ? ' <span class="badge bg-secondary ms-2">F/B</span>' : '';
         // prefer server-stored effectiveQty if available
+        // prefer server-stored effectiveQty if available (this is "effective sheets" BEFORE factor)
         const rawPages = Number(it.pages || 1);
-        const displayQty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (isFb ? Math.ceil(rawPages / 2) : rawPages);
-        const qty = Number(displayQty);
-        const requiresPrinter = !!it.printer;        const qtyLabel = requiresPrinter ? 'Sheets' : 'QTY';
-        const pages = requiresPrinter ? rawPages : null;
+        const baseSheets =
+          (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null)
+            ? Number(it.effectiveQty)
+            : (isFb ? Math.ceil(rawPages / 2) : rawPages);
 
+        const requiresPrinter = !!it.printer;
+        const factor = Math.max(1, Math.floor(Number(it.factor || 1)));
+
+        // DISPLAY FIX:
+        // - non-printing: QTY = baseSheets
+        // - printing: Sheets = baseSheets × factor
+        const displayQty = requiresPrinter ? (baseSheets * factor) : baseSheets;
+
+        const qtyLabel = requiresPrinter ? 'Sheets' : 'QTY';
+        const pages = requiresPrinter ? rawPages : null;
 
         const unit = Number(it.unitPrice || 0);
 
-        // prefer server-subtotal; otherwise compute from displayQty
-        const subtotal = Number((typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))) ? Number(it.subtotal) : (qty * unit));
+        // prefer server-subtotal; otherwise compute from DISPLAY qty for consistency
+        const subtotal = Number(
+          (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal)))
+            ? Number(it.subtotal)
+            : (displayQty * unit)
+        );
 
         const serviceName = it.serviceName || 'Service';
-        const factor = Number(it.factor || 1);
 
         itemsHtml += `
           <div class="list-group-item d-flex align-items-start justify-content-between" style="padding:0.5rem 0.75rem;">
@@ -313,9 +327,9 @@ function discountAppliedLabel(order) {
             </div>
 
             <div class="text-end ms-3" style="min-width:200px;">
-              <div>${qtyLabel}: ${escapeHtml(String(qty))}</div>
-              ${ requiresPrinter ? `<div>Pages: ${escapeHtml(String(pages))}</div>` : '' }
-              ${ factor > 1 ? `<div>QTY ×${factor}</div>` : '' }
+            <div>${qtyLabel}: ${escapeHtml(String(displayQty))}</div>
+            ${ requiresPrinter ? `<div>Pages: ${escapeHtml(String(pages))}</div>` : '' }
+            ${ (requiresPrinter && factor > 1) ? `<div>QTY ×${factor}</div>` : '' }
               <div>Unit: GH₵ ${escapeHtml(fmt(unit))}</div>
               <div>Subtotal: GH₵ ${escapeHtml(fmt(subtotal))}</div>
             </div>
