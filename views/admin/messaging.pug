@@ -1,0 +1,121 @@
+extends ../layout
+
+block content
+  .d-flex.justify-content-between.align-items-center.mb-3
+    h2.mb-0.text-white Messaging
+    a.btn.btn-secondary(href='/admin/services') Back to services
+
+  hr
+
+  p.text-muted-light.small.mb-3
+    | Manage automatic (dynamic) SMS that triggers when an order is placed, and send custom/manual bulk SMS to customers.
+
+  // Tabs
+  ul.nav.nav-tabs.mb-3
+    li.nav-item
+      button.nav-link.active(type="button" data-bs-toggle="tab" data-bs-target="#tabAuto") Dynamic (Auto)
+    li.nav-item
+      button.nav-link(type="button" data-bs-toggle="tab" data-bs-target="#tabManual") Custom / Manual
+
+  .tab-content
+    // -------------------------
+    // AUTO / DYNAMIC
+    // -------------------------
+    .tab-pane.fade.show.active#tabAuto
+      .row.g-3
+        .col-12.col-lg-6
+          .card.dark-surface.border
+            .card-body.dark-card-body
+              h5.mb-2.text-white Auto Message Settings
+              p.text-muted-light.small.mb-3
+                | These messages are sent automatically after an order is placed.
+
+              .form-check.form-switch.mb-2
+                input.form-check-input(type="checkbox" id="autoEnabled")
+                label.form-check-label.text-muted-light(for="autoEnabled")
+                  | Enable auto SMS when an order is placed
+
+              .form-check.form-switch.mb-3
+                input.form-check-input(type="checkbox" id="usePerType")
+                label.form-check-label.text-muted-light(for="usePerType")
+                  | Use different template per customer type
+
+              label.form-label.text-muted-light General template (fallback)
+              textarea.form-control.form-control-dark#generalTemplate(
+                rows="4"
+                placeholder="Example: Thank you for doing business with AHADPRINT. You are currently a {category} customer..."
+              )
+              .text-muted-light.small.mt-2
+                | Placeholders: {name}, {category}, {phone}
+
+              hr.text-muted-light
+
+              .form-check.form-switch.mb-2
+                input.form-check-input(type="checkbox" id="appendSignature")
+                label.form-check-label.text-muted-light(for="appendSignature")
+                  | Append signature/footer
+              input.form-control.form-control-dark#signatureText(type="text" placeholder="AHADPRINT")
+
+              button.btn.btn-primary.mt-3#saveAutoBtn(type="button")
+                i.bi.bi-save.me-1
+                | Save Auto Settings
+
+        .col-12.col-lg-6
+          .card.dark-surface.border
+            .card-body.dark-card-body
+              h5.mb-2.text-white Per Customer Type Templates
+              p.text-muted-light.small.mb-3
+                | Used only when “Use different template per customer type” is enabled.
+
+              label.form-label.text-muted-light One-time
+              textarea.form-control.form-control-dark#tplOneTime(rows="3")
+
+              label.form-label.text-muted-light.mt-3 Regular
+              textarea.form-control.form-control-dark#tplRegular(rows="3")
+
+              label.form-label.text-muted-light.mt-3 Artist
+              textarea.form-control.form-control-dark#tplArtist(rows="3")
+
+              label.form-label.text-muted-light.mt-3 Organisation
+              textarea.form-control.form-control-dark#tplOrganisation(rows="3")
+
+    // -------------------------
+    // MANUAL
+    // -------------------------
+    .tab-pane.fade#tabManual
+      .card.dark-surface.border
+        .card-body.dark-card-body
+          h5.mb-2.text-white Send Manual SMS
+          p.text-muted-light.small.mb-3
+            | Compose a message and choose recipients (all customers or by customer type).
+
+          .row.g-2
+            .col-12.col-lg-8
+              label.form-label.text-muted-light Message
+              textarea.form-control.form-control-dark#manualMessage(
+                rows="5"
+                placeholder="Type your message here..."
+              )
+
+            .col-12.col-lg-4
+              label.form-label.text-muted-light Send to
+              select.form-select.form-select-dark#manualTarget
+                option(value="all") All customers
+                option(value="customer_type") By customer type
+
+              label.form-label.text-muted-light.mt-2 Customer type
+              select.form-select.form-select-dark#manualCustomerType(disabled)
+                option(value="one_time") One-time
+                option(value="regular") Regular
+                option(value="artist") Artist
+                option(value="organisation") Organisation
+
+              button.btn.btn-success.mt-3.w-100#sendManualBtn(type="button")
+                i.bi.bi-send.me-1
+                | Send SMS
+
+          .mt-3
+            div.text-muted-light.small#manualResult
+
+block append scripts
+  script(src='/public/javascripts/messaging.js')

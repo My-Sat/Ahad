@@ -40,6 +40,14 @@ router.get('/services/:id', ensureAdmin, serviceController.get);
 router.post('/services', ensureAdmin, serviceController.create);
 router.put('/services/:id', ensureAdmin, serviceController.update);
 router.delete('/services/:id', ensureAdmin, serviceController.remove);
+const messagingController = require('../controllers/messaging');
+
+// Messaging (ADMIN)
+router.get('/messaging', ensureAdmin, messagingController.page);
+router.get('/messaging/api/config', ensureAdmin, messagingController.apiGetConfig);
+router.post('/messaging/api/config', ensureAdmin, messagingController.apiSaveConfig);
+router.post('/messaging/api/send', ensureAdmin, messagingController.apiSendManual);
+
 
 // Add component to service (unit + chosen subUnits)
 router.post('/services/:id/components', ensureAdmin, serviceController.addComponent);

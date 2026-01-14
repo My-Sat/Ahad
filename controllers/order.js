@@ -24,7 +24,7 @@ function buildThankYouSms(category) {
 
   // Keep wording correct for categories that never "migrate to regular" (artist/organisation).
   if (String(category || '').toLowerCase() === 'regular') {
-    return `Thank you for doing business with AHADPRINT. You are currently a ${label} customer. Continue doing business with us to maintain your Regular status and enjoy our discounts.`;
+    return `Thank you for doing business with AHADPRINT. You are currently a ${label} customer. Continue doing business with us to maintain your Regular status and enjoy our discoun.`;
   }
 
   if (String(category || '').toLowerCase() === 'artist' || String(category || '').toLowerCase() === 'organisation') {
@@ -32,7 +32,7 @@ function buildThankYouSms(category) {
   }
 
   // one_time default
-  return `Thank you for doing business with AHADPRINT. You are currently a ${label} customer. Continue doing business with us to be upgraded to Regular customer status and enjoy our discounts.`;
+  return `Thank you for doing business with AHADPRINT. You are currently a ${label} customer. Continue doing business with us to be upgraded to Regular customer status and enjoy our discoun.`;
 }
 
 
@@ -637,17 +637,30 @@ try {
     // 3) Send SMS (do not block order success if SMS fails)
     try {
       if (cust && cust.phone) {
-        const { sendSms } = require('../utilities/hubtel_sms');
-        const msg = buildThankYouSms(cust.category);
-        await sendSms({ to: cust.phone, content: msg });
+      const { sendSms } = require('../utilities/hubtel_sms');
+      const messagingController = require('./messaging');
+
+      // Ask messaging config what to send (or whether to send)
+      const auto = await messagingController.buildAutoMessageForCustomer(cust);
+
+      // auto.enabled false => admin disabled auto messages
+      if (auto && auto.enabled === false) {
+        // do nothing
+      } else {
+        // If no configured content, fallback to old hardcoded message
+        const msg = (auto && auto.content) ? auto.content : buildThankYouSms(cust.category);
+        if (msg && String(msg).trim()) {
+          await sendSms({ to: cust.phone, content: msg });
+        }
       }
-    } catch (smsErr) {
-      console.error('Failed to send customer thank-you SMS', smsErr);
-    }
-  }
-} catch (e) {
-  console.error('post-order regular update + SMS error', e);
-}
+            }
+          } catch (smsErr) {
+            console.error('Failed to send customer thank-you SMS', smsErr);
+          }
+        }
+      } catch (e) {
+        console.error('post-order regular update + SMS error', e);
+      }
 
     // --- MATERIAL MATCHING & RECORDING ---
     try {
