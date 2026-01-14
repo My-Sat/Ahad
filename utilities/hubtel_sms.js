@@ -7,6 +7,23 @@ function requireEnv(name) {
   return v;
 }
 
+// NEW: normalize Ghana phone to MSISDN for Hubtel
+function normalizeGhanaToMsisdn(phone) {
+  let p = String(phone || '').trim().replace(/\s+/g, '');
+  if (!p) return '';
+
+  // remove leading +
+  if (p.startsWith('+')) p = p.slice(1);
+
+  // 0XXXXXXXXX (10 digits) -> 233XXXXXXXXX
+  if (p.startsWith('0') && p.length === 10) {
+    p = '233' + p.slice(1);
+  }
+
+  // if already starts with 233 leave as-is
+  return p;
+}
+
 // Sends SMS using Hubtel endpoint you provided.
 // Uses Basic Auth: clientId:clientSecret
 exports.sendSms = async function sendSms({ to, content }) {
@@ -15,11 +32,12 @@ exports.sendSms = async function sendSms({ to, content }) {
   const clientSecret = requireEnv('HUBTEL_CLIENT_SECRET');
   const senderId = requireEnv('HUBTEL_SENDER_ID');
 
-  // Hubtel typically expects MSISDN format. If your stored phones are like 054xxxxxxx,
-  // convert before calling (you can implement normalization in controller).
+  const msisdn = normalizeGhanaToMsisdn(to);
+  if (!msisdn) throw new Error('Missing recipient phone');
+
   const payload = {
     from: senderId,
-    to,
+    to: msisdn,
     content
   };
 

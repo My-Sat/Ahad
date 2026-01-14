@@ -11,6 +11,31 @@ const { MaterialUsage, MaterialAggregate } = require('../models/material_usage')
 const { ObjectId } = require('mongoose').Types;
 const DiscountConfig = require('../models/discount');
 
+function customerTypeLabel(category) {
+  const c = String(category || '').toLowerCase();
+  if (c === 'regular') return 'Regular';
+  if (c === 'artist') return 'Artist';
+  if (c === 'organisation') return 'Organisation';
+  return 'One-time';
+}
+
+function buildThankYouSms(category) {
+  const label = customerTypeLabel(category);
+
+  // Keep wording correct for categories that never "migrate to regular" (artist/organisation).
+  if (String(category || '').toLowerCase() === 'regular') {
+    return `Thank you for doing business with AHADPRINT. You are currently a ${label} customer. Continue doing business with us to maintain your Regular status and enjoy our discounts.`;
+  }
+
+  if (String(category || '').toLowerCase() === 'artist' || String(category || '').toLowerCase() === 'organisation') {
+    return `Thank you for doing business with AHADPRINT. You are currently an ${label} customer. We appreciate your continued support—ask about our available discounts on your next visit.`;
+  }
+
+  // one_time default
+  return `Thank you for doing business with AHADPRINT. You are currently a ${label} customer. Continue doing business with us to be upgraded to Regular customer status and enjoy our discounts.`;
+}
+
+
 
 async function getActiveDiscountRules() {
   const cfg = await DiscountConfig.findOne().sort({ updatedAt: -1 }).lean();
@@ -585,19 +610,43 @@ order.total = finalTotal;
 
     await order.save();
 
-    // If the order has a customer attached, re-evaluate their 'regular' status.
-// Do this in background but wait a short time to capture any potential synchronous listeners.
+// If the order has a customer attached, re-evaluate their 'regular' status
+// AND send a thank-you SMS with the customer's current type.
 try {
   if (order.customer) {
-    // require the customer controller helper and call it (non-blocking)
     const customerController = require('./customer');
-    // fire-and-forget but await to handle occasional DB consistency; swallow errors
-    customerController.updateRegularStatus(order.customer).catch(err => {
-      console.error('updateRegularStatus failed for customer', String(order.customer), err);
-    });
+
+    // 1) Update regular status and wait (so category is accurate)
+    let updatedCustomer = null;
+    try {
+      updatedCustomer = await customerController.updateRegularStatus(order.customer);
+    } catch (e) {
+      console.error('updateRegularStatus failed for customer', String(order.customer), e);
+    }
+
+    // 2) Load latest customer (ensure we have phone + category)
+    let cust = updatedCustomer;
+    if (!cust) {
+      try {
+        cust = await Customer.findById(order.customer).select('_id phone category').lean();
+      } catch (e) {
+        console.error('Failed to reload customer after order', String(order.customer), e);
+      }
+    }
+
+    // 3) Send SMS (do not block order success if SMS fails)
+    try {
+      if (cust && cust.phone) {
+        const { sendSms } = require('../utilities/hubtel_sms');
+        const msg = buildThankYouSms(cust.category);
+        await sendSms({ to: cust.phone, content: msg });
+      }
+    } catch (smsErr) {
+      console.error('Failed to send customer thank-you SMS', smsErr);
+    }
   }
 } catch (e) {
-  console.error('post-order regular update dispatch error', e);
+  console.error('post-order regular update + SMS error', e);
 }
 
     // --- MATERIAL MATCHING & RECORDING ---
