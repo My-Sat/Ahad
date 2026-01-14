@@ -8,7 +8,7 @@ block content
   hr
 
   p.text-muted-light.small.mb-3
-    | Manage automatic (dynamic) SMS that triggers when an order is placed, and send custom/manual bulk SMS to customers.
+    | Manage automatic (dynamic) SMS for Order/Pay events, and send custom/manual bulk SMS to customers.
 
   // Tabs
   ul.nav.nav-tabs.mb-3
@@ -22,62 +22,135 @@ block content
     // AUTO / DYNAMIC
     // -------------------------
     .tab-pane.fade.show.active#tabAuto
-      .row.g-3
+      // NEW: event select (Order / Pay)
+      .row.mb-3
         .col-12.col-lg-6
-          .card.dark-surface.border
-            .card-body.dark-card-body
-              h5.mb-2.text-white Auto Message Settings
-              p.text-muted-light.small.mb-3
-                | These messages are sent automatically after an order is placed.
+          label.form-label.text-muted-light(for="autoEventSelect") Auto event
+          select.form-select.form-select-dark#autoEventSelect
+            option(value="order" selected) Order (when order is placed)
+            option(value="pay") Pay (when order is fully paid)
 
-              .form-check.form-switch.mb-2
-                input.form-check-input(type="checkbox" id="autoEnabled")
-                label.form-check-label.text-muted-light(for="autoEnabled")
-                  | Enable auto SMS when an order is placed
+      // -------------------------
+      // ORDER AUTO SECTION
+      // -------------------------
+      #autoOrderSection
+        .row.g-3
+          .col-12.col-lg-6
+            .card.dark-surface.border
+              .card-body.dark-card-body
+                h5.mb-2.text-white Auto Message Settings — Order
+                p.text-muted-light.small.mb-3
+                  | These messages are sent automatically after an order is placed.
 
-              .form-check.form-switch.mb-3
-                input.form-check-input(type="checkbox" id="usePerType")
-                label.form-check-label.text-muted-light(for="usePerType")
-                  | Use different template per customer type
+                .form-check.form-switch.mb-2
+                  input.form-check-input(type="checkbox" id="order_autoEnabled")
+                  label.form-check-label.text-muted-light(for="order_autoEnabled")
+                    | Enable auto SMS when an order is placed
 
-              label.form-label.text-muted-light General template (fallback)
-              textarea.form-control.form-control-dark#generalTemplate(
-                rows="4"
-                placeholder="Example: Thank you for doing business with AHADPRINT. You are currently a {category} customer..."
-              )
-              .text-muted-light.small.mt-2
-                | Placeholders: {name}, {category}, {phone}
+                .form-check.form-switch.mb-3
+                  input.form-check-input(type="checkbox" id="order_usePerType")
+                  label.form-check-label.text-muted-light(for="order_usePerType")
+                    | Use different template per customer type
 
-              hr.text-muted-light
+                label.form-label.text-muted-light General template (fallback)
+                textarea.form-control.form-control-dark#order_generalTemplate(
+                  rows="4"
+                  placeholder="Example: Thank you for doing business with AHADPRINT. You are currently a {category} customer..."
+                )
+                .text-muted-light.small.mt-2
+                  | Placeholders: {name}, {category}, {phone}
 
-              .form-check.form-switch.mb-2
-                input.form-check-input(type="checkbox" id="appendSignature")
-                label.form-check-label.text-muted-light(for="appendSignature")
-                  | Append signature/footer
-              input.form-control.form-control-dark#signatureText(type="text" placeholder="AHADPRINT")
+                hr.text-muted-light
 
-              button.btn.btn-primary.mt-3#saveAutoBtn(type="button")
-                i.bi.bi-save.me-1
-                | Save Auto Settings
+                .form-check.form-switch.mb-2
+                  input.form-check-input(type="checkbox" id="order_appendSignature")
+                  label.form-check-label.text-muted-light(for="order_appendSignature")
+                    | Append signature/footer
+                input.form-control.form-control-dark#order_signatureText(type="text" placeholder="AHADPRINT")
 
-        .col-12.col-lg-6
-          .card.dark-surface.border
-            .card-body.dark-card-body
-              h5.mb-2.text-white Per Customer Type Templates
-              p.text-muted-light.small.mb-3
-                | Used only when “Use different template per customer type” is enabled.
+                button.btn.btn-primary.mt-3#order_saveAutoBtn(type="button")
+                  i.bi.bi-save.me-1
+                  | Save Auto Settings (Order)
 
-              label.form-label.text-muted-light One-time
-              textarea.form-control.form-control-dark#tplOneTime(rows="3")
+          .col-12.col-lg-6
+            .card.dark-surface.border
+              .card-body.dark-card-body
+                h5.mb-2.text-white Per Customer Type Templates — Order
+                p.text-muted-light.small.mb-3
+                  | Used only when “Use different template per customer type” is enabled.
 
-              label.form-label.text-muted-light.mt-3 Regular
-              textarea.form-control.form-control-dark#tplRegular(rows="3")
+                label.form-label.text-muted-light One-time
+                textarea.form-control.form-control-dark#order_tplOneTime(rows="3")
 
-              label.form-label.text-muted-light.mt-3 Artist
-              textarea.form-control.form-control-dark#tplArtist(rows="3")
+                label.form-label.text-muted-light.mt-3 Regular
+                textarea.form-control.form-control-dark#order_tplRegular(rows="3")
 
-              label.form-label.text-muted-light.mt-3 Organisation
-              textarea.form-control.form-control-dark#tplOrganisation(rows="3")
+                label.form-label.text-muted-light.mt-3 Artist
+                textarea.form-control.form-control-dark#order_tplArtist(rows="3")
+
+                label.form-label.text-muted-light.mt-3 Organisation
+                textarea.form-control.form-control-dark#order_tplOrganisation(rows="3")
+
+      // -------------------------
+      // PAY AUTO SECTION
+      // -------------------------
+      #autoPaySection(style="display:none;")
+        .row.g-3
+          .col-12.col-lg-6
+            .card.dark-surface.border
+              .card-body.dark-card-body
+                h5.mb-2.text-white Auto Message Settings — Pay
+                p.text-muted-light.small.mb-3
+                  | These messages are sent automatically when an order becomes fully paid.
+
+                .form-check.form-switch.mb-2
+                  input.form-check-input(type="checkbox" id="pay_autoEnabled")
+                  label.form-check-label.text-muted-light(for="pay_autoEnabled")
+                    | Enable auto SMS when an order is fully paid
+
+                .form-check.form-switch.mb-3
+                  input.form-check-input(type="checkbox" id="pay_usePerType")
+                  label.form-check-label.text-muted-light(for="pay_usePerType")
+                    | Use different template per customer type
+
+                label.form-label.text-muted-light General template (fallback)
+                textarea.form-control.form-control-dark#pay_generalTemplate(
+                  rows="4"
+                  placeholder="Example: Thank you for your payment. You are currently a {category} customer..."
+                )
+                .text-muted-light.small.mt-2
+                  | Placeholders: {name}, {category}, {phone}
+
+                hr.text-muted-light
+
+                .form-check.form-switch.mb-2
+                  input.form-check-input(type="checkbox" id="pay_appendSignature")
+                  label.form-check-label.text-muted-light(for="pay_appendSignature")
+                    | Append signature/footer
+                input.form-control.form-control-dark#pay_signatureText(type="text" placeholder="AHADPRINT")
+
+                button.btn.btn-primary.mt-3#pay_saveAutoBtn(type="button")
+                  i.bi.bi-save.me-1
+                  | Save Auto Settings (Pay)
+
+          .col-12.col-lg-6
+            .card.dark-surface.border
+              .card-body.dark-card-body
+                h5.mb-2.text-white Per Customer Type Templates — Pay
+                p.text-muted-light.small.mb-3
+                  | Used only when “Use different template per customer type” is enabled.
+
+                label.form-label.text-muted-light One-time
+                textarea.form-control.form-control-dark#pay_tplOneTime(rows="3")
+
+                label.form-label.text-muted-light.mt-3 Regular
+                textarea.form-control.form-control-dark#pay_tplRegular(rows="3")
+
+                label.form-label.text-muted-light.mt-3 Artist
+                textarea.form-control.form-control-dark#pay_tplArtist(rows="3")
+
+                label.form-label.text-muted-light.mt-3 Organisation
+                textarea.form-control.form-control-dark#pay_tplOrganisation(rows="3")
 
     // -------------------------
     // MANUAL
@@ -118,4 +191,5 @@ block content
             div.text-muted-light.small#manualResult
 
 block append scripts
+  // IMPORTANT: script is re-run after ajax navigation (dashboard_nav)
   script(src='/public/javascripts/messaging.js')

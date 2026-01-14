@@ -17,50 +17,103 @@
     return j;
   }
 
+  // -------------------------
+  // AUTO (ORDER / PAY) helpers
+  // -------------------------
+  function fillAuto(prefix, ac) {
+    // defensive: if element missing (page partially updated), don't crash
+    const en = $(prefix + '_autoEnabled'); if (en) en.checked = ac ? (ac.enabled !== false) : true;
+
+    const upt = $(prefix + '_usePerType'); if (upt) upt.checked = ac ? (ac.usePerCustomerTypeTemplates !== false) : true;
+
+    const gt = $(prefix + '_generalTemplate'); if (gt) gt.value = ac ? (ac.generalTemplate || '') : '';
+
+    const ot = $(prefix + '_tplOneTime'); if (ot) ot.value = ac?.templates?.one_time || '';
+    const rg = $(prefix + '_tplRegular'); if (rg) rg.value = ac?.templates?.regular || '';
+    const ar = $(prefix + '_tplArtist'); if (ar) ar.value = ac?.templates?.artist || '';
+    const org = $(prefix + '_tplOrganisation'); if (org) org.value = ac?.templates?.organisation || '';
+
+    const ap = $(prefix + '_appendSignature'); if (ap) ap.checked = ac ? !!ac.appendSignature : false;
+    const st = $(prefix + '_signatureText'); if (st) st.value = ac ? (ac.signatureText || 'AHADPRINT') : 'AHADPRINT';
+  }
+
+  function readAuto(prefix) {
+    return {
+      enabled: !!($(prefix + '_autoEnabled') && $(prefix + '_autoEnabled').checked),
+      usePerCustomerTypeTemplates: !!($(prefix + '_usePerType') && $(prefix + '_usePerType').checked),
+      generalTemplate: ($(prefix + '_generalTemplate') && $(prefix + '_generalTemplate').value) ? $(prefix + '_generalTemplate').value : '',
+      templates: {
+        one_time: ($(prefix + '_tplOneTime') && $(prefix + '_tplOneTime').value) ? $(prefix + '_tplOneTime').value : '',
+        regular: ($(prefix + '_tplRegular') && $(prefix + '_tplRegular').value) ? $(prefix + '_tplRegular').value : '',
+        artist: ($(prefix + '_tplArtist') && $(prefix + '_tplArtist').value) ? $(prefix + '_tplArtist').value : '',
+        organisation: ($(prefix + '_tplOrganisation') && $(prefix + '_tplOrganisation').value) ? $(prefix + '_tplOrganisation').value : ''
+      },
+      appendSignature: !!($(prefix + '_appendSignature') && $(prefix + '_appendSignature').checked),
+      signatureText: ($(prefix + '_signatureText') && $(prefix + '_signatureText').value) ? $(prefix + '_signatureText').value : 'AHADPRINT'
+    };
+  }
+
+  function toggleAutoSections() {
+    const sel = $('autoEventSelect');
+    const orderSec = $('autoOrderSection');
+    const paySec = $('autoPaySection');
+    if (!sel || !orderSec || !paySec) return;
+
+    const v = String(sel.value || 'order').toLowerCase();
+    orderSec.style.display = (v === 'order') ? '' : 'none';
+    paySec.style.display = (v === 'pay') ? '' : 'none';
+  }
+
   async function loadConfig() {
     const j = await fetchJson('/admin/messaging/api/config', { method: 'GET' });
     const cfg = j && j.config ? j.config : null;
 
-    // defaults
-    $('autoEnabled').checked = cfg ? !!cfg.autoEnabled : true;
-    $('usePerType').checked = cfg ? !!cfg.usePerCustomerTypeTemplates : true;
+    // NEW schema preferred
+    const orderAuto = cfg?.auto?.order || null;
+    const payAuto = cfg?.auto?.pay || null;
 
-    $('generalTemplate').value = cfg ? (cfg.generalTemplate || '') : '';
-    $('tplOneTime').value = cfg ? (cfg.templates?.one_time || '') : '';
-    $('tplRegular').value = cfg ? (cfg.templates?.regular || '') : '';
-    $('tplArtist').value = cfg ? (cfg.templates?.artist || '') : '';
-    $('tplOrganisation').value = cfg ? (cfg.templates?.organisation || '') : '';
+    // Backward compat: if no cfg.auto, treat old fields as order config
+    const legacyOrder = (!orderAuto && cfg) ? {
+      enabled: cfg.autoEnabled !== false,
+      usePerCustomerTypeTemplates: cfg.usePerCustomerTypeTemplates !== false,
+      generalTemplate: cfg.generalTemplate || '',
+      templates: cfg.templates || {},
+      appendSignature: !!cfg.appendSignature,
+      signatureText: cfg.signatureText || 'AHADPRINT'
+    } : null;
 
-    $('appendSignature').checked = cfg ? !!cfg.appendSignature : false;
-    $('signatureText').value = cfg ? (cfg.signatureText || 'AHADPRINT') : 'AHADPRINT';
+    fillAuto('order', orderAuto || legacyOrder);
+    fillAuto('pay', payAuto); // if missing, defaults will apply
+
+    // ensure correct section is shown
+    toggleAutoSections();
   }
 
-  async function saveConfig() {
-    const payload = {
-      autoEnabled: $('autoEnabled').checked,
-      usePerCustomerTypeTemplates: $('usePerType').checked,
-      generalTemplate: $('generalTemplate').value || '',
-      templates: {
-        one_time: $('tplOneTime').value || '',
-        regular: $('tplRegular').value || '',
-        artist: $('tplArtist').value || '',
-        organisation: $('tplOrganisation').value || ''
-      },
-      appendSignature: $('appendSignature').checked,
-      signatureText: $('signatureText').value || 'AHADPRINT'
-    };
+  async function saveAuto(prefix, event) {
+    const btn = $(prefix + '_saveAutoBtn');
+    if (btn) btn.disabled = true;
 
-    await fetchJson('/admin/messaging/api/config', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
+    try {
+      const config = readAuto(prefix);
 
-    alert('Messaging config saved.');
+      await fetchJson('/admin/messaging/api/config', {
+        method: 'POST',
+        body: JSON.stringify({ event, config })
+      });
+
+      alert(`Messaging auto config saved for: ${event.toUpperCase()}`);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
+  // -------------------------
+  // MANUAL
+  // -------------------------
   function wireManualTarget() {
     const targetSel = $('manualTarget');
     const typeSel = $('manualCustomerType');
+    if (!targetSel || !typeSel) return;
 
     function toggle() {
       const v = targetSel.value;
@@ -71,43 +124,84 @@
   }
 
   async function sendManual() {
-    const msg = String($('manualMessage').value || '').trim();
+    const msgEl = $('manualMessage');
+    if (!msgEl) return;
+
+    const msg = String(msgEl.value || '').trim();
     if (!msg) return alert('Please type a message.');
 
-    const target = $('manualTarget').value;
-    const customerType = $('manualCustomerType').value;
+    const target = $('manualTarget') ? $('manualTarget').value : 'all';
+    const customerType = $('manualCustomerType') ? $('manualCustomerType').value : 'one_time';
 
-    $('sendManualBtn').disabled = true;
-    $('manualResult').textContent = 'Sending...';
+    const btn = $('sendManualBtn');
+    const result = $('manualResult');
+
+    if (btn) btn.disabled = true;
+    if (result) result.textContent = 'Sending...';
 
     try {
       const j = await fetchJson('/admin/messaging/api/send', {
         method: 'POST',
-        body: JSON.stringify({
-          message: msg,
-          target,
-          customerType
-        })
+        body: JSON.stringify({ message: msg, target, customerType })
       });
 
-      $('manualResult').textContent =
-        `Done. Total: ${j.total}, Sent: ${j.success}, Failed: ${j.failed}`;
+      if (result) {
+        result.textContent = `Done. Total: ${j.total}, Sent: ${j.success}, Failed: ${j.failed}`;
+      }
     } catch (e) {
-      $('manualResult').textContent = e.message || 'Failed to send';
+      if (result) result.textContent = e.message || 'Failed to send';
     } finally {
-      $('sendManualBtn').disabled = false;
+      if (btn) btn.disabled = false;
     }
   }
 
+  // -------------------------
+  // INIT (supports ajax fragment reload)
+  // -------------------------
   function init() {
-    // Only run if we're on messaging page (because dashboard_nav can re-run scripts)
-    if (!$('saveAutoBtn') || !$('sendManualBtn')) return;
+    // Auto dropdown + sections exist only on messaging page
+    const eventSel = $('autoEventSelect');
+    const orderSaveBtn = $('order_saveAutoBtn');
+    const paySaveBtn = $('pay_saveAutoBtn');
+    const manualBtn = $('sendManualBtn');
 
-    $('saveAutoBtn').addEventListener('click', saveConfig);
-    $('sendManualBtn').addEventListener('click', sendManual);
+    // If none exists, we're not on this page
+    if (!eventSel && !orderSaveBtn && !paySaveBtn && !manualBtn) return;
+
+    // Wire dropdown toggle (clone to avoid double binding on ajax reload)
+    if (eventSel) {
+      const cloned = eventSel.cloneNode(true);
+      eventSel.parentNode.replaceChild(cloned, eventSel);
+      cloned.addEventListener('change', toggleAutoSections);
+    }
+
+    // Wire save buttons (clone to avoid double binding)
+    if (orderSaveBtn) {
+      const b = orderSaveBtn.cloneNode(true);
+      orderSaveBtn.parentNode.replaceChild(b, orderSaveBtn);
+      b.addEventListener('click', function () { saveAuto('order', 'order').catch(err => alert(err.message || 'Failed')); });
+    }
+
+    if (paySaveBtn) {
+      const b = paySaveBtn.cloneNode(true);
+      paySaveBtn.parentNode.replaceChild(b, paySaveBtn);
+      b.addEventListener('click', function () { saveAuto('pay', 'pay').catch(err => alert(err.message || 'Failed')); });
+    }
+
+    // Manual send (clone to avoid double binding)
+    if (manualBtn) {
+      const b = manualBtn.cloneNode(true);
+      manualBtn.parentNode.replaceChild(b, manualBtn);
+      b.addEventListener('click', function () { sendManual().catch(err => alert(err.message || 'Failed')); });
+    }
 
     wireManualTarget();
     loadConfig().catch(err => console.error('loadConfig failed', err));
+
+    // Ensure default select shows ORDER
+    const sel = $('autoEventSelect');
+    if (sel && !sel.value) sel.value = 'order';
+    toggleAutoSections();
   }
 
   // Run now (for normal full load)

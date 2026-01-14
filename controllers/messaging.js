@@ -13,6 +13,14 @@ function normalizeCategory(cat) {
   return 'one_time';
 }
 
+function categoryLabel(category) {
+  const c = normalizeCategory(category);
+  if (c === 'regular') return 'Regular';
+  if (c === 'artist') return 'Artist';
+  if (c === 'organisation') return 'Organisation';
+  return 'One-time';
+}
+
 function applyTemplate(template, ctx) {
   // Very small safe templating: {name}, {category}, {phone}
   let t = String(template || '');
@@ -22,17 +30,37 @@ function applyTemplate(template, ctx) {
   return t.trim();
 }
 
-function categoryLabel(category) {
-  const c = normalizeCategory(category);
-  if (c === 'regular') return 'Regular';
-  if (c === 'artist') return 'Artist';
-  if (c === 'organisation') return 'Organisation';
-  return 'One-time';
+// ---- internal helpers for auto config (supports new schema + backward compat) ----
+function normalizeEvent(ev) {
+  const e = String(ev || 'order').toLowerCase();
+  return (e === 'pay') ? 'pay' : 'order';
+}
+
+function getAutoConfigForEvent(cfg, event) {
+  const ev = normalizeEvent(event);
+
+  // NEW schema preferred: cfg.auto[order|pay]
+  if (cfg && cfg.auto && cfg.auto[ev]) return cfg.auto[ev];
+
+  // Backward compat: old top-level config applies to "order" only
+  if (ev === 'order' && cfg) {
+    return {
+      enabled: (cfg.autoEnabled !== false),
+      usePerCustomerTypeTemplates: (cfg.usePerCustomerTypeTemplates !== false),
+      generalTemplate: String(cfg.generalTemplate || ''),
+      templates: cfg.templates || {},
+      appendSignature: !!cfg.appendSignature,
+      signatureText: String(cfg.signatureText || 'AHADPRINT')
+    };
+  }
+
+  // No config for this event
+  return null;
 }
 
 exports.page = async (req, res) => {
   try {
-    return res.render('admin/messaging'); // fragment loads into #main-content
+    return res.render('admin/messaging');
   } catch (e) {
     console.error('messaging page error', e);
     return res.status(500).send('Failed to load messaging page');
@@ -49,24 +77,59 @@ exports.apiGetConfig = async (req, res) => {
   }
 };
 
+// NEW: save config per event (order/pay)
+// Body expected:
+//  - { event: 'order'|'pay', config: { enabled, usePerCustomerTypeTemplates, generalTemplate, templates{...}, appendSignature, signatureText } }
+// Backward compat: if older UI posts the old shape (autoEnabled, generalTemplate, etc), we treat it as event='order'.
 exports.apiSaveConfig = async (req, res) => {
   try {
     const body = req.body || {};
 
-    const doc = new MessagingConfig({
-      autoEnabled: body.autoEnabled === true || body.autoEnabled === 'true',
-      usePerCustomerTypeTemplates: body.usePerCustomerTypeTemplates === true || body.usePerCustomerTypeTemplates === 'true',
-      generalTemplate: String(body.generalTemplate || ''),
-      templates: {
-        one_time: String(body.templates?.one_time || ''),
-        regular: String(body.templates?.regular || ''),
-        artist: String(body.templates?.artist || ''),
-        organisation: String(body.templates?.organisation || '')
-      },
-      appendSignature: body.appendSignature === true || body.appendSignature === 'true',
-      signatureText: String(body.signatureText || 'AHADPRINT'),
-      updatedBy: req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null
-    });
+    // If new UI: body.event + body.config
+    const hasNewShape = body && (body.event || body.config);
+
+    const event = normalizeEvent(hasNewShape ? body.event : 'order');
+
+    let incoming = hasNewShape ? (body.config || {}) : body;
+
+    // Load latest doc (update-in-place) so order + pay live together
+    const latest = await MessagingConfig.findOne().sort({ updatedAt: -1 });
+    const doc = latest ? latest : new MessagingConfig({});
+
+    // Ensure auto structure exists
+    doc.auto = doc.auto || {};
+    doc.auto.order = doc.auto.order || {};
+    doc.auto.pay = doc.auto.pay || {};
+
+    // Map incoming into the selected event
+    doc.auto[event].enabled = incoming.enabled === true || incoming.enabled === 'true' || incoming.autoEnabled === true || incoming.autoEnabled === 'true';
+    doc.auto[event].usePerCustomerTypeTemplates =
+      incoming.usePerCustomerTypeTemplates === true || incoming.usePerCustomerTypeTemplates === 'true';
+
+    doc.auto[event].generalTemplate = String(incoming.generalTemplate || '');
+
+    doc.auto[event].templates = {
+      one_time: String(incoming.templates?.one_time || ''),
+      regular: String(incoming.templates?.regular || ''),
+      artist: String(incoming.templates?.artist || ''),
+      organisation: String(incoming.templates?.organisation || '')
+    };
+
+    doc.auto[event].appendSignature = incoming.appendSignature === true || incoming.appendSignature === 'true';
+    doc.auto[event].signatureText = String(incoming.signatureText || 'AHADPRINT');
+
+    // Keep backward compat top-level fields in sync for ORDER event only
+    // (helps older code or old UI if still present somewhere)
+    if (event === 'order') {
+      doc.autoEnabled = doc.auto.order.enabled;
+      doc.usePerCustomerTypeTemplates = doc.auto.order.usePerCustomerTypeTemplates;
+      doc.generalTemplate = doc.auto.order.generalTemplate;
+      doc.templates = doc.auto.order.templates;
+      doc.appendSignature = doc.auto.order.appendSignature;
+      doc.signatureText = doc.auto.order.signatureText;
+    }
+
+    doc.updatedBy = req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null;
 
     await doc.save();
     return res.json({ ok: true });
@@ -85,7 +148,7 @@ exports.apiSendManual = async (req, res) => {
 
     if (!message) return res.status(400).json({ error: 'Message is required' });
     if (!['all', 'customer_type'].includes(target)) return res.status(400).json({ error: 'Invalid target' });
-    if (target === 'customer_type' && !['one_time','regular','artist','organisation'].includes(String(customerType))) {
+    if (target === 'customer_type' && !['one_time', 'regular', 'artist', 'organisation'].includes(String(customerType))) {
       return res.status(400).json({ error: 'Invalid customer type' });
     }
 
@@ -107,7 +170,7 @@ exports.apiSendManual = async (req, res) => {
     let successCount = 0;
     let failCount = 0;
 
-    // Send sequentially (simple + safe). If you want speed later, do small concurrency batches.
+    // Send sequentially (simple + safe)
     for (const c of customers) {
       try {
         await sendSms({ to: c.phone, content: message });
@@ -136,14 +199,20 @@ exports.apiSendManual = async (req, res) => {
 };
 
 // Helper for orders controller (server-authoritative dynamic message selection)
-exports.buildAutoMessageForCustomer = async function buildAutoMessageForCustomer(customerDoc) {
+// NOW supports event: 'order' | 'pay'
+exports.buildAutoMessageForCustomer = async function buildAutoMessageForCustomer(customerDoc, event = 'order') {
   const cfg = await MessagingConfig.findOne().sort({ updatedAt: -1 }).lean();
 
   // if no config, return null so caller can fallback to old hardcoded
   if (!cfg) return { enabled: true, content: null };
 
+  const autoCfg = getAutoConfigForEvent(cfg, event);
+
+  // If event not configured, let caller fallback (e.g., pay event may not be configured yet)
+  if (!autoCfg) return { enabled: true, content: null };
+
   // if explicitly disabled
-  if (cfg.autoEnabled === false) return { enabled: false, content: null };
+  if (autoCfg.enabled === false) return { enabled: false, content: null };
 
   const cat = normalizeCategory(customerDoc?.category);
   const ctx = {
@@ -155,18 +224,18 @@ exports.buildAutoMessageForCustomer = async function buildAutoMessageForCustomer
   };
 
   let template = '';
-  if (cfg.usePerCustomerTypeTemplates) {
-    template = String(cfg.templates?.[cat] || '');
+  if (autoCfg.usePerCustomerTypeTemplates) {
+    template = String(autoCfg.templates?.[cat] || '');
   }
-  if (!template) template = String(cfg.generalTemplate || '');
+  if (!template) template = String(autoCfg.generalTemplate || '');
 
-  // If template still empty, let caller fallback to old hardcoded
+  // If template still empty, let caller fallback to old hardcoded/default
   if (!template) return { enabled: true, content: null };
 
   let out = applyTemplate(template, ctx);
 
-  if (cfg.appendSignature && cfg.signatureText) {
-    out = `${out}\n${String(cfg.signatureText).trim()}`.trim();
+  if (autoCfg.appendSignature && autoCfg.signatureText) {
+    out = `${out}\n${String(autoCfg.signatureText).trim()}`.trim();
   }
 
   return { enabled: true, content: out };

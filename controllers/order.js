@@ -24,15 +24,15 @@ function buildThankYouSms(category) {
 
   // Keep wording correct for categories that never "migrate to regular" (artist/organisation).
   if (String(category || '').toLowerCase() === 'regular') {
-    return `Thank you for doing business with AHADPRINT. You are currently a ${label} customer. Continue doing business with us to maintain your Regular status and enjoy our discoun.`;
+    return `Thank you for doing business with us. You are currently a ${label} customer. Continue doing business with us to maintain your Regular status and enjoy our discounts.`;
   }
 
   if (String(category || '').toLowerCase() === 'artist' || String(category || '').toLowerCase() === 'organisation') {
-    return `Thank you for doing business with AHADPRINT. You are currently an ${label} customer. We appreciate your continued support—ask about our available discounts on your next visit.`;
+    return `Thank you for doing business with us. You are currently an ${label} customer. We appreciate your continued support—ask about our available discounts on your next visit.`;
   }
 
   // one_time default
-  return `Thank you for doing business with AHADPRINT. You are currently a ${label} customer. Continue doing business with us to be upgraded to Regular customer status and enjoy our discoun.`;
+  return `Thank you for doing business with us. You are currently a ${label} customer. Continue doing business with us to be upgraded to Regular customer status and enjoy our discounts.`;
 }
 
 
@@ -641,7 +641,7 @@ try {
       const messagingController = require('./messaging');
 
       // Ask messaging config what to send (or whether to send)
-      const auto = await messagingController.buildAutoMessageForCustomer(cust);
+      const auto = await messagingController.buildAutoMessageForCustomer(cust, 'order');
 
       // auto.enabled false => admin disabled auto messages
       if (auto && auto.enabled === false) {
@@ -957,7 +957,7 @@ try {
 
 // API: mark order paid (record payment)
 // POST /api/orders/:orderId/pay
-exports.apiPayOrder = async (req, res) => {   
+exports.apiPayOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
     if (!orderId) return res.status(400).json({ error: 'No orderId provided' });
@@ -967,6 +967,7 @@ exports.apiPayOrder = async (req, res) => {
     const body = req.body || {};
     const method = (body.paymentMethod || 'cash').toString().toLowerCase();
     const isPart = !!body.partPayment;
+
     let amount = null;
     if (isPart) {
       amount = Number(body.partPaymentAmount || 0);
@@ -979,9 +980,15 @@ exports.apiPayOrder = async (req, res) => {
     const order = await Order.findOne({ orderId });
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
+    // Track if order was already fully paid before this request
+    const currentPaid = order.paidSoFar
+      ? order.paidSoFar()
+      : (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+    const wasPaidAlready = (order.status === 'paid' && (Number(currentPaid) >= Number(order.total || 0)));
+
     // If already fully paid, short-circuit
-    const currentPaid = order.paidSoFar ? order.paidSoFar() : (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    if (order.status === 'paid' && (Number(currentPaid) >= Number(order.total || 0))) {
+    if (wasPaidAlready) {
       return res.status(400).json({ error: 'Order already paid' });
     }
 
@@ -994,11 +1001,11 @@ exports.apiPayOrder = async (req, res) => {
       if (body.partPaymentAmount) {
         toRecordAmount = Number(body.partPaymentAmount);
       } else {
-        // remaining outstanding
         const remaining = Number(order.total || 0) - Number(currentPaid || 0);
         toRecordAmount = remaining > 0 ? remaining : 0;
       }
     }
+
     if (toRecordAmount <= 0) {
       return res.status(400).json({ error: 'Payment amount must be greater than zero' });
     }
@@ -1011,31 +1018,29 @@ exports.apiPayOrder = async (req, res) => {
     } else if (method === 'cheque') {
       if (body.chequeNumber) meta.chequeNumber = String(body.chequeNumber);
     }
-    // other arbitrary metadata allowed in body.meta
     if (body.meta && typeof body.meta === 'object') {
       Object.assign(meta, body.meta);
     }
 
     // Create payment record and push
-const payment = {
-  method: ['cash','momo','cheque','other'].includes(method) ? method : 'other',
-  amount: Number(toRecordAmount),
-  meta,
-  note: body.note || (isPart ? 'part-payment' : 'full-payment'),
-  createdAt: new Date(),
-  // NEW: attach who recorded this payment (if available on req.user)
-  recordedBy: null,
-  recordedByName: ''
-};
+    const payment = {
+      method: ['cash', 'momo', 'cheque', 'other'].includes(method) ? method : 'other',
+      amount: Number(toRecordAmount),
+      meta,
+      note: body.note || (isPart ? 'part-payment' : 'full-payment'),
+      createdAt: new Date(),
+      recordedBy: null,
+      recordedByName: ''
+    };
 
-try {
-  if (req.user && req.user._id) {
-    payment.recordedBy = new mongoose.Types.ObjectId(req.user._id);
-    payment.recordedByName = (req.user.name || req.user.username || '').toString();
-  }
-} catch (e) {
-  console.error('Failed to attach recordedBy to payment', e);
-}
+    try {
+      if (req.user && req.user._id) {
+        payment.recordedBy = new mongoose.Types.ObjectId(req.user._id);
+        payment.recordedByName = (req.user.name || req.user.username || '').toString();
+      }
+    } catch (e) {
+      console.error('Failed to attach recordedBy to payment', e);
+    }
 
     order.payments = order.payments || [];
     order.payments.push(payment);
@@ -1045,12 +1050,47 @@ try {
     const outstanding = Number((Number(order.total || 0) - newPaidSoFar).toFixed(2));
 
     // If fully paid now, mark paid and set paidAt
+    let becamePaidNow = false;
     if (outstanding <= 0) {
       order.status = 'paid';
       order.paidAt = new Date();
+      becamePaidNow = true;
     }
 
     await order.save();
+
+    // -----------------------------
+    // AUTO SMS ON PAY (dynamic)
+    // only when this request transitions order -> paid
+    // -----------------------------
+    try {
+      if (!wasPaidAlready && becamePaidNow && order.customer) {
+        const cust = await Customer.findById(order.customer)
+          .select('_id phone category firstName businessName')
+          .lean();
+
+        if (cust && cust.phone) {
+          const messagingController = require('./messaging');
+          const auto = await messagingController.buildAutoMessageForCustomer(cust, 'pay');
+
+          // If disabled, do nothing
+          if (auto && auto.enabled === false) {
+            // no-op
+          } else {
+            // fallback if pay template empty
+            const fallback = 'Thank you for your payment. We appreciate doing business with you.';
+            const msg = (auto && auto.content) ? String(auto.content) : fallback;
+
+            if (msg && msg.trim()) {
+              const { sendSms } = require('../utilities/hubtel_sms');
+              await sendSms({ to: cust.phone, content: msg });
+            }
+          }
+        }
+      }
+    } catch (smsErr) {
+      console.error('Failed to send PAY auto SMS', smsErr);
+    }
 
     return res.json({
       ok: true,
@@ -1066,7 +1106,6 @@ try {
 };
 
 // POST /orders/pay-bulk
-// POST /orders/pay-bulk
 exports.apiPayBulkDebtor = async (req, res) => {
   try {
     const { orderIds, paymentMethod, momoNumber, momoTxId, chequeNumber } = req.body;
@@ -1075,21 +1114,22 @@ exports.apiPayBulkDebtor = async (req, res) => {
       return res.status(400).json({ error: 'No orders provided for bulk payment' });
     }
 
+    // Optional: normalize method (keep existing behavior defaulting to 'cash')
+    const method = (paymentMethod || 'cash').toString().toLowerCase();
+    const safeMethod = ['cash', 'momo', 'cheque', 'other'].includes(method) ? method : 'other';
+
     for (const oid of orderIds) {
       const order = await Order.findOne({ orderId: oid });
       if (!order) continue;
 
-      const paidSoFar = (order.payments || []).reduce(
-        (s, p) => s + (Number(p.amount) || 0),
-        0
-      );
-
+      const paidSoFar = (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
       const outstanding = Number(order.total || 0) - paidSoFar;
       if (outstanding <= 0) continue;
 
+      order.payments = order.payments || [];
       order.payments.push({
-        method: paymentMethod || 'cash',
-        amount: outstanding,
+        method: safeMethod,
+        amount: Number(outstanding),
         meta: {
           momoNumber,
           momoTxId,
@@ -1097,18 +1137,49 @@ exports.apiPayBulkDebtor = async (req, res) => {
         },
         note: 'bulk-full-payment',
         createdAt: new Date(),
-        recordedBy: req.user?._id || null,
-        recordedByName: req.user?.name || req.user?.username || ''
+        recordedBy: req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null,
+        recordedByName: (req.user?.name || req.user?.username || '').toString()
       });
 
+      const wasPaidAlready = (order.status === 'paid'); // simple state check
       order.status = 'paid';
       order.paidAt = new Date();
 
       await order.save();
+
+      // -----------------------------
+      // AUTO SMS ON PAY (dynamic) - bulk
+      // only send if it wasn't already paid before
+      // -----------------------------
+      try {
+        if (!wasPaidAlready && order.customer) {
+          const cust = await Customer.findById(order.customer)
+            .select('_id phone category firstName businessName')
+            .lean();
+
+          if (cust && cust.phone) {
+            const messagingController = require('./messaging');
+            const auto = await messagingController.buildAutoMessageForCustomer(cust, 'pay');
+
+            if (auto && auto.enabled === false) {
+              // no-op
+            } else {
+              const fallback = 'Thank you for your payment. We appreciate doing business with you.';
+              const msg = (auto && auto.content) ? String(auto.content) : fallback;
+
+              if (msg && msg.trim()) {
+                const { sendSms } = require('../utilities/hubtel_sms');
+                await sendSms({ to: cust.phone, content: msg });
+              }
+            }
+          }
+        }
+      } catch (smsErr) {
+        console.error('Bulk pay: failed to send PAY auto SMS for order', oid, smsErr);
+      }
     }
 
     return res.json({ ok: true });
-
   } catch (err) {
     console.error('apiPayBulkDebtor error', err);
     return res.status(500).json({ error: 'Bulk payment failed' });
