@@ -58,7 +58,7 @@ block content
                   placeholder="Example: Thank you for doing business with AHADPRINT. You are currently a {category} customer..."
                 )
                 .text-muted-light.small.mt-2
-                  | Placeholders: {name}, {category}, {phone}
+                | Placeholders: {name}, {category}, {phone}, {orderId}, {amount}, {totalBeforeDiscount}, {discountAmount}
 
                 hr.text-muted-light
 
@@ -119,7 +119,7 @@ block content
                   placeholder="Example: Thank you for your payment. You are currently a {category} customer..."
                 )
                 .text-muted-light.small.mt-2
-                  | Placeholders: {name}, {category}, {phone}
+                | Placeholders: {name}, {category}, {phone}, {orderId}, {amount}, {totalBeforeDiscount}, {discountAmount}
 
                 hr.text-muted-light
 
@@ -175,6 +175,8 @@ block content
               select.form-select.form-select-dark#manualTarget
                 option(value="all") All customers
                 option(value="customer_type") By customer type
+                option(value="debtors") Debtors (customers with outstanding balance)
+
 
               label.form-label.text-muted-light.mt-2 Customer type
               select.form-select.form-select-dark#manualCustomerType(disabled)

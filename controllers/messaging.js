@@ -22,11 +22,18 @@ function categoryLabel(category) {
 }
 
 function applyTemplate(template, ctx) {
-  // Very small safe templating: {name}, {category}, {phone}
+  // Very small safe templating:
+  // {name}, {category}, {phone}, {orderId}, {amount}, {totalBeforeDiscount}, {discountAmount}
   let t = String(template || '');
   t = t.replaceAll('{name}', ctx.name || '');
   t = t.replaceAll('{category}', ctx.categoryLabel || '');
   t = t.replaceAll('{phone}', ctx.phone || '');
+
+  t = t.replaceAll('{orderId}', ctx.orderId || '');
+  t = t.replaceAll('{amount}', ctx.amount || '');
+  t = t.replaceAll('{totalBeforeDiscount}', ctx.totalBeforeDiscount || '');
+  t = t.replaceAll('{discountAmount}', ctx.discountAmount || '');
+
   return t.trim();
 }
 
@@ -147,7 +154,9 @@ exports.apiSendManual = async (req, res) => {
     const customerType = body.customerType ? String(body.customerType) : null;
 
     if (!message) return res.status(400).json({ error: 'Message is required' });
-    if (!['all', 'customer_type'].includes(target)) return res.status(400).json({ error: 'Invalid target' });
+    if (!['all', 'customer_type', 'debtors'].includes(target)) {
+    return res.status(400).json({ error: 'Invalid target' });
+    }
     if (target === 'customer_type' && !['one_time', 'regular', 'artist', 'organisation'].includes(String(customerType))) {
       return res.status(400).json({ error: 'Invalid customer type' });
     }
@@ -156,7 +165,41 @@ exports.apiSendManual = async (req, res) => {
     const q = { phone: { $exists: true, $ne: '' } };
     if (target === 'customer_type') q.category = String(customerType);
 
-    const customers = await Customer.find(q).select('_id phone firstName businessName category').lean();
+    // Default: customers list
+    let customers = [];
+
+    if (target === 'debtors') {
+    // Debtors = customers who have at least one order with outstanding > 0
+    // We compute it from Orders (payments vs total), then map to customers.
+
+    const Order = require('../models/order');
+
+    const debtorPipeline = [
+        // paidSoFar = sum(payments.amount)
+        { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
+        // outstanding = total - paidSoFar
+        { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
+        { $match: { outstanding: { $gt: 0 }, customer: { $ne: null } } },
+        { $group: { _id: '$customer' } }
+    ];
+
+    const debtorCustomerIds = await Order.aggregate(debtorPipeline);
+    const ids = (debtorCustomerIds || [])
+        .map(d => d && d._id ? d._id : null)
+        .filter(Boolean);
+
+    // If none, return empty campaign result quickly
+    if (!ids.length) {
+        return res.json({ ok: true, total: 0, success: 0, failed: 0 });
+    }
+
+    customers = await Customer.find({
+        _id: { $in: ids },
+        phone: { $exists: true, $ne: '' }
+    }).select('_id phone firstName businessName category').lean();
+    } else {
+    customers = await Customer.find(q).select('_id phone firstName businessName category').lean();
+    }
 
     const campaign = new MessageCampaign({
       mode: 'manual',
@@ -200,7 +243,7 @@ exports.apiSendManual = async (req, res) => {
 
 // Helper for orders controller (server-authoritative dynamic message selection)
 // NOW supports event: 'order' | 'pay'
-exports.buildAutoMessageForCustomer = async function buildAutoMessageForCustomer(customerDoc, event = 'order') {
+exports.buildAutoMessageForCustomer = async function buildAutoMessageForCustomer(customerDoc, event = 'order', orderCtx = null) {
   const cfg = await MessagingConfig.findOne().sort({ updatedAt: -1 }).lean();
 
   // if no config, return null so caller can fallback to old hardcoded
@@ -215,13 +258,27 @@ exports.buildAutoMessageForCustomer = async function buildAutoMessageForCustomer
   if (autoCfg.enabled === false) return { enabled: false, content: null };
 
   const cat = normalizeCategory(customerDoc?.category);
-  const ctx = {
-    phone: customerDoc?.phone ? String(customerDoc.phone) : '',
-    categoryLabel: categoryLabel(customerDoc?.category),
-    name: (cat === 'artist' || cat === 'organisation')
-      ? (customerDoc?.businessName || customerDoc?.phone || '')
-      : (customerDoc?.firstName || customerDoc?.businessName || customerDoc?.phone || '')
-  };
+const ctx = {
+  phone: customerDoc?.phone ? String(customerDoc.phone) : '',
+  categoryLabel: categoryLabel(customerDoc?.category),
+  name: (cat === 'artist' || cat === 'organisation')
+    ? (customerDoc?.businessName || customerDoc?.phone || '')
+    : (customerDoc?.firstName || customerDoc?.businessName || customerDoc?.phone || ''),
+
+  // Order placeholders (NEW)
+  orderId: orderCtx && orderCtx.orderId ? String(orderCtx.orderId) : '',
+  amount: (orderCtx && orderCtx.amount !== undefined && orderCtx.amount !== null)
+    ? String(orderCtx.amount)
+    : '',
+
+  totalBeforeDiscount: (orderCtx && orderCtx.totalBeforeDiscount !== undefined && orderCtx.totalBeforeDiscount !== null)
+    ? String(orderCtx.totalBeforeDiscount)
+    : '',
+
+  discountAmount: (orderCtx && orderCtx.discountAmount !== undefined && orderCtx.discountAmount !== null)
+    ? String(orderCtx.discountAmount)
+    : ''
+};
 
   let template = '';
   if (autoCfg.usePerCustomerTypeTemplates) {

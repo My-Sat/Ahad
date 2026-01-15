@@ -641,7 +641,16 @@ try {
       const messagingController = require('./messaging');
 
       // Ask messaging config what to send (or whether to send)
-      const auto = await messagingController.buildAutoMessageForCustomer(cust, 'order');
+      const auto = await messagingController.buildAutoMessageForCustomer(
+        cust,
+        'order',
+        {
+          orderId: order.orderId,
+          amount: order.total, // final payable total
+          totalBeforeDiscount: order.totalBeforeDiscount ?? '',
+          discountAmount: order.discountAmount ?? ''
+        }
+      );
 
       // auto.enabled false => admin disabled auto messages
       if (auto && auto.enabled === false) {
@@ -1071,7 +1080,16 @@ exports.apiPayOrder = async (req, res) => {
 
         if (cust && cust.phone) {
           const messagingController = require('./messaging');
-          const auto = await messagingController.buildAutoMessageForCustomer(cust, 'pay');
+          const auto = await messagingController.buildAutoMessageForCustomer(
+            cust,
+            'pay',
+            {
+              orderId: order.orderId,
+              amount: order.total,
+              totalBeforeDiscount: order.totalBeforeDiscount ?? '',
+              discountAmount: order.discountAmount ?? ''
+            }
+          );
 
           // If disabled, do nothing
           if (auto && auto.enabled === false) {
@@ -1159,7 +1177,16 @@ exports.apiPayBulkDebtor = async (req, res) => {
 
           if (cust && cust.phone) {
             const messagingController = require('./messaging');
-            const auto = await messagingController.buildAutoMessageForCustomer(cust, 'pay');
+            const auto = await messagingController.buildAutoMessageForCustomer(
+              cust,
+              'pay',
+              {
+                orderId: order.orderId,
+                amount: order.total,
+                totalBeforeDiscount: order.totalBeforeDiscount ?? '',
+                discountAmount: order.discountAmount ?? ''
+              }
+            );
 
             if (auto && auto.enabled === false) {
               // no-op
