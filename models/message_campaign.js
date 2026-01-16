@@ -2,11 +2,11 @@
 const mongoose = require('mongoose');
 
 const MessageCampaignSchema = new mongoose.Schema({
-  mode: { type: String, enum: ['manual'], default: 'manual' },
+  mode: { type: String, enum: ['manual', 'auto'], default: 'manual' },
   message: { type: String, required: true },
 
   // Targeting
-  target: { type: String, enum: ['all', 'customer_type'], required: true },
+  target: { type: String, enum: ['all', 'customer_type', 'debtors'], required: true },
   customerType: { type: String, enum: ['one_time', 'regular', 'artist', 'organisation', null], default: null },
 
   // Results

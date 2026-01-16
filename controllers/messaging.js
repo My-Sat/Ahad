@@ -23,7 +23,8 @@ function categoryLabel(category) {
 
 function applyTemplate(template, ctx) {
   // Very small safe templating:
-  // {name}, {category}, {phone}, {orderId}, {amount}, {totalBeforeDiscount}, {discountAmount}
+  // {name}, {category}, {phone}, {orderId}, {amount}, {totalBeforeDiscount}, {discountAmount},
+  // {outstanding}, {ordersCount}
   let t = String(template || '');
   t = t.replaceAll('{name}', ctx.name || '');
   t = t.replaceAll('{category}', ctx.categoryLabel || '');
@@ -34,13 +35,19 @@ function applyTemplate(template, ctx) {
   t = t.replaceAll('{totalBeforeDiscount}', ctx.totalBeforeDiscount || '');
   t = t.replaceAll('{discountAmount}', ctx.discountAmount || '');
 
+  // ✅ NEW: debtors placeholders
+  t = t.replaceAll('{outstanding}', ctx.outstanding || '');
+  t = t.replaceAll('{ordersCount}', ctx.ordersCount || '');
+
   return t.trim();
 }
 
 // ---- internal helpers for auto config (supports new schema + backward compat) ----
 function normalizeEvent(ev) {
   const e = String(ev || 'order').toLowerCase();
-  return (e === 'pay') ? 'pay' : 'order';
+  if (e === 'pay') return 'pay';
+  if (e === 'debtors') return 'debtors';
+  return 'order';
 }
 
 function getAutoConfigForEvent(cfg, event) {
@@ -135,6 +142,22 @@ exports.apiSaveConfig = async (req, res) => {
       doc.appendSignature = doc.auto.order.appendSignature;
       doc.signatureText = doc.auto.order.signatureText;
     }
+
+        // ✅ scheduling fields (mainly for debtors event; safe for all)
+    const freq = String(incoming.frequency || '').toLowerCase();
+    if (['daily', 'weekly', 'monthly'].includes(freq)) doc.auto[event].frequency = freq;
+
+    const hour = Number(incoming.hour);
+    if (!isNaN(hour) && hour >= 0 && hour <= 23) doc.auto[event].hour = hour;
+
+    const minute = Number(incoming.minute);
+    if (!isNaN(minute) && minute >= 0 && minute <= 59) doc.auto[event].minute = minute;
+
+    // If admin changes schedule, reset nextRunAt so scheduler can recompute cleanly
+    if (event === 'debtors') {
+      doc.auto.debtors.nextRunAt = null;
+    }
+
 
     doc.updatedBy = req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null;
 
@@ -265,18 +288,20 @@ const ctx = {
     ? (customerDoc?.businessName || customerDoc?.phone || '')
     : (customerDoc?.firstName || customerDoc?.businessName || customerDoc?.phone || ''),
 
-  // Order placeholders (NEW)
   orderId: orderCtx && orderCtx.orderId ? String(orderCtx.orderId) : '',
-  amount: (orderCtx && orderCtx.amount !== undefined && orderCtx.amount !== null)
-    ? String(orderCtx.amount)
-    : '',
-
+  amount: (orderCtx && orderCtx.amount !== undefined && orderCtx.amount !== null) ? String(orderCtx.amount) : '',
   totalBeforeDiscount: (orderCtx && orderCtx.totalBeforeDiscount !== undefined && orderCtx.totalBeforeDiscount !== null)
     ? String(orderCtx.totalBeforeDiscount)
     : '',
-
   discountAmount: (orderCtx && orderCtx.discountAmount !== undefined && orderCtx.discountAmount !== null)
     ? String(orderCtx.discountAmount)
+    : '',
+
+  outstanding: (orderCtx && orderCtx.outstanding !== undefined && orderCtx.outstanding !== null)
+    ? String(orderCtx.outstanding)
+    : '',
+  ordersCount: (orderCtx && orderCtx.ordersCount !== undefined && orderCtx.ordersCount !== null)
+    ? String(orderCtx.ordersCount)
     : ''
 };
 
@@ -297,3 +322,205 @@ const ctx = {
 
   return { enabled: true, content: out };
 };
+
+// -----------------------------
+// AUTO: periodic debtors campaign
+// -----------------------------
+function computeNextRun({ frequency, hour, minute }, now = new Date()) {
+  // Africa/Accra is UTC+0 in practice; we’ll use server time as-is (your server already treats dates in UTC often)
+  const h = (typeof hour === 'number' && hour >= 0 && hour <= 23) ? hour : 9;
+  const m = (typeof minute === 'number' && minute >= 0 && minute <= 59) ? minute : 0;
+  const freq = ['daily', 'weekly', 'monthly'].includes(String(frequency)) ? String(frequency) : 'weekly';
+
+  const base = new Date(now);
+  base.setSeconds(0, 0);
+
+  // Build candidate at today HH:MM
+  const candidate = new Date(base);
+  candidate.setHours(h, m, 0, 0);
+
+  if (freq === 'daily') {
+    if (candidate <= now) candidate.setDate(candidate.getDate() + 1);
+    return candidate;
+  }
+
+  if (freq === 'weekly') {
+    // Choose next Monday at HH:MM (simple + predictable).
+    // If today is Monday and time not passed, it’ll be today.
+    const day = candidate.getDay(); // 0 Sun .. 1 Mon .. 6 Sat
+    const daysToMon = (1 - day + 7) % 7;
+    candidate.setDate(candidate.getDate() + daysToMon);
+    if (candidate <= now) candidate.setDate(candidate.getDate() + 7);
+    return candidate;
+  }
+
+  // monthly: 1st of next month at HH:MM (or this month if still upcoming)
+  const y = candidate.getFullYear();
+  const mo = candidate.getMonth();
+  const firstThisMonth = new Date(y, mo, 1, h, m, 0, 0);
+  if (firstThisMonth > now) return firstThisMonth;
+  return new Date(y, mo + 1, 1, h, m, 0, 0);
+}
+
+exports.runDebtorsAutoCampaign = async function runDebtorsAutoCampaign() {
+  const cfg = await MessagingConfig.findOne().sort({ updatedAt: -1 });
+  if (!cfg || !cfg.auto || !cfg.auto.debtors) return { ok: true, skipped: true, reason: 'no-config' };
+
+  const dc = cfg.auto.debtors;
+
+  // disabled => no-op
+  if (dc.enabled === false) return { ok: true, skipped: true, reason: 'disabled' };
+
+  // Load debtors grouped by customer with total outstanding + count
+  const Order = require('../models/order');
+
+  const pipeline = [
+    { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
+    { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
+    { $match: { outstanding: { $gt: 0 }, customer: { $ne: null } } },
+    {
+      $group: {
+        _id: '$customer',
+        totalOutstanding: { $sum: '$outstanding' },
+        ordersCount: { $sum: 1 }
+      }
+    }
+  ];
+
+  const debtorGroups = await Order.aggregate(pipeline);
+  const ids = (debtorGroups || []).map(d => d?._id).filter(Boolean);
+
+  if (!ids.length) {
+    // record a campaign with zero recipients (optional, but useful)
+    const campaign = new MessageCampaign({
+      mode: 'auto',
+      message: '[AUTO] Debtors campaign (no recipients)',
+      target: 'debtors',
+      totalRecipients: 0,
+      successCount: 0,
+      failCount: 0,
+      createdBy: null,
+      sentAt: new Date()
+    });
+    await campaign.save();
+    return { ok: true, total: 0, success: 0, failed: 0 };
+  }
+
+  // Load customer docs
+  const customers = await Customer.find({
+    _id: { $in: ids },
+    phone: { $exists: true, $ne: '' }
+  }).select('_id phone firstName businessName category').lean();
+
+  // map customer -> outstanding info
+  const grpMap = {};
+  debtorGroups.forEach(g => {
+    if (g && g._id) grpMap[String(g._id)] = {
+      outstanding: Number(g.totalOutstanding || 0).toFixed(2),
+      ordersCount: Number(g.ordersCount || 0)
+    };
+  });
+
+  const campaign = new MessageCampaign({
+    mode: 'auto',
+    message: '[AUTO] Debtors campaign',
+    target: 'debtors',
+    totalRecipients: customers.length,
+    createdBy: null
+  });
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const c of customers) {
+    try {
+      const extra = grpMap[String(c._id)] || { outstanding: '0.00', ordersCount: 0 };
+
+      // Build auto message using the configured templates for debtors
+      const auto = await exports.buildAutoMessageForCustomer(
+        c,
+        'debtors',
+        {
+          outstanding: extra.outstanding,
+          ordersCount: extra.ordersCount
+        }
+      );
+
+      if (auto && auto.enabled === false) {
+        // disabled mid-flight => skip
+        continue;
+      }
+
+      const fallback = `Hello ${c.firstName || c.businessName || ''}. You have an outstanding balance of GH₵ ${extra.outstanding}. Please visit to make payment.`;
+      const msg = (auto && auto.content) ? String(auto.content) : fallback;
+
+      if (msg && msg.trim()) {
+        await sendSms({ to: c.phone, content: msg });
+        successCount++;
+      }
+    } catch (err) {
+      failCount++;
+      console.error('Debtors auto SMS failed for', c?.phone, err?.message || err);
+    }
+  }
+
+  campaign.successCount = successCount;
+  campaign.failCount = failCount;
+  campaign.sentAt = new Date();
+  await campaign.save();
+
+  return { ok: true, total: customers.length, success: successCount, failed: failCount };
+};
+
+// -----------------------------
+// Scheduler tick helper (DB-lock)
+// -----------------------------
+exports.schedulerTickDebtors = async function schedulerTickDebtors() {
+  const now = new Date();
+
+  // Find latest config
+  const cfg = await MessagingConfig.findOne().sort({ updatedAt: -1 });
+  if (!cfg || !cfg.auto || !cfg.auto.debtors) return;
+
+  const dc = cfg.auto.debtors;
+
+  if (dc.enabled === false) return;
+
+  // if nextRunAt missing, compute + store
+  if (!dc.nextRunAt) {
+    dc.nextRunAt = computeNextRun(dc, now);
+    await cfg.save();
+    return;
+  }
+
+  if (new Date(dc.nextRunAt).getTime() > now.getTime()) return;
+
+  // Acquire a lock by atomically pushing nextRunAt forward (prevents double-run on multi instances)
+  const next = computeNextRun(dc, now);
+
+  const updated = await MessagingConfig.findOneAndUpdate(
+    {
+      _id: cfg._id,
+      'auto.debtors.enabled': { $ne: false },
+      'auto.debtors.nextRunAt': { $lte: now }
+    },
+    {
+      $set: {
+        'auto.debtors.lastRunAt': now,
+        'auto.debtors.nextRunAt': next
+      }
+    },
+    { new: true }
+  );
+
+  // If update failed, someone else ran it
+  if (!updated) return;
+
+  // Run campaign
+  try {
+    await exports.runDebtorsAutoCampaign();
+  } catch (e) {
+    console.error('Debtors scheduler campaign error', e);
+  }
+};
+

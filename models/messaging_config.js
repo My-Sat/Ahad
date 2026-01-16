@@ -1,7 +1,7 @@
 // models/messaging_config.js
 const mongoose = require('mongoose');
 
-// Reusable schema for an auto-message event (Order placed / Order paid)
+// Reusable schema for an auto-message event (Order placed / Order paid / Debtors periodic)
 const AutoEventConfigSchema = new mongoose.Schema(
   {
     // enable/disable this event’s auto SMS
@@ -23,23 +23,33 @@ const AutoEventConfigSchema = new mongoose.Schema(
 
     // Optional signature/appended footer
     appendSignature: { type: Boolean, default: false },
-    signatureText: { type: String, default: 'AHADPRINT' }
+    signatureText: { type: String, default: 'AHADPRINT' },
+
+    // -----------------------------
+    // NEW: scheduler fields (for debtors periodic)
+    // -----------------------------
+    frequency: { type: String, enum: ['daily', 'weekly', 'monthly'], default: 'weekly' },
+    hour: { type: Number, default: 9 },     // Africa/Accra local time
+    minute: { type: Number, default: 0 },
+
+    // Used by server scheduler to avoid duplicate sends
+    nextRunAt: { type: Date, default: null },
+    lastRunAt: { type: Date, default: null }
   },
   { _id: false }
 );
 
 const MessagingConfigSchema = new mongoose.Schema(
   {
-    // NEW: auto messaging config is now separated by event
-    // - order: when order is placed
-    // - pay: when order becomes fully paid
     auto: {
       order: { type: AutoEventConfigSchema, default: () => ({}) },
-      pay: { type: AutoEventConfigSchema, default: () => ({}) }
+      pay: { type: AutoEventConfigSchema, default: () => ({}) },
+
+      // ✅ NEW: periodic debtor messages
+      debtors: { type: AutoEventConfigSchema, default: () => ({ enabled: false }) }
     },
 
-    // Backward-compat fields (optional): keep these so older code/data won't break if still present
-    // You can remove these later after migration, but keeping them is safe.
+    // Backward-compat fields
     autoEnabled: { type: Boolean, default: true },
     usePerCustomerTypeTemplates: { type: Boolean, default: true },
     generalTemplate: { type: String, default: '' },
@@ -52,7 +62,6 @@ const MessagingConfigSchema = new mongoose.Schema(
     appendSignature: { type: Boolean, default: false },
     signatureText: { type: String, default: 'AHADPRINT' },
 
-    // Audit
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
   },
   { timestamps: true }

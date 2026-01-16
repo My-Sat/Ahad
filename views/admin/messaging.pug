@@ -8,7 +8,7 @@ block content
   hr
 
   p.text-muted-light.small.mb-3
-    | Manage automatic (dynamic) SMS for Order/Pay events, and send custom/manual bulk SMS to customers.
+    | Manage automatic (dynamic) SMS for Order/Pay/Debtors events, and send custom/manual bulk SMS to customers.
 
   // Tabs
   ul.nav.nav-tabs.mb-3
@@ -22,13 +22,14 @@ block content
     // AUTO / DYNAMIC
     // -------------------------
     .tab-pane.fade.show.active#tabAuto
-      // NEW: event select (Order / Pay)
+      // NEW: event select (Order / Pay / Debtors)
       .row.mb-3
         .col-12.col-lg-6
           label.form-label.text-muted-light(for="autoEventSelect") Auto event
           select.form-select.form-select-dark#autoEventSelect
             option(value="order" selected) Order (when order is placed)
             option(value="pay") Pay (when order is fully paid)
+            option(value="debtors") Debtors (periodic reminders)
 
       // -------------------------
       // ORDER AUTO SECTION
@@ -58,7 +59,7 @@ block content
                   placeholder="Example: Thank you for doing business with AHADPRINT. You are currently a {category} customer..."
                 )
                 .text-muted-light.small.mt-2
-                | Placeholders: {name}, {category}, {phone}, {orderId}, {amount}, {totalBeforeDiscount}, {discountAmount}
+                  | Placeholders: {name}, {category}, {phone}, {orderId}, {amount}, {totalBeforeDiscount}, {discountAmount}
 
                 hr.text-muted-light
 
@@ -119,7 +120,7 @@ block content
                   placeholder="Example: Thank you for your payment. You are currently a {category} customer..."
                 )
                 .text-muted-light.small.mt-2
-                | Placeholders: {name}, {category}, {phone}, {orderId}, {amount}, {totalBeforeDiscount}, {discountAmount}
+                  | Placeholders: {name}, {category}, {phone}, {orderId}, {amount}, {totalBeforeDiscount}, {discountAmount}
 
                 hr.text-muted-light
 
@@ -152,6 +153,82 @@ block content
                 label.form-label.text-muted-light.mt-3 Organisation
                 textarea.form-control.form-control-dark#pay_tplOrganisation(rows="3")
 
+      // -------------------------
+      // DEBTORS AUTO SECTION
+      // -------------------------
+      #autoDebtorsSection(style="display:none;")
+        .row.g-3
+          .col-12.col-lg-6
+            .card.dark-surface.border
+              .card-body.dark-card-body
+                h5.mb-2.text-white Auto Message Settings — Debtors
+                p.text-muted-light.small.mb-3
+                  | These messages are sent periodically to customers with outstanding balance.
+
+                .form-check.form-switch.mb-2
+                  input.form-check-input(type="checkbox" id="debtors_autoEnabled")
+                  label.form-check-label.text-muted-light(for="debtors_autoEnabled")
+                    | Enable periodic debtor reminders
+
+                // Schedule
+                label.form-label.text-muted-light.mt-2 Frequency
+                select.form-select.form-select-dark#debtors_frequency
+                  option(value="daily") Daily
+                  option(value="weekly" selected) Weekly (Mondays)
+                  option(value="monthly") Monthly (1st day)
+
+                .row.g-2.mt-2
+                  .col-6
+                    label.form-label.text-muted-light Hour (0-23)
+                    input.form-control.form-control-dark#debtors_hour(type="number" min="0" max="23" value="9")
+                  .col-6
+                    label.form-label.text-muted-light Minute (0-59)
+                    input.form-control.form-control-dark#debtors_minute(type="number" min="0" max="59" value="0")
+
+                .form-check.form-switch.mb-3.mt-3
+                  input.form-check-input(type="checkbox" id="debtors_usePerType")
+                  label.form-check-label.text-muted-light(for="debtors_usePerType")
+                    | Use different template per customer type
+
+                label.form-label.text-muted-light General template (fallback)
+                textarea.form-control.form-control-dark#debtors_generalTemplate(
+                  rows="4"
+                  placeholder="Example: Hello {name}. You have an outstanding balance of GH₵ {outstanding}. Please visit to make payment."
+                )
+                .text-muted-light.small.mt-2
+                  | Placeholders: {name}, {category}, {phone}, {outstanding}, {ordersCount}
+
+                hr.text-muted-light
+
+                .form-check.form-switch.mb-2
+                  input.form-check-input(type="checkbox" id="debtors_appendSignature")
+                  label.form-check-label.text-muted-light(for="debtors_appendSignature")
+                    | Append signature/footer
+                input.form-control.form-control-dark#debtors_signatureText(type="text" placeholder="AHADPRINT")
+
+                button.btn.btn-primary.mt-3#debtors_saveAutoBtn(type="button")
+                  i.bi.bi-save.me-1
+                  | Save Auto Settings (Debtors)
+
+          .col-12.col-lg-6
+            .card.dark-surface.border
+              .card-body.dark-card-body
+                h5.mb-2.text-white Per Customer Type Templates — Debtors
+                p.text-muted-light.small.mb-3
+                  | Used only when “Use different template per customer type” is enabled.
+
+                label.form-label.text-muted-light One-time
+                textarea.form-control.form-control-dark#debtors_tplOneTime(rows="3")
+
+                label.form-label.text-muted-light.mt-3 Regular
+                textarea.form-control.form-control-dark#debtors_tplRegular(rows="3")
+
+                label.form-label.text-muted-light.mt-3 Artist
+                textarea.form-control.form-control-dark#debtors_tplArtist(rows="3")
+
+                label.form-label.text-muted-light.mt-3 Organisation
+                textarea.form-control.form-control-dark#debtors_tplOrganisation(rows="3")
+
     // -------------------------
     // MANUAL
     // -------------------------
@@ -160,7 +237,7 @@ block content
         .card-body.dark-card-body
           h5.mb-2.text-white Send Manual SMS
           p.text-muted-light.small.mb-3
-            | Compose a message and choose recipients (all customers or by customer type).
+            | Compose a message and choose recipients (all customers, by customer type, or debtors).
 
           .row.g-2
             .col-12.col-lg-8
@@ -176,7 +253,6 @@ block content
                 option(value="all") All customers
                 option(value="customer_type") By customer type
                 option(value="debtors") Debtors (customers with outstanding balance)
-
 
               label.form-label.text-muted-light.mt-2 Customer type
               select.form-select.form-select-dark#manualCustomerType(disabled)

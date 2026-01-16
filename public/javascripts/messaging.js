@@ -35,10 +35,19 @@
 
     const ap = $(prefix + '_appendSignature'); if (ap) ap.checked = ac ? !!ac.appendSignature : false;
     const st = $(prefix + '_signatureText'); if (st) st.value = ac ? (ac.signatureText || 'AHADPRINT') : 'AHADPRINT';
+
+    const fr = $(prefix + '_frequency'); if (fr) fr.value = ac ? (ac.frequency || 'weekly') : 'weekly';
+    const hr = $(prefix + '_hour'); if (hr) hr.value = (ac && ac.hour !== undefined && ac.hour !== null) ? String(ac.hour) : '9';
+    const mn = $(prefix + '_minute'); if (mn) mn.value = (ac && ac.minute !== undefined && ac.minute !== null) ? String(ac.minute) : '0';
+
   }
 
   function readAuto(prefix) {
     return {
+        frequency: ($(prefix + '_frequency') && $(prefix + '_frequency').value) ? $(prefix + '_frequency').value : 'weekly',
+        hour: ($(prefix + '_hour') && $(prefix + '_hour').value !== '') ? Number($(prefix + '_hour').value) : 9,
+        minute: ($(prefix + '_minute') && $(prefix + '_minute').value !== '') ? Number($(prefix + '_minute').value) : 0,
+
       enabled: !!($(prefix + '_autoEnabled') && $(prefix + '_autoEnabled').checked),
       usePerCustomerTypeTemplates: !!($(prefix + '_usePerType') && $(prefix + '_usePerType').checked),
       generalTemplate: ($(prefix + '_generalTemplate') && $(prefix + '_generalTemplate').value) ? $(prefix + '_generalTemplate').value : '',
@@ -53,20 +62,26 @@
     };
   }
 
-  function toggleAutoSections() {
-    const sel = $('autoEventSelect');
-    const orderSec = $('autoOrderSection');
-    const paySec = $('autoPaySection');
-    if (!sel || !orderSec || !paySec) return;
+function toggleAutoSections() {
+  const sel = $('autoEventSelect');
+  const orderSec = $('autoOrderSection');
+  const paySec = $('autoPaySection');
+  const debtSec = $('autoDebtorsSection');
+  if (!sel || !orderSec || !paySec || !debtSec) return;
 
-    const v = String(sel.value || 'order').toLowerCase();
-    orderSec.style.display = (v === 'order') ? '' : 'none';
-    paySec.style.display = (v === 'pay') ? '' : 'none';
-  }
+  const v = String(sel.value || 'order').toLowerCase();
+  orderSec.style.display = (v === 'order') ? '' : 'none';
+  paySec.style.display = (v === 'pay') ? '' : 'none';
+  debtSec.style.display = (v === 'debtors') ? '' : 'none';
+}
 
   async function loadConfig() {
     const j = await fetchJson('/admin/messaging/api/config', { method: 'GET' });
     const cfg = j && j.config ? j.config : null;
+
+    const debtorsAuto = cfg?.auto?.debtors || null;
+    fillAuto('debtors', debtorsAuto);
+
 
     // NEW schema preferred
     const orderAuto = cfg?.auto?.order || null;
@@ -164,6 +179,8 @@
     const orderSaveBtn = $('order_saveAutoBtn');
     const paySaveBtn = $('pay_saveAutoBtn');
     const manualBtn = $('sendManualBtn');
+    const debtSaveBtn = $('debtors_saveAutoBtn');
+
 
     // If none exists, we're not on this page
     if (!eventSel && !orderSaveBtn && !paySaveBtn && !manualBtn) return;
@@ -187,6 +204,15 @@
       paySaveBtn.parentNode.replaceChild(b, paySaveBtn);
       b.addEventListener('click', function () { saveAuto('pay', 'pay').catch(err => alert(err.message || 'Failed')); });
     }
+
+    if (debtSaveBtn) {
+    const b = debtSaveBtn.cloneNode(true);
+    debtSaveBtn.parentNode.replaceChild(b, debtSaveBtn);
+    b.addEventListener('click', function () {
+        saveAuto('debtors', 'debtors').catch(err => alert(err.message || 'Failed'));
+    });
+    }
+
 
     // Manual send (clone to avoid double binding)
     if (manualBtn) {
