@@ -16,6 +16,22 @@ document.addEventListener('DOMContentLoaded', function () {
   const cartTotalEl = document.getElementById('cartTotal');
   const orderNowBtn = document.getElementById('orderNowBtn');
 
+    // Admin-only manual discount UI (may not exist for non-admin)
+  const manualDiscountMode = document.getElementById('manualDiscountMode');
+  const manualDiscountValue = document.getElementById('manualDiscountValue');
+  const applyManualDiscountBtn = document.getElementById('applyManualDiscountBtn');
+  const clearManualDiscountBtn = document.getElementById('clearManualDiscountBtn');
+  const manualDiscountSummary = document.getElementById('manualDiscountSummary');
+
+  // IDs in views/orders/new.pug
+  const manualDiscountBeforeEl = document.getElementById('manualDiscountTotalBefore');
+  const manualDiscountAmountEl = document.getElementById('manualDiscountAmount');
+  const manualDiscountAfterEl = document.getElementById('manualDiscountTotalAfter');
+
+  // client-only state (per order)
+  let manualDiscount = null; // { mode:'amount'|'percent', value:number }
+
+
   // Orders explorer elements
   const openOrdersExplorerBtn = document.getElementById('openOrdersExplorerBtn');
   const ordersExplorerModalEl = document.getElementById('ordersExplorerModal');
@@ -224,6 +240,53 @@ async function loadServicesForCategory(catId) {
       return '&#' + c.charCodeAt(0) + ';';
     });
   }
+
+    function clamp(n, min, max) {
+    const x = Number(n);
+    if (isNaN(x)) return min;
+    return Math.max(min, Math.min(max, x));
+  }
+
+  function computeManualDiscountAmount(baseTotal, disc) {
+    if (!disc) return 0;
+    const mode = String(disc.mode || '');
+    const value = Number(disc.value || 0);
+
+    if (!isFinite(value) || value <= 0) return 0;
+
+    let amt = 0;
+    if (mode === 'amount') {
+      amt = Math.max(0, value);
+    } else if (mode === 'percent') {
+      const pct = clamp(value, 0, 100);
+      amt = Number((baseTotal * (pct / 100)).toFixed(2));
+    }
+
+    // cap at baseTotal
+    amt = Math.min(baseTotal, Math.max(0, amt));
+    return Number(amt.toFixed(2));
+  }
+
+  function updateManualDiscountUI(baseTotal) {
+    // hide if not admin or UI not present
+    if (!window._isAdmin || !manualDiscountMode || !manualDiscountValue) return;
+
+    const discAmt = computeManualDiscountAmount(baseTotal, manualDiscount);
+    const after = Number(Math.max(0, baseTotal - discAmt).toFixed(2));
+
+    if (manualDiscountSummary && discAmt > 0) {
+      manualDiscountSummary.style.display = '';
+  if (manualDiscountBeforeEl) manualDiscountBeforeEl.textContent = `GH₵ ${formatMoney(baseTotal)}`;
+  if (manualDiscountAmountEl) manualDiscountAmountEl.textContent = `- GH₵ ${formatMoney(discAmt)}`;
+  if (manualDiscountAfterEl) manualDiscountAfterEl.textContent = `GH₵ ${formatMoney(after)}`;
+
+      if (clearManualDiscountBtn) clearManualDiscountBtn.style.display = '';
+    } else {
+      if (manualDiscountSummary) manualDiscountSummary.style.display = 'none';
+      if (clearManualDiscountBtn) clearManualDiscountBtn.style.display = 'none';
+    }
+  }
+
 
   function isoDate(d) {
     const dt = d ? new Date(d) : new Date();
@@ -804,9 +867,54 @@ function addToCart({
       `;
       cartTbody.appendChild(tr);
     });
-    cartTotalEl.textContent = 'GH₵ ' + formatMoney(total);
+    // existing:
+    // cartTotalEl.textContent = 'GH₵ ' + total.toFixed(2);
+
+    // NEW: apply admin manual discount (client-only)
+    const baseTotal = Number(total.toFixed(2));
+    const discAmt = (window._isAdmin && manualDiscount) ? computeManualDiscountAmount(baseTotal, manualDiscount) : 0;
+    const finalTotal = Number(Math.max(0, baseTotal - discAmt).toFixed(2));
+
+    // show final in main total
+    cartTotalEl.textContent = 'GH₵ ' + finalTotal.toFixed(2);
+
+    // update the manual discount summary box
+    updateManualDiscountUI(baseTotal);
     orderNowBtn.disabled = false;
   }
+
+    // Admin-only apply discount
+  if (window._isAdmin && applyManualDiscountBtn) {
+    applyManualDiscountBtn.addEventListener('click', function () {
+      if (!cart || !cart.length) return showAlertModal('Add items to cart before applying discount.');
+
+      const mode = manualDiscountMode ? manualDiscountMode.value : 'amount';
+      const v = manualDiscountValue ? Number(manualDiscountValue.value) : 0;
+
+      if (!isFinite(v) || v <= 0) {
+        return showAlertModal('Enter a valid discount value (> 0).');
+      }
+
+      if (mode === 'percent' && v > 100) {
+        return showAlertModal('Percentage discount cannot exceed 100%.');
+      }
+
+      manualDiscount = { mode, value: Number(v) };
+      renderCart(); // refresh totals + summary
+      showAlertModal('Manual discount applied for this order.', 'Discount');
+    });
+  }
+
+  // Admin-only remove discount
+  if (window._isAdmin && clearManualDiscountBtn) {
+    clearManualDiscountBtn.addEventListener('click', function () {
+      manualDiscount = null;
+      if (manualDiscountValue) manualDiscountValue.value = '';
+      renderCart();
+      showAlertModal('Manual discount removed.', 'Discount');
+    });
+  }
+
 
   // ---------- Event delegation: Apply / Add buttons ----------
   pricesList.addEventListener('click', async function (e) {
@@ -1079,7 +1187,8 @@ function addToCart({
 
 // ---------- Order placement ----------
 async function placeOrderFlow() {
-  if (!cart.length) return;
+  if (!cart || !cart.length) return;
+
   orderNowBtn.disabled = true;
   const originalText = orderNowBtn.textContent;
   orderNowBtn.textContent = 'Placing...';
@@ -1136,6 +1245,34 @@ async function placeOrderFlow() {
           : null
     };
 
+    // -----------------------------------------
+    // Admin-only: manual discount (per order)
+    // - applied after cart is built
+    // - not saved as config, must be re-applied each order
+    // - server remains authoritative (will ignore for non-admin)
+    // -----------------------------------------
+    try {
+      if (window._isAdmin) {
+        // This assumes you added the admin-only UI in new.pug and the client-only state:
+        // let manualDiscount = null; // { mode:'amount'|'percent', value:number }
+        // If manualDiscount is set and valid, attach it.
+        if (typeof manualDiscount !== 'undefined' && manualDiscount && typeof manualDiscount === 'object') {
+          const mode = String(manualDiscount.mode || '').trim();
+          const value = Number(manualDiscount.value);
+
+          const validMode = (mode === 'amount' || mode === 'percent');
+          const validValue = isFinite(value) && value > 0 && (mode !== 'percent' || value <= 100);
+
+          if (validMode && validValue) {
+            payload.manualDiscount = { mode, value: Number(value) };
+          }
+        }
+      }
+    } catch (e) {
+      // don't block order placement if discount attachment fails
+      console.warn('Failed to attach manualDiscount to payload', e);
+    }
+
     const res = await fetch('/orders', {
       method: 'POST',
       headers: {
@@ -1146,22 +1283,49 @@ async function placeOrderFlow() {
     });
 
     const j = await res.json().catch(() => null);
-if (!res.ok) {
-  // If order failed due to stock, refresh materials so user sees correct state immediately
-  await refreshMaterialsIfStale(true);
-  showAlertModal((j && j.error) ? j.error : 'Order creation failed');
-  return;
-}
+    if (!res.ok) {
+      // If order failed due to stock, refresh materials so user sees correct state immediately
+      await refreshMaterialsIfStale(true);
+
+      // Show richer error if server returned details array (stock pre-check does)
+      if (j && j.details && Array.isArray(j.details) && j.details.length) {
+        const msg = (j.error ? String(j.error) : 'Order creation failed') + '\n\n' + j.details.join('\n');
+        showAlertModal(msg);
+      } else {
+        showAlertModal((j && j.error) ? j.error : 'Order creation failed');
+      }
+      return;
+    }
 
     showOrderSuccessModal(j.orderId, j.total);
     if (typeof showGlobalToast === 'function') {
       showGlobalToast(`Order created: ${j.orderId}`, 3200);
     }
+
     // Stock just changed on the server — force refresh so next Apply uses updated remaining
     await refreshMaterialsIfStale(true);
 
-
+    // Reset cart and discount (discount must be re-applied per order)
     cart = [];
+
+    try {
+      if (window._isAdmin) {
+        if (typeof manualDiscount !== 'undefined') manualDiscount = null;
+
+        const mdValEl = document.getElementById('manualDiscountValue');
+        const mdModeEl = document.getElementById('manualDiscountMode');
+        const mdSummaryEl = document.getElementById('manualDiscountSummary');
+        const mdClearBtn = document.getElementById('clearManualDiscountBtn');
+
+        if (mdValEl) mdValEl.value = '';
+        if (mdModeEl) mdModeEl.value = 'amount';
+        if (mdSummaryEl) mdSummaryEl.style.display = 'none';
+        if (mdClearBtn) mdClearBtn.style.display = 'none';
+      }
+    } catch (e) {
+      // ignore
+    }
+
     renderCart();
   } catch (err) {
     console.error('create order err', err);

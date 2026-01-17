@@ -550,71 +550,107 @@ try {
 }
 
 // -----------------------------
-// DISCOUNT (server-authoritative) - FIXED
+// DISCOUNT (server-authoritative)
+// Priority: Manual (admin-only) > Auto rules
 // -----------------------------
 const baseTotal = Number(total || 0);
 
-// determine customer category (if attached to this order)
-let customerCategory = null;
+// 1) Manual discount (admin only)
+let manual = null;
 try {
-  if (order.customer) {
-    const c = await Customer.findById(order.customer).select('_id category').lean();
-    if (c && c.category) customerCategory = String(c.category);
+  const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
+  if (isAdmin && req.body && req.body.manualDiscount && typeof req.body.manualDiscount === 'object') {
+    const md = req.body.manualDiscount;
+    const mode = String(md.mode || '').trim();
+    const value = Number(md.value);
+
+    if ((mode === 'amount' || mode === 'percent') && isFinite(value) && value > 0) {
+      if (mode === 'percent' && value > 100) {
+        // ignore invalid percent
+      } else {
+        manual = { mode, value: Number(value) };
+      }
+    }
   }
 } catch (e) {
-  console.error('Discount: failed to load customer category', e);
+  manual = null;
 }
-
-// collect service ids and service category ids involved in THIS order
-const serviceIds = new Set();
-for (const bi of (builtItems || [])) {
-  if (bi && bi.service) serviceIds.add(String(bi.service));
-}
-
-const serviceCategoryIds = new Set();
-try {
-  const svcDocs = await Service.find({ _id: { $in: Array.from(serviceIds) } })
-    .select('_id category')
-    .lean();
-
-  (svcDocs || []).forEach(s => {
-    if (s && s.category) serviceCategoryIds.add(String(s.category));
-  });
-} catch (e) {
-  console.error('Discount: failed to load service categories', e);
-}
-
-const customerIdForDiscount = order.customer ? String(order.customer) : null;
-
-
-const best = await pickBestDiscount({
-  baseTotal,
-  customerId: customerIdForDiscount,
-  customerCategory,
-  serviceIds,
-  serviceCategoryIds
-});
 
 let discountAmount = 0;
 let discountBreakdown = null;
 
-if (best && best.amount > 0) {
-  discountAmount = Number(best.amount || 0);
-  discountBreakdown = {
-    scope: best.rule.scope,
-    mode: best.rule.mode,
-    value: best.rule.value,
-    computed: discountAmount,
-    label: best.label
-  };
+if (manual) {
+  // compute manual discount
+  discountAmount = computeDiscountAmount(baseTotal, manual);
+  discountAmount = Number(Math.min(baseTotal, Math.max(0, discountAmount)).toFixed(2));
+
+  if (discountAmount > 0) {
+    discountBreakdown = {
+      scope: 'manual',
+      mode: manual.mode,
+      value: manual.value,
+      computed: discountAmount,
+      label: 'Manual discount'
+    };
+  }
+} else {
+  // 2) Auto discounts (existing behavior)
+  let customerCategory = null;
+  try {
+    if (order.customer) {
+      const c = await Customer.findById(order.customer).select('_id category').lean();
+      if (c && c.category) customerCategory = String(c.category);
+    }
+  } catch (e) {
+    console.error('Discount: failed to load customer category', e);
+  }
+
+  const serviceIds = new Set();
+  for (const bi of (builtItems || [])) {
+    if (bi && bi.service) serviceIds.add(String(bi.service));
+  }
+
+  const serviceCategoryIds = new Set();
+  try {
+    const svcDocs = await Service.find({ _id: { $in: Array.from(serviceIds) } })
+      .select('_id category')
+      .lean();
+
+    (svcDocs || []).forEach(s => {
+      if (s && s.category) serviceCategoryIds.add(String(s.category));
+    });
+  } catch (e) {
+    console.error('Discount: failed to load service categories', e);
+  }
+
+  const customerIdForDiscount = order.customer ? String(order.customer) : null;
+
+  const best = await pickBestDiscount({
+    baseTotal,
+    customerId: customerIdForDiscount,
+    customerCategory,
+    serviceIds,
+    serviceCategoryIds
+  });
+
+  if (best && best.amount > 0) {
+    discountAmount = Number(best.amount || 0);
+    discountBreakdown = {
+      scope: best.rule.scope,
+      mode: best.rule.mode,
+      value: best.rule.value,
+      computed: discountAmount,
+      label: best.label
+    };
+  }
 }
 
-// apply discount
-const finalTotal = Number(Math.max(0, baseTotal - discountAmount).toFixed(2));
+// Apply discount
+const finalTotal = Number(Math.max(0, baseTotal - Number(discountAmount || 0)).toFixed(2));
 
 // store snapshot on the order doc before saving
 order.totalBeforeDiscount = baseTotal;
-order.discountAmount = discountAmount;
+order.discountAmount = Number(discountAmount || 0);
 order.discountBreakdown = discountBreakdown;
 
 // IMPORTANT: total becomes final payable total
