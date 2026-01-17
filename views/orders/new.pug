@@ -82,6 +82,8 @@ block content
                   span.badge.bg-secondary Manual discount
 
               // ADMIN-ONLY: manual discount UI (applies AFTER items are in cart)
+              // NOTE: This block now contains ONLY the inputs/buttons.
+              // The discount breakdown (#manualDiscountSummary) is rendered under Cart totals instead.
               if currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin'
                 .card.mb-3.dark-surface(style='border:1px solid rgba(255,255,255,.08);')
                   .card-body.dark-card-body.py-2
@@ -95,26 +97,11 @@ block content
                         label.form-label.mb-1(for='manualDiscountValue') Value
                         input.form-control.form-control-sm.form-control-dark#manualDiscountValue(type='number', min='0', step='0.01', placeholder='e.g. 5 or 10')
                       .col-12.col-md-6.d-flex.gap-2.justify-content-end
-                        button.btn.btn-sm.btn-outline-light-custom#applyManualDiscountBtn(type='button',) Apply Discount
+                        button.btn.btn-sm.btn-outline-light-custom#applyManualDiscountBtn(type='button') Apply Discount
                         button.btn.btn-sm.btn-outline-light-custom#clearManualDiscountBtn(type='button', style='display:none;') Clear
 
                     p.text-muted-light.small.mt-2.mb-0
                       | This discount applies only to this order and will not be saved. You must re-apply it for each order when needed.
-
-                    // shown/updated by orders_client.js after Apply
-                    .mt-2#manualDiscountSummary(style='display:none;')
-                      .d-flex.justify-content-end
-                        .text-end
-                          div.small.text-muted-light Total before discount:
-                          strong#manualDiscountTotalBefore.text-white GH₵ 0.00
-                      .d-flex.justify-content-end
-                        .text-end
-                          div.small.text-muted-light Discount:
-                          strong#manualDiscountAmount.text-white - GH₵ 0.00
-                      .d-flex.justify-content-end
-                        .text-end
-                          div.small.text-muted-light Total after discount:
-                          strong#manualDiscountTotalAfter.text-white GH₵ 0.00
 
               .table-responsive
                 table.table.table-sm.table-borderless#cartTable
@@ -134,6 +121,22 @@ block content
                 .d-flex.justify-content-end.mt-2
                   span.me-3.fs-5.text-white Total:
                   strong.fs-5#cartTotal.text-white GH₵ 0.00
+
+                // ✅ ADMIN-ONLY: discount breakdown rendered under cart totals
+                if currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin'
+                  .mt-2#manualDiscountSummary(style='display:none;')
+                    .d-flex.justify-content-end
+                      .text-end
+                        div.small.text-muted-light Total before discount:
+                        strong#manualDiscountTotalBefore.text-white GH₵ 0.00
+                    .d-flex.justify-content-end
+                      .text-end
+                        div.small.text-muted-light Discount:
+                        strong#manualDiscountAmount.text-white - GH₵ 0.00
+                    .d-flex.justify-content-end
+                      .text-end
+                        div.small.text-muted-light Total after discount:
+                        strong#manualDiscountTotalAfter.text-white GH₵ 0.00
 
                 .d-flex.justify-content-end.mt-3
                   button.btn.btn-primary#orderNowBtn(type='button', disabled) Order Now

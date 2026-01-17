@@ -808,14 +808,19 @@ function addToCart({
   // ---------- Render cart ----------
   function renderCart() {
     cartTbody.innerHTML = '';
-    if (!cart.length) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = '<td class="text-muted" colspan="5">Cart is empty.</td>';
-      cartTbody.appendChild(tr);
-      cartTotalEl.textContent = 'GH₵ 0.00';
-      orderNowBtn.disabled = true;
-      return;
-    }
+  if (!cart.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td class="text-muted" colspan="5">Cart is empty.</td>';
+    cartTbody.appendChild(tr);
+    cartTotalEl.textContent = 'GH₵ 0.00';
+    orderNowBtn.disabled = true;
+
+    // ✅ ensure breakdown under totals is hidden when cart empties
+    if (manualDiscountSummary) manualDiscountSummary.style.display = 'none';
+    if (clearManualDiscountBtn) clearManualDiscountBtn.style.display = 'none';
+
+    return;
+  }
     let total = 0;
     cart.forEach((it, idx) => {
       total += it.subtotal;
