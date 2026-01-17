@@ -9,46 +9,8 @@ block content
 
   p.text-muted-light.small.mb-3 Displaying stocked quantities, total used (aggregates) and remaining stock. Use the "Create count unit" form below to define a global tracked unit (one sub-unit per unit). Duplicate selection sets are disallowed.
 
-  //- CREATE MATERIAL (GLOBAL COUNT UNIT) FORM
+    //- STOCK TABLE
   .card.mb-4.dark-surface
-    .card-body.dark-card-body
-      h5.mb-3.text-white Create count unit (global)
-      form#create-count-unit(class='row g-3' novalidate)
-        .col-12.col-md-5
-          label.form-label(for='cuName') Name
-          input.form-control(type='text', id='cuName', placeholder='e.g. A3 STD paper' required)
-        .col-12.col-md-3
-          label.form-label(for='cuStock') Stocked (initial)
-          input.form-control(type='number', id='cuStock', value='0', min='0', step='1')
-        .col-12
-          small.text-muted-light.mb-2 Select one sub-unit per unit to form the tracked selection set.
-        // Units/subunits UI
-        .col-12
-          // added dark-surface so accordion isn't bright/white
-          .accordion#stockUnitsAccordion.dark-surface
-            each unit in units
-              - const uid = unit._id
-              .accordion-item
-                h2.accordion-header
-                  button.accordion-button.collapsed(type='button', data-bs-toggle='collapse', data-bs-target=`#u-${uid}`, aria-expanded='false')
-                    span.text-white #{unit.name}
-                .accordion-collapse.collapse(id=`u-${uid}`)
-                  .accordion-body
-                    ul.list-group
-                      each su in subunits.filter(s=>String(s.unit) === String(uid))
-                        li.list-group-item
-                          label.form-check
-                            input.form-check-input.unit-sub-checkbox(data-unit=uid data-subunit=su._id type='checkbox')
-                            |&nbsp;
-                            span= su.name
-        .col-12.text-end
-          // button is type=button so native form submit is not triggered
-          button.btn.btn-primary(type='button' id='createCountBtn')
-            span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='createCountSpinner')
-            | Create Count Unit
-
-  //- STOCK TABLE
-  .card.dark-surface
     .card-body.dark-card-body
       .table-responsive
         table.table.table-striped.table-hover.table-sm
@@ -86,6 +48,45 @@ block content
             else
               tr
                 td.text-muted(colspan='5') No count units defined.
+
+
+  //- CREATE MATERIAL (GLOBAL COUNT UNIT) FORM
+  .card.mb-4.dark-surface
+    .card-body.dark-card-body
+      h5.mb-3.text-white Create count unit (global)
+      form#create-count-unit(class='row g-3' novalidate)
+        .col-12.col-md-5
+          label.form-label(for='cuName') Name
+          input.form-control(type='text', id='cuName', placeholder='e.g. A3 STD paper' required)
+        .col-12.col-md-3
+          label.form-label(for='cuStock') Stocked (initial)
+          input.form-control(type='number', id='cuStock', value='0', min='0', step='1')
+        .col-12
+          small.text-muted-light.mb-2 Select one sub-unit per unit to form the tracked selection set.
+        // Units/subunits UI
+        .col-12
+          // added dark-surface so accordion isn't bright/white
+          .accordion#stockUnitsAccordion.dark-surface
+            each unit in units
+              - const uid = unit._id
+              .accordion-item
+                h2.accordion-header
+                  button.accordion-button.collapsed(type='button', data-bs-toggle='collapse', data-bs-target=`#u-${uid}`, aria-expanded='false')
+                    span.text-white #{unit.name}
+                .accordion-collapse.collapse(id=`u-${uid}`)
+                  .accordion-body
+                    ul.list-group
+                      each su in subunits.filter(s=>String(s.unit) === String(uid))
+                        li.list-group-item
+                          label.form-check
+                            input.form-check-input.unit-sub-checkbox(data-unit=uid data-subunit=su._id type='checkbox')
+                            |&nbsp;
+                            span= su.name
+        .col-12.text-end
+          // button is type=button so native form submit is not triggered
+          button.btn.btn-primary(type='button' id='createCountBtn')
+            span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='createCountSpinner')
+            | Create Count Unit
 
   // Adjust stock modal (dark-themed appearance; IDs unchanged)
   .modal.fade(id='adjustStockModal', tabindex='-1', aria-labelledby='adjustStockModalLabel', aria-hidden='true')
