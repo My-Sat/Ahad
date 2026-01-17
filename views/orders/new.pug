@@ -118,11 +118,8 @@ block content
                     tr
                       td.text-muted-light(colspan='5') Cart is empty.
 
-                .d-flex.justify-content-end.mt-2
-                  span.me-3.fs-5.text-white Total:
-                  strong.fs-5#cartTotal.text-white GH₵ 0.00
 
-                // ✅ ADMIN-ONLY: discount breakdown rendered under cart totals
+                // ✅ ADMIN-ONLY: discount breakdown rendered under cart totals (only shown when discount is applied)
                 if currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin'
                   .mt-2#manualDiscountSummary(style='display:none;')
                     .d-flex.justify-content-end
@@ -133,10 +130,11 @@ block content
                       .text-end
                         div.small.text-muted-light Discount:
                         strong#manualDiscountAmount.text-white - GH₵ 0.00
-                    .d-flex.justify-content-end
-                      .text-end
-                        div.small.text-muted-light Total after discount:
-                        strong#manualDiscountTotalAfter.text-white GH₵ 0.00
+                .d-flex.justify-content-end.mt-2
+                
+                  span.me-3.fs-5.text-white Total:
+                  strong.fs-5#cartTotal.text-white GH₵ 0.00        
+
 
                 .d-flex.justify-content-end.mt-3
                   button.btn.btn-primary#orderNowBtn(type='button', disabled) Order Now

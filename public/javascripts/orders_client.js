@@ -26,7 +26,6 @@ document.addEventListener('DOMContentLoaded', function () {
   // IDs in views/orders/new.pug
   const manualDiscountBeforeEl = document.getElementById('manualDiscountTotalBefore');
   const manualDiscountAmountEl = document.getElementById('manualDiscountAmount');
-  const manualDiscountAfterEl = document.getElementById('manualDiscountTotalAfter');
 
   // client-only state (per order)
   let manualDiscount = null; // { mode:'amount'|'percent', value:number }
@@ -272,13 +271,11 @@ async function loadServicesForCategory(catId) {
     if (!window._isAdmin || !manualDiscountMode || !manualDiscountValue) return;
 
     const discAmt = computeManualDiscountAmount(baseTotal, manualDiscount);
-    const after = Number(Math.max(0, baseTotal - discAmt).toFixed(2));
 
     if (manualDiscountSummary && discAmt > 0) {
       manualDiscountSummary.style.display = '';
-  if (manualDiscountBeforeEl) manualDiscountBeforeEl.textContent = `GH₵ ${formatMoney(baseTotal)}`;
-  if (manualDiscountAmountEl) manualDiscountAmountEl.textContent = `- GH₵ ${formatMoney(discAmt)}`;
-  if (manualDiscountAfterEl) manualDiscountAfterEl.textContent = `GH₵ ${formatMoney(after)}`;
+      if (manualDiscountBeforeEl) manualDiscountBeforeEl.textContent = `GH₵ ${formatMoney(baseTotal)}`;
+      if (manualDiscountAmountEl) manualDiscountAmountEl.textContent = `- GH₵ ${formatMoney(discAmt)}`;
 
       if (clearManualDiscountBtn) clearManualDiscountBtn.style.display = '';
     } else {
