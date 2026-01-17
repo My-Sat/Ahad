@@ -2,6 +2,8 @@
 const DiscountConfig = require('../models/discount');
 const Service = require('../models/service');
 const ServiceCategory = require('../models/service_category');
+const mongoose = require('mongoose');         
+const Customer = require('../models/customer');
 
 const CUSTOMER_TYPES = ['one_time', 'regular', 'artist', 'organisation'];
 
@@ -15,20 +17,26 @@ function sanitizeRule(r) {
   const targets = Array.isArray(r.targets) ? r.targets.map(x => String(x)) : [];
   if (scope !== 'general' && (!targets.length || !targets[0])) return null;
 
-
-  if (!['general','customer_type','service','service_category'].includes(scope)) return null;
+  // ✅ add 'customer'
+  if (!['general','customer_type','customer','service','service_category'].includes(scope)) return null;
   if (!['amount','percent'].includes(mode)) return null;
   if (!isFinite(value) || value < 0) return null;
-
-  // percent range guard
   if (mode === 'percent' && value > 100) return null;
 
-  // scope guards
   if (scope === 'general') return { scope, targets: [], mode, value, enabled };
+
   if (scope === 'customer_type') {
     const t = targets.filter(x => CUSTOMER_TYPES.includes(x));
     return { scope, targets: t, mode, value, enabled };
   }
+
+  // ✅ customer scope: validate ObjectId target(s)
+  if (scope === 'customer') {
+    const t = targets.filter(x => mongoose.Types.ObjectId.isValid(x));
+    if (!t.length) return null;
+    return { scope, targets: t, mode, value, enabled };
+  }
+
   // service/service_category accept ids (strings)
   return { scope, targets, mode, value, enabled };
 }
@@ -71,5 +79,50 @@ exports.apiSave = async (req, res) => {
   } catch (e) {
     console.error('discount save error', e);
     res.status(500).json({ ok: false, error: 'Failed to save discounts' });
+  }
+};
+
+exports.apiSearchCustomers = async (req, res) => {
+  try {
+    const q = (req.query.q || '').toString().trim();
+    const by = (req.query.by || 'name').toString().toLowerCase();
+
+    if (!q) return res.json({ ok: true, results: [] });
+
+    const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rx = new RegExp(safe, 'i');
+
+    const or = [];
+    if (by === 'phone') {
+      or.push({ phone: rx });
+    } else {
+      // "name": search firstName + businessName, and also phone as a convenience
+      or.push({ firstName: rx }, { businessName: rx }, { phone: rx });
+    }
+
+    const docs = await Customer.find({ $or: or })
+      .limit(20)
+      .select('_id category firstName businessName phone')
+      .lean();
+
+    const results = (docs || []).map(c => {
+      const name =
+        (c.category === 'artist' || c.category === 'organisation')
+          ? (c.businessName || '')
+          : (c.firstName || c.businessName || '');
+
+      return {
+        _id: String(c._id),
+        phone: c.phone || '',
+        category: c.category || '',
+        name: name || '',
+        label: `${(name || 'Customer')} (${c.phone || ''})`
+      };
+    });
+
+    return res.json({ ok: true, results });
+  } catch (e) {
+    console.error('apiSearchCustomers error', e);
+    return res.status(500).json({ ok: false, error: 'Failed to search customers' });
   }
 };

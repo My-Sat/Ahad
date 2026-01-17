@@ -3,13 +3,14 @@ const mongoose = require('mongoose');
 const DiscountRuleSchema = new mongoose.Schema({
   scope: {
     type: String,
-    enum: ['general', 'customer_type', 'service', 'service_category'],
+    enum: ['general', 'customer_type', 'service', 'service_category', 'customer'],
     required: true,
     index: true
   },
 
   // targets depending on scope:
   // customer_type: ['one_time','regular','artist','organisation']
+  // customer: [customerId...]
   // service: [serviceId...]
   // service_category: [categoryId...]
   targets: { type: [String], default: [] },

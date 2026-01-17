@@ -64,6 +64,47 @@ block content
 
             hr
 
+
+            // Specific Customer
+            h6.text-white Discount by Specific Customer
+            p.small.text-muted-light.mb-2
+              | Add multiple rules (one per customer). Search by name or phone, then pick the customer.
+
+            #customerRulesContainer
+
+            .d-flex.justify-content-end.mb-3
+              button.btn.btn-outline-light-custom.btn-sm#addCustomerRule(type='button') + Add customer rule
+
+            // template (hidden)
+            template#customerRuleTemplate
+              .row.g-2.align-items-end.mb-2.discount-rule-row(data-scope='customer')
+                .col-md-2
+                  label.form-label.small.text-muted-light Search by
+                  select.form-select.form-select-sm.form-select-dark.customer-search-by
+                    option(value='name') Name
+                    option(value='phone') Phone
+                .col-md-4
+                  label.form-label.small.text-muted-light Search
+                  input.form-control.form-control-sm.form-control-dark.customer-search-q(type='text', placeholder='Type to search...')
+                .col-md-4
+                  label.form-label.small.text-muted-light Customer
+                  select.form-select.form-select-sm.form-select-dark.rule-target
+                    option(value='') -- Select customer --
+                .col-md-1
+                  label.form-label.small.text-muted-light Mode
+                  select.form-select.form-select-sm.form-select-dark.rule-mode
+                    option(value='amount') Amount
+                    option(value='percent') Percent
+                .col-md-1
+                  label.form-label.small.text-muted-light Value
+                  input.form-control.form-control-sm.form-control-dark.rule-value(type='number', min='0', step='0.01')
+                .col-md-1
+                  .form-check.mt-4
+                    input.form-check-input.rule-enabled(type='checkbox', checked)
+                .col-md-1.text-end
+                  button.btn.btn-sm.btn-danger.rule-remove(type='button') ✕
+            hr
+
             // Service Type
             h6.text-white Discount by Service
             p.small.text-muted-light.mb-2 Add multiple rules (one per service). Duplicate targets are blocked.

@@ -54,7 +54,7 @@ function computeDiscountAmount(baseTotal, rule) {
 }
 
 // Choose best single discount among applicable rules
-async function pickBestDiscount({ baseTotal, customerCategory, serviceIds, serviceCategoryIds }) {
+  async function pickBestDiscount({ baseTotal, customerId, customerCategory, serviceIds, serviceCategoryIds }) {
   const rules = await getActiveDiscountRules();
   if (!rules.length) return null;
 
@@ -74,6 +74,14 @@ async function pickBestDiscount({ baseTotal, customerCategory, serviceIds, servi
       }
       continue;
     }
+
+    if (r.scope === 'customer') {
+      if (customerId && (r.targets || []).includes(String(customerId))) {
+        candidates.push({ rule: r, label: 'Customer match' });
+      }
+      continue;
+    }
+
 
     if (r.scope === 'service') {
       const hit = (r.targets || []).some(t => serviceIds.has(String(t)));
@@ -576,8 +584,12 @@ try {
   console.error('Discount: failed to load service categories', e);
 }
 
+const customerIdForDiscount = order.customer ? String(order.customer) : null;
+
+
 const best = await pickBestDiscount({
   baseTotal,
+  customerId: customerIdForDiscount,
   customerCategory,
   serviceIds,
   serviceCategoryIds

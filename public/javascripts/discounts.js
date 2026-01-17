@@ -22,20 +22,23 @@ const els = {
   generalValue: document.getElementById('generalValue'),
   generalEnabled: document.getElementById('generalEnabled'),
 
-  // new multi-rule containers
   custRulesContainer: document.getElementById('custRulesContainer'),
   svcRulesContainer: document.getElementById('svcRulesContainer'),
   catRulesContainer: document.getElementById('catRulesContainer'),
 
-  // templates
+  customerRulesContainer: document.getElementById('customerRulesContainer'),
+
   custRuleTemplate: document.getElementById('custRuleTemplate'),
   svcRuleTemplate: document.getElementById('svcRuleTemplate'),
   catRuleTemplate: document.getElementById('catRuleTemplate'),
 
-  // add buttons
+  customerRuleTemplate: document.getElementById('customerRuleTemplate'),
+
   addCustRule: document.getElementById('addCustRule'),
   addSvcRule: document.getElementById('addSvcRule'),
   addCatRule: document.getElementById('addCatRule'),
+
+  addCustomerRule: document.getElementById('addCustomerRule'),
 
   btnSave: document.getElementById('saveDiscounts'),
   btnLoad: document.getElementById('loadDiscounts')
@@ -57,6 +60,49 @@ function wireRuleRow(rowEl) {
   }
 }
 
+function debounce(fn, wait) {
+  let t = null;
+  return function (...args) {
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(this, args), wait);
+  };
+}
+
+async function fetchCustomerResults(q, by) {
+  const url = `/admin/discounts/customer-search?q=${encodeURIComponent(q)}&by=${encodeURIComponent(by)}`;
+  const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+  const j = await res.json().catch(() => null);
+  if (!res.ok || !j || !j.ok) return [];
+  return Array.isArray(j.results) ? j.results : [];
+}
+
+function wireCustomerSearch(rowEl) {
+  const byEl = rowEl.querySelector('.customer-search-by');
+  const qEl = rowEl.querySelector('.customer-search-q');
+  const targetEl = rowEl.querySelector('.rule-target');
+  if (!byEl || !qEl || !targetEl) return;
+
+  const run = debounce(async () => {
+    const q = String(qEl.value || '').trim();
+    const by = String(byEl.value || 'name');
+    targetEl.innerHTML = '<option value="">-- Select customer --</option>';
+
+    if (q.length < 2) return; // avoid huge queries
+    const results = await fetchCustomerResults(q, by);
+
+    for (const c of results) {
+      const opt = document.createElement('option');
+      opt.value = c._id;
+      opt.textContent = c.label || c.phone || c._id;
+      targetEl.appendChild(opt);
+    }
+  }, 250);
+
+  qEl.addEventListener('input', run);
+  byEl.addEventListener('change', run);
+}
+
+
 function addRuleRow(scope, data) {
   let container = null;
   let tpl = null;
@@ -65,24 +111,31 @@ function addRuleRow(scope, data) {
   if (scope === 'service') { container = els.svcRulesContainer; tpl = els.svcRuleTemplate; }
   if (scope === 'service_category') { container = els.catRulesContainer; tpl = els.catRuleTemplate; }
 
+  // ✅ NEW
+  if (scope === 'customer') { container = els.customerRulesContainer; tpl = els.customerRuleTemplate; }
+
   if (!container || !tpl) return;
 
   const row = cloneTemplateRow(tpl);
   if (!row) return;
 
-  // apply defaults/data
   const targetEl = row.querySelector('.rule-target');
   const modeEl = row.querySelector('.rule-mode');
   const valueEl = row.querySelector('.rule-value');
   const enabledEl = row.querySelector('.rule-enabled');
 
-  if (targetEl) targetEl.value = (data && data.target) ? String(data.target) : '';
   if (modeEl) modeEl.value = (data && data.mode) ? String(data.mode) : 'amount';
   if (valueEl) valueEl.value = (data && data.value !== undefined && data.value !== null) ? String(data.value) : '';
   if (enabledEl) enabledEl.checked = (data && typeof data.enabled !== 'undefined') ? !!data.enabled : true;
 
+  // for customer scope, target is set after search/selection
+  if (targetEl && data && data.target) targetEl.value = String(data.target);
+
   wireRuleRow(row);
   container.appendChild(row);
+
+  //  if customer row, wire search
+  if (scope === 'customer') wireCustomerSearch(row);
 }
 
 function collectScopeRules(scope, containerEl) {
@@ -144,6 +197,8 @@ function buildRules() {
   rules.push(...collectScopeRules('customer_type', els.custRulesContainer));
   rules.push(...collectScopeRules('service', els.svcRulesContainer));
   rules.push(...collectScopeRules('service_category', els.catRulesContainer));
+  rules.push(...collectScopeRules('customer', els.customerRulesContainer)); 
+
 
   return rules;
 }
@@ -167,11 +222,13 @@ function applyConfig(cfg) {
   if (els.custRulesContainer) els.custRulesContainer.innerHTML = '';
   if (els.svcRulesContainer) els.svcRulesContainer.innerHTML = '';
   if (els.catRulesContainer) els.catRulesContainer.innerHTML = '';
+  if (els.customerRulesContainer) els.customerRulesContainer.innerHTML = '';
 
   // group + render rows
   const custRules = rules.filter(r => r && r.scope === 'customer_type');
   const svcRules = rules.filter(r => r && r.scope === 'service');
   const catRules = rules.filter(r => r && r.scope === 'service_category');
+  const customerRules = rules.filter(r => r && r.scope === 'customer');
 
   custRules.forEach(r => addRuleRow('customer_type', {
     target: (r.targets && r.targets[0]) ? r.targets[0] : '',
@@ -192,10 +249,18 @@ function applyConfig(cfg) {
     enabled: !!r.enabled
   }));
 
+  customerRules.forEach(r => addRuleRow('customer', {
+    target: (r.targets && r.targets[0]) ? r.targets[0] : '',
+    mode: r.mode || 'amount',
+    value: r.value,
+    enabled: !!r.enabled
+  }));
+
   // if none exist, give user one empty row to start
   if (!custRules.length) addRuleRow('customer_type');
   if (!svcRules.length) addRuleRow('service');
   if (!catRules.length) addRuleRow('service_category');
+  if (!customerRules.length) addRuleRow('customer');
 }
 
   async function load() {
@@ -225,6 +290,8 @@ function applyConfig(cfg) {
   els.addCustRule && els.addCustRule.addEventListener('click', () => addRuleRow('customer_type'));
   els.addSvcRule && els.addSvcRule.addEventListener('click', () => addRuleRow('service'));
   els.addCatRule && els.addCatRule.addEventListener('click', () => addRuleRow('service_category'));
+  els.addCustomerRule && els.addCustomerRule.addEventListener('click', () => addRuleRow('customer')); 
+
 
 
   load();

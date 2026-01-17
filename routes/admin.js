@@ -117,6 +117,7 @@ router.get('/api/printers', printersController.listAll);
 router.get('/discounts', ensureAdmin, discountsController.page);
 router.get('/discounts/api', ensureAdmin, discountsController.apiGet);
 router.post('/discounts', ensureAdmin, discountsController.apiSave);
+router.get('/discounts/customer-search', ensureAdmin, discountsController.apiSearchCustomers);
 
 
 module.exports = router;
