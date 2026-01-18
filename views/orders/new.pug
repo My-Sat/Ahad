@@ -79,7 +79,7 @@ block content
 
                 // ADMIN-ONLY: Manual discount (per order, not saved)
                 if currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin'
-                  span.badge.bg-secondary Manual discount
+                  span.badge.bg-info Manual discount
 
               // ADMIN-ONLY: manual discount UI (applies AFTER items are in cart)
               // NOTE: This block now contains ONLY the inputs/buttons.
@@ -131,7 +131,7 @@ block content
                         div.small.text-muted-light Discount:
                         strong#manualDiscountAmount.text-white - GH₵ 0.00
                 .d-flex.justify-content-end.mt-2
-                
+
                   span.me-3.fs-5.text-white Total:
                   strong.fs-5#cartTotal.text-white GH₵ 0.00        
 
