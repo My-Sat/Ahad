@@ -522,7 +522,7 @@ header .dropdown-menu,
 }
 
 /* ---------------------------
-   Checkboxes & Radios (light)
+   Checkboxes & Radios (visible on light/cream UI)
    --------------------------- */
 .content-card .form-check-label,
 .dark-card-body .form-check-label,
@@ -535,13 +535,16 @@ header .dropdown-menu,
 .content-card .form-check-input,
 .dark-card-body .form-check-input,
 .dark-surface .form-check-input{
-  accent-color: var(--accent);
+  /* keep a clean “field” look when unchecked */
   background-color: rgba(255,249,238,.92) !important;
   border: 1px solid rgba(11,15,26,.14) !important;
   width: 1.05rem;
   height: 1.05rem;
   margin-top: .12rem;
   box-shadow: none !important;
+
+  /* let modern browsers also color native UI */
+  accent-color: #111; /* dark check */
 }
 
 .content-card .form-check-input:focus,
@@ -551,21 +554,29 @@ header .dropdown-menu,
   outline: none;
 }
 
+/* ✅ IMPORTANT: make checked state dark so it contrasts on cream */
 .content-card .form-check-input:checked,
 .dark-card-body .form-check-input:checked,
 .dark-surface .form-check-input:checked{
-  border-color: rgba(43,123,187,.60) !important;
+  background-color: #111 !important;
+  border-color: #111 !important;
 }
 
-/* switches */
-.content-card .form-switch .form-check-input,
-.dark-card-body .form-switch .form-check-input,
-.dark-surface .form-switch .form-check-input{
-  width: 2.2rem;
-  height: 1.2rem;
-  background-color: rgba(255,249,238,.88) !important;
-  border-radius: 999px;
-  border: 1px solid rgba(11,15,26,.14) !important;
+/* ✅ Force a visible tick (covers browsers where the native tick disappears) */
+.content-card .form-check-input[type="checkbox"]:checked,
+.dark-card-body .form-check-input[type="checkbox"]:checked,
+.dark-surface .form-check-input[type="checkbox"]:checked{
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='white' d='M6.173 11.414 2.05 7.29 0 9.34l6.173 6.174L16 5.688 13.95 3.64z'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: 50% 50% !important;
+  background-size: 70% 70% !important;
+}
+
+/* Radio: show a white inner dot on dark fill */
+.content-card .form-check-input[type="radio"]:checked,
+.dark-card-body .form-check-input[type="radio"]:checked,
+.dark-surface .form-check-input[type="radio"]:checked{
+  background-image: radial-gradient(circle, #fff 0 35%, transparent 36%) !important;
 }
 
 /* ---------------------------
