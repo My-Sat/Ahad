@@ -326,7 +326,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!storeId || !stockId) return;
 
     if (activityMeta) activityMeta.textContent = 'Loading...';
-    if (activityTbody) activityTbody.innerHTML = `<tr><td class="text-muted" colspan="4">Loading...</td></tr>`;
+    if (activityTbody) activityTbody.innerHTML = `<tr><td class="text-muted" colspan="5">Loading...</td></tr>`;
 
     bootstrap.Modal.getOrCreateInstance(activityModalEl).show();
 
@@ -345,34 +345,39 @@ document.addEventListener('DOMContentLoaded', function () {
       const matName = j.material?.name || '';
       if (activityMeta) activityMeta.textContent = `${matName} — ${storeName}`;
 
-      const events = Array.isArray(j.events) ? j.events : [];
-      if (!events.length) {
-        activityTbody.innerHTML = `<tr><td class="text-muted" colspan="4">No activity yet.</td></tr>`;
-        return;
-      }
+const events = Array.isArray(j.events) ? j.events : [];
+const current = j.current || null;
 
-      const rows = events.map(ev => {
-        const d = ev.createdAt ? new Date(ev.createdAt) : null;
-        const ds = d ? d.toLocaleString() : '';
-        const type = ev.type || '';
-        const qty = (ev.qty !== undefined && ev.qty !== null) ? ev.qty : '';
-        let detail = ev.note || '';
+if (activityMeta) {
+  const storeName = j.store?.name || '';
+  const matName = j.material?.name || '';
+  const rem = (current && typeof current.remaining === 'number') ? current.remaining : '';
+  activityMeta.textContent = `${matName} — ${storeName}${rem !== '' ? ` | Current remaining: ${rem}` : ''}`;
+}
 
-        if (type === 'usage') {
-          detail = `Order: ${ev.orderId || ''}`;
-        } else if (type === 'transfer-in' || type === 'transfer-out') {
-          detail = `${ev.from || ''} → ${ev.to || ''}`;
-        }
+if (!events.length) {
+  activityTbody.innerHTML = `<tr><td class="text-muted" colspan="5">No activity yet.</td></tr>`;
+  return;
+}
 
-        return `<tr>
-          <td class="text-muted-light">${ds}</td>
-          <td class="text-muted-light">${type}</td>
-          <td class="text-muted-light">${qty}</td>
-          <td class="text-muted-light">${detail}</td>
-        </tr>`;
-      }).join('');
+const rows = events.map(ev => {
+  const d = ev.createdAt ? new Date(ev.createdAt) : null;
+  const ds = d ? d.toLocaleString() : '';
+  const type = ev.type || '';
+  const delta = (ev.delta === null || ev.delta === undefined) ? '' : ev.delta;
+  const bal = (ev.balance === null || ev.balance === undefined) ? '' : ev.balance;
+  const detail = ev.details || '';
 
-      activityTbody.innerHTML = rows;
+  return `<tr>
+    <td class="text-muted-light">${ds}</td>
+    <td class="text-muted-light">${type}</td>
+    <td class="text-muted-light">${delta}</td>
+    <td class="text-muted-light">${bal}</td>
+    <td class="text-muted-light">${detail}</td>
+  </tr>`;
+}).join('');
+
+activityTbody.innerHTML = rows;
     } catch (err) {
       console.error(err);
       if (activityMeta) activityMeta.textContent = 'Failed to load activity';

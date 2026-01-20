@@ -8,6 +8,8 @@ const { MaterialUsage, MaterialAggregate } = require('../models/material_usage')
 const Store = require('../models/store');
 const StoreStock = require('../models/store_stock');
 const StoreStockTransfer = require('../models/store_stock_transfer');
+const StoreStockAdjustment = require('../models/store_stock_adjustment');
+
 
 // Helper: safely parse selections (JSON string or array)
 function parseSelections(sels) {
@@ -311,6 +313,24 @@ exports.addStockToStore = async (req, res) => {
     const agg = await MaterialAggregate.findOne({ store: storeId, material: materialId }).lean();
     const used = agg ? Number(agg.total || 0) : 0;
     const remaining = Math.max(0, Number(up.stocked || 0) - used);
+    // ✅ log "add to store" as a snapshot event
+try {
+  await StoreStockAdjustment.create({
+    stock: up._id,
+    store: st._id,
+    material: mat._id,
+    kind: 'add',
+    delta: 0,
+    setTo: remaining,
+    stockedAfter: Number(up.stocked || 0),
+    usedAfter: Number(used || 0),
+    note: `Added to store`,
+    actor: (req.user && req.user._id) ? new mongoose.Types.ObjectId(req.user._id) : null
+  });
+} catch (e) {
+  console.error('addStockToStore adjustment log failed', e);
+}
+
 
     return res.status(201).json({ ok: true, stock: Object.assign({}, up, { used, remaining }) });
   } catch (err) {
@@ -363,6 +383,27 @@ exports.adjustStoreStock = async (req, res) => {
     const agg = await MaterialAggregate.findOne({ store: storeId, material: updated.material._id }).lean();
     const used = agg ? Number(agg.total || 0) : 0;
     const remaining = Math.max(0, Number(updated.stocked || 0) - used);
+
+    // ✅ log adjustment as a snapshot event
+try {
+  const deltaVal = (mode === 'delta') ? Math.floor(Number(valRaw) || 0) : 0;
+
+  await StoreStockAdjustment.create({
+    stock: updated._id,
+    store: new mongoose.Types.ObjectId(storeId),
+    material: updated.material._id,
+    kind: (mode === 'absolute') ? 'adjust-absolute' : 'adjust-delta',
+    delta: deltaVal,
+    setTo: remaining,
+    stockedAfter: Number(updated.stocked || 0),
+    usedAfter: Number(used || 0),
+    note: (mode === 'absolute') ? 'Absolute set (used reset)' : 'Delta adjust',
+    actor: (req.user && req.user._id) ? new mongoose.Types.ObjectId(req.user._id) : null
+  });
+} catch (e) {
+  console.error('adjustStoreStock adjustment log failed', e);
+}
+
 
     return res.json({ ok: true, stock: Object.assign({}, updated, { used, remaining }) });
   } catch (err) {
@@ -427,6 +468,8 @@ exports.transferStoreStock = async (req, res) => {
         material: fromStock.material._id,
         fromStore: fromStore._id,
         toStore: toStore._id,
+        fromStock: updatedFrom._id,   // ✅ NEW
+        toStock: updatedTo._id,       // ✅ NEW
         qty,
         actor: (req.user && req.user._id) ? new mongoose.Types.ObjectId(req.user._id) : null
       });
@@ -461,7 +504,19 @@ exports.removeStockFromStore = async (req, res) => {
     if (!ss) return res.status(404).json({ error: 'Stock not found' });
     if (String(ss.store) !== String(storeId)) return res.status(403).json({ error: 'Stock does not belong to selected store' });
 
-    await StoreStock.findByIdAndUpdate(stockId, { $set: { active: false } });
+    const materialId = ss.material;
+
+    // ✅ delete activity logs for THIS stock item
+    await StoreStockAdjustment.deleteMany({ stock: stockId });
+    await StoreStockTransfer.deleteMany({ $or: [{ fromStock: stockId }, { toStock: stockId }] });
+
+    // ✅ delete operational logs + aggregate for this store/material (so re-adding starts clean)
+    await MaterialUsage.deleteMany({ store: storeId, material: materialId });
+    await MaterialAggregate.deleteMany({ store: storeId, material: materialId });
+
+    // ✅ delete the stock item itself (no soft remove)
+    await StoreStock.findByIdAndDelete(stockId);
+
     return res.json({ ok: true });
   } catch (err) {
     console.error('materials.removeStockFromStore error', err);
@@ -469,7 +524,6 @@ exports.removeStockFromStore = async (req, res) => {
   }
 };
 
-// View stock activity: usage + transfers (JSON)
 exports.stockActivity = async (req, res) => {
   try {
     const { storeId, stockId } = req.params;
@@ -482,52 +536,117 @@ exports.stockActivity = async (req, res) => {
 
     const store = await Store.findById(storeId).lean();
 
+    // current totals
+    const agg = await MaterialAggregate.findOne({ store: storeId, material: ss.material._id }).lean();
+    const usedNow = agg ? Number(agg.total || 0) : 0;
+    const stockedNow = Number(ss.stocked || 0);
+    const remainingNow = Math.max(0, stockedNow - usedNow);
+
+    // --- pull events ---
+    const adjustments = await StoreStockAdjustment.find({ stock: stockId })
+      .sort({ createdAt: 1, _id: 1 })
+      .lean();
+
     const usage = await MaterialUsage.find({ store: storeId, material: ss.material._id })
-      .select('orderId count createdAt')
-      .sort({ createdAt: -1 })
-      .limit(500)
+      .select('orderId itemIndex count createdAt')
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(2000)
       .lean();
 
     const transfers = await StoreStockTransfer.find({
-      material: ss.material._id,
-      $or: [{ fromStore: storeId }, { toStore: storeId }]
+      $or: [{ fromStock: stockId }, { toStock: stockId }]
     })
       .populate('fromStore', 'name')
       .populate('toStore', 'name')
-      .sort({ createdAt: -1 })
-      .limit(500)
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(2000)
       .lean();
 
+    // --- normalize into a single timeline ---
     const events = [];
 
+    // adjustments are "snapshots" (setTo = remaining after action)
+    adjustments.forEach(a => {
+      events.push({
+        createdAt: a.createdAt,
+        type: a.kind,              // add | adjust-delta | adjust-absolute
+        delta: (a.kind === 'adjust-delta') ? Number(a.delta || 0) : null,
+        setTo: Number(a.setTo || 0),
+        details: a.note || ''
+      });
+    });
+
+    // transfers are deltas to remaining
+    transfers.forEach(t => {
+      const isOut = String(t.fromStock || '') === String(stockId);
+      events.push({
+        createdAt: t.createdAt,
+        type: isOut ? 'transfer-out' : 'transfer-in',
+        delta: isOut ? -Number(t.qty || 0) : Number(t.qty || 0),
+        setTo: null,
+        details: `${t.fromStore?.name || ''} → ${t.toStore?.name || ''}`
+      });
+    });
+
+    // operational logs (order consumption) are deltas to remaining
     usage.forEach(u => {
       events.push({
-        type: 'usage',
         createdAt: u.createdAt,
-        qty: Number(u.count || 0),
-        orderId: u.orderId || '',
-        note: 'Order consumption'
+        type: 'order-consume',
+        delta: -Number(u.count || 0),
+        setTo: null,
+        details: `Order ${u.orderId || ''} (item ${u.itemIndex})`
       });
     });
 
-    transfers.forEach(t => {
-      const dir = (String(t.fromStore?._id) === String(storeId)) ? 'transfer-out' : 'transfer-in';
+    // sort oldest -> newest so it narrates how we reached current
+    events.sort((a, b) => {
+      const ta = new Date(a.createdAt).getTime();
+      const tb = new Date(b.createdAt).getTime();
+      if (ta !== tb) return ta - tb;
+      return 0;
+    });
+
+    // compute running balance (remaining)
+    let balance = null;
+    for (const ev of events) {
+      if (ev.setTo !== null && ev.setTo !== undefined) {
+        balance = Number(ev.setTo || 0);
+      } else {
+        if (balance === null) balance = 0;
+        balance = balance + Number(ev.delta || 0);
+      }
+      ev.balance = balance;
+    }
+
+    // If missing older logs, ensure the timeline ends at current remaining
+    const lastBal = (events.length ? events[events.length - 1].balance : null);
+    if (lastBal === null) {
+      // No events at all -> show a single snapshot row
       events.push({
-        type: dir,
-        createdAt: t.createdAt,
-        qty: Number(t.qty || 0),
-        from: t.fromStore?.name || '',
-        to: t.toStore?.name || '',
-        note: dir === 'transfer-out' ? 'Transferred out' : 'Transferred in'
+        createdAt: new Date(),
+        type: 'current',
+        delta: null,
+        setTo: remainingNow,
+        balance: remainingNow,
+        details: 'Current remaining (no activity yet)'
       });
-    });
-
-    events.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    } else if (Math.floor(lastBal) !== Math.floor(remainingNow)) {
+      events.push({
+        createdAt: new Date(),
+        type: 'reconcile',
+        delta: null,
+        setTo: remainingNow,
+        balance: remainingNow,
+        details: 'Reconciled to current remaining'
+      });
+    }
 
     return res.json({
       ok: true,
       store: store ? { _id: store._id, name: store.name } : null,
       material: ss.material ? { _id: ss.material._id, name: ss.material.name } : null,
+      current: { stocked: stockedNow, used: usedNow, remaining: remainingNow },
       events
     });
   } catch (err) {
