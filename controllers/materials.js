@@ -238,10 +238,17 @@ exports.stockPage = async (req, res) => {
 
     let stocks = [];
     if (selectedStore) {
-      const rawStocks = await StoreStock.find({ store: selectedStore._id, active: true })
-        .populate('material', 'name selections')
-        .sort({ createdAt: -1 })
-        .lean();
+    const rawStocks = await StoreStock.find({ store: selectedStore._id, active: true })
+      .populate({
+        path: 'material',
+        select: 'name selections',
+        populate: [
+          { path: 'selections.unit', select: 'name' },
+          { path: 'selections.subUnit', select: 'name' }
+        ]
+      })
+      .sort({ createdAt: -1 })
+      .lean();
 
       const materialIds = rawStocks.map(s => s.material?._id).filter(Boolean);
       const aggDocs = materialIds.length

@@ -186,21 +186,23 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Open adjust modal
-  document.addEventListener('click', function (e) {
-    const btn = e.target.closest && e.target.closest('.adjust-stock-btn');
-    if (!btn) return;
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest && e.target.closest('.adjust-stock-btn');
+  if (!btn) return;
 
-    const stockId = btn.dataset.stockId;
-    const stocked = Number(btn.dataset.stocked || 0);
+  e.preventDefault(); // ✅ NEW (important for dropdown <a>)
 
-    adjustStockId.value = stockId;
-    adjustCurrentStock.value = String(stocked);
-    adjustStockInput.value = '';
+  const stockId = btn.dataset.stockId;
+  const stocked = Number(btn.dataset.stocked || 0);
 
-    document.getElementById('adjustModeDelta').checked = true;
+  adjustStockId.value = stockId;
+  adjustCurrentStock.value = String(stocked);
+  adjustStockInput.value = '';
 
-    bootstrap.Modal.getOrCreateInstance(adjustModalEl).show();
-  });
+  document.getElementById('adjustModeDelta').checked = true;
+
+  bootstrap.Modal.getOrCreateInstance(adjustModalEl).show();
+});
 
   // Save adjust
   if (saveAdjustBtn) {
@@ -258,16 +260,18 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Open transfer modal
-  document.addEventListener('click', function (e) {
-    const btn = e.target.closest && e.target.closest('.transfer-stock-btn');
-    if (!btn) return;
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest && e.target.closest('.transfer-stock-btn');
+  if (!btn) return;
 
-    const stockId = btn.dataset.stockId;
-    transferStockId.value = stockId;
-    transferQty.value = '1';
+  e.preventDefault(); // ✅ NEW
 
-    bootstrap.Modal.getOrCreateInstance(transferModalEl).show();
-  });
+  const stockId = btn.dataset.stockId;
+  transferStockId.value = stockId;
+  transferQty.value = '1';
+
+  bootstrap.Modal.getOrCreateInstance(transferModalEl).show();
+});
 
   // Confirm transfer
   if (confirmTransferBtn) {
@@ -317,9 +321,11 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // View activity
-  document.addEventListener('click', async function (e) {
+    document.addEventListener('click', async function (e) {
     const btn = e.target.closest && e.target.closest('.view-activity-btn');
     if (!btn) return;
+
+    e.preventDefault(); // ✅ NEW
 
     const storeId = selectedStoreId();
     const stockId = btn.dataset.stockId;
@@ -385,13 +391,15 @@ activityTbody.innerHTML = rows;
   });
 
   // Remove stock item
-  document.addEventListener('click', function (e) {
-    const btn = e.target.closest && e.target.closest('.remove-stock-btn');
-    if (!btn) return;
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest && e.target.closest('.remove-stock-btn');
+  if (!btn) return;
 
-    pendingRemoveStockId = btn.dataset.stockId;
-    bootstrap.Modal.getOrCreateInstance(deleteConfirmModalEl).show();
-  });
+  e.preventDefault(); // ✅ NEW
+
+  pendingRemoveStockId = btn.dataset.stockId;
+  bootstrap.Modal.getOrCreateInstance(deleteConfirmModalEl).show();
+});
 
   if (confirmDeleteBtn) {
     confirmDeleteBtn.addEventListener('click', async function () {

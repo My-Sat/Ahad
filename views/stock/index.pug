@@ -63,7 +63,11 @@ block content
                         if ss.material.selections && ss.material.selections.length
                           br
                           small.text-muted-light
-                            - const labels = ss.material.selections.map(s => `${String(s.unit)}:${String(s.subUnit)}`);
+                            - const labels = ss.material.selections.map(s => {
+                            -   const u = (s.unit && s.unit.name) ? s.unit.name : String(s.unit);
+                            -   const su = (s.subUnit && s.subUnit.name) ? s.subUnit.name : String(s.subUnit);
+                            -   return `${u}: ${su}`;
+                            - });
                             = labels.join(' + ')
                       else
                         span.text-muted-light (missing material)
@@ -74,24 +78,35 @@ block content
                         span.text-danger #{remaining}
                       else
                         span #{remaining}
-                    td.text-center
-                      button.btn.btn-sm.btn-primary.adjust-stock-btn(
-                        type='button'
-                        data-stock-id=ss._id
-                        data-stocked=stocked
-                      ) Adjust
-                      button.btn.btn-sm.btn-outline-light-custom.ms-1.transfer-stock-btn(
-                        type='button'
-                        data-stock-id=ss._id
-                      ) Transfer
-                      button.btn.btn-sm.btn-outline-light-custom.ms-1.view-activity-btn(
-                        type='button'
-                        data-stock-id=ss._id
-                      ) View
-                      button.btn.btn-sm.btn-danger.ms-1.remove-stock-btn(
-                        type='button'
-                        data-stock-id=ss._id
-                      ) Remove
+                    td.text-center.text-nowrap
+                      .dropdown.d-inline-block
+                        button.btn.btn-sm.btn-outline-light-custom(
+                          type='button'
+                          data-bs-toggle='dropdown'
+                          aria-expanded='false'
+                          title='Actions'
+                        )
+                          i.bi.bi-three-dots-vertical
+
+                        ul.dropdown-menu.dropdown-menu-end
+                          li
+                            a.dropdown-item.adjust-stock-btn(href='#' data-stock-id=ss._id data-stocked=stocked)
+                              i.bi.bi-sliders.me-2
+                              | Adjust
+                          li
+                            a.dropdown-item.transfer-stock-btn(href='#' data-stock-id=ss._id)
+                              i.bi.bi-arrow-left-right.me-2
+                              | Transfer
+                          li
+                            a.dropdown-item.view-activity-btn(href='#' data-stock-id=ss._id)
+                              i.bi.bi-clock-history.me-2
+                              | View activity
+                          li
+                            hr.dropdown-divider
+                          li
+                            a.dropdown-item.text-danger.remove-stock-btn(href='#' data-stock-id=ss._id)
+                              i.bi.bi-trash.me-2
+                              | Remove
               else
                 tr
                   td.text-muted(colspan='5') No stock items in this store.

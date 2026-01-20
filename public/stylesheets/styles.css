@@ -752,3 +752,6 @@ body.app-bg .dropdown-item:focus{
   outline: none !important;
 }
 
+.dropdown-menu .dropdown-item i { width: 1.25rem; }
+
+
