@@ -2,160 +2,233 @@ extends ../layout
 
 block content
   .d-flex.justify-content-between.align-items-center.mb-3
-    h2.mb-0.text-white Stock Dashboard
-    a.btn.btn-secondary(href='/admin/services') Back to services
+    h2.mb-0.text-white Stock Dashboard (Stores)
+    .d-flex.gap-2
+      a.btn.btn-secondary(href='/admin/catalogue') Catalogue
+      a.btn.btn-secondary(href='/admin/services') Back to services
 
   hr
 
-  p.text-muted-light.small.mb-3 Displaying stocked quantities, total used (aggregates) and remaining stock. Use the "Create count unit" form below to define a global tracked unit (one sub-unit per unit). Duplicate selection sets are disallowed.
-
-    //- STOCK TABLE
-  .card.mb-4.dark-surface
+  // Store selector + create + operational
+  .card.mb-3.dark-surface
     .card-body.dark-card-body
-      .table-responsive
-        table.table.table-striped.table-hover.table-sm
-          thead
-            tr
-              th.text-white Material
-              th.text-center.text-muted-light Stocked
-              th.text-center.text-muted-light Used
-              th.text-center.text-muted-light Remaining
-              th.text-center.text-muted-light Actions
-          tbody
-            if materials && materials.length
-              each m in materials
-                - const used = (typeof m.used === 'number') ? m.used : 0;
-                - const stocked = (typeof m.stocked === 'number') ? m.stocked : ((typeof m.stock === 'number') ? m.stock : 0);
-                - const remaining = (typeof m.remaining === 'number') ? m.remaining : Math.max(0, stocked - used);
-                tr(data-id=m._id)
-                  td
-                    strong.text-white= m.name
-                    if m.selections && m.selections.length
-                      br
-                      small.text-muted-light
-                        - const labels = m.selections.map(s => (s.unit && s.unit.name ? s.unit.name + ': ' + (s.subUnit && s.subUnit.name ? s.subUnit.name : s.subUnit) : ''));
-                        = labels.join(' + ')
-                  td.text-center.text-muted-light.stocked-cell= stocked
-                  td.text-center.text-muted-light.used-cell= used
-                  td.text-center.remaining-cell
-                    if remaining < 0
-                      span.text-danger #{remaining}
-                    else
-                      span #{remaining}
-                  td.text-center
-                    button.btn.btn-sm.btn-primary.adjust-stock-btn(data-id=m._id data-stocked=stocked type='button') Adjust
-                    button.btn.btn-sm.btn-danger.ms-1.delete-material-btn(data-id=m._id type='button') Delete
-            else
-              tr
-                td.text-muted(colspan='5') No count units defined.
-
-
-  //- CREATE MATERIAL (GLOBAL COUNT UNIT) FORM
-  .card.mb-4.dark-surface
-    .card-body.dark-card-body
-      h5.mb-3.text-white Create count unit (global)
-      form#create-count-unit(class='row g-3' novalidate)
+      .row.g-2.align-items-end
         .col-12.col-md-5
-          label.form-label(for='cuName') Name
-          input.form-control(type='text', id='cuName', placeholder='e.g. A3 STD paper' required)
-        .col-12.col-md-3
-          label.form-label(for='cuStock') Stocked (initial)
-          input.form-control(type='number', id='cuStock', value='0', min='0', step='1')
-        .col-12
-          small.text-muted-light.mb-2 Select one sub-unit per unit to form the tracked selection set.
-        // Units/subunits UI
-        .col-12
-          // added dark-surface so accordion isn't bright/white
-          .accordion#stockUnitsAccordion.dark-surface
-            each unit in units
-              - const uid = unit._id
-              .accordion-item
-                h2.accordion-header
-                  button.accordion-button.collapsed(type='button', data-bs-toggle='collapse', data-bs-target=`#u-${uid}`, aria-expanded='false')
-                    span.text-white #{unit.name}
-                .accordion-collapse.collapse(id=`u-${uid}`)
-                  .accordion-body
-                    ul.list-group
-                      each su in subunits.filter(s=>String(s.unit) === String(uid))
-                        li.list-group-item
-                          label.form-check
-                            input.form-check-input.unit-sub-checkbox(data-unit=uid data-subunit=su._id type='checkbox')
-                            |&nbsp;
-                            span= su.name
-        .col-12.text-end
-          // button is type=button so native form submit is not triggered
-          button.btn.btn-primary(type='button' id='createCountBtn')
-            span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='createCountSpinner')
-            | Create Count Unit
+          label.form-label.text-muted-light(for='storeSelect') Select store
+          select.form-select#storeSelect
+            if stores && stores.length
+              each s in stores
+                option(value=s._id selected=(selectedStore && String(selectedStore._id)===String(s._id)) ? true : false)
+                  | #{s.name}
+            else
+              option(value='') No stores yet
 
-  // Adjust stock modal (dark-themed appearance; IDs unchanged)
-  .modal.fade(id='adjustStockModal', tabindex='-1', aria-labelledby='adjustStockModalLabel', aria-hidden='true')
+        .col-12.col-md-3
+          button.btn.btn-primary.w-100(type='button', id='openCreateStoreBtn') Create Store
+
+        .col-12.col-md-4.text-md-end
+          if operationalStore
+            div.small.text-muted-light.mb-1 Operational store:
+            span.badge.bg-success #{operationalStore.name}
+          else
+            span.badge.bg-warning.text-dark No operational store set
+
+          button.btn.btn-outline-light-custom.ms-2(type='button', id='setOperationalBtn' disabled=(!selectedStore)) Set Selected as Operational
+
+  // Store stock table
+  .card.mb-4.dark-surface
+    .card-body.dark-card-body
+      if !selectedStore
+        p.text-muted-light.small No store selected. Create a store first.
+      else
+        .table-responsive
+          table.table.table-striped.table-hover.table-sm
+            thead
+              tr
+                th.text-white Stock item
+                th.text-center.text-muted-light Stocked
+                th.text-center.text-muted-light Used
+                th.text-center.text-muted-light Remaining
+                th.text-center.text-muted-light Actions
+            tbody
+              if stocks && stocks.length
+                each ss in stocks
+                  - const used = (typeof ss.used === 'number') ? ss.used : 0;
+                  - const stocked = (typeof ss.stocked === 'number') ? ss.stocked : 0;
+                  - const remaining = (typeof ss.remaining === 'number') ? ss.remaining : Math.max(0, stocked - used);
+                  tr(data-stock-id=ss._id data-material-id=(ss.material && ss.material._id ? ss.material._id : '') data-stocked=stocked)
+                    td
+                      if ss.material
+                        strong.text-white= ss.material.name
+                        if ss.material.selections && ss.material.selections.length
+                          br
+                          small.text-muted-light
+                            - const labels = ss.material.selections.map(s => `${String(s.unit)}:${String(s.subUnit)}`);
+                            = labels.join(' + ')
+                      else
+                        span.text-muted-light (missing material)
+                    td.text-center.text-muted-light.stocked-cell= stocked
+                    td.text-center.text-muted-light.used-cell= used
+                    td.text-center.remaining-cell
+                      if remaining < 0
+                        span.text-danger #{remaining}
+                      else
+                        span #{remaining}
+                    td.text-center
+                      button.btn.btn-sm.btn-primary.adjust-stock-btn(
+                        type='button'
+                        data-stock-id=ss._id
+                        data-stocked=stocked
+                      ) Adjust
+                      button.btn.btn-sm.btn-outline-light-custom.ms-1.transfer-stock-btn(
+                        type='button'
+                        data-stock-id=ss._id
+                      ) Transfer
+                      button.btn.btn-sm.btn-outline-light-custom.ms-1.view-activity-btn(
+                        type='button'
+                        data-stock-id=ss._id
+                      ) View
+                      button.btn.btn-sm.btn-danger.ms-1.remove-stock-btn(
+                        type='button'
+                        data-stock-id=ss._id
+                      ) Remove
+              else
+                tr
+                  td.text-muted(colspan='5') No stock items in this store.
+
+  // Add catalogue to selected store
+  .card.mb-4.dark-surface
+    .card-body.dark-card-body
+      h5.mb-3.text-white Add catalogue to store
+      if !selectedStore
+        p.text-muted-light.small Create/select a store first.
+      else
+        form#add-to-store-form(class='row g-3' novalidate data-store-id=(selectedStore ? selectedStore._id : ''))
+          .col-12.col-md-7
+            label.form-label.text-muted-light(for='catalogueSelect') Catalogue item
+            select.form-select#catalogueSelect
+              if catalogues && catalogues.length
+                each c in catalogues
+                  option(value=c._id)= c.name
+              else
+                option(value='') No catalogue items yet
+
+          .col-12.col-md-3
+            label.form-label.text-muted-light(for='initialStockInput') Stock Initial
+            input.form-control#initialStockInput(type='number', value='0', min='0', step='1')
+
+          .col-12.col-md-2.d-grid
+            button.btn.btn-primary#addToStoreBtn(type='button')
+              span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='addToStoreSpinner')
+              | Add
+
+  // Create Store Modal
+  .modal.fade(id='createStoreModal', tabindex='-1', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
       .modal-content.dark-surface
         .modal-header
-          h5.modal-title.text-white(id='adjustStockModalLabel') Adjust stocked quantity
+          h5.modal-title.text-white Create Store
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
         .modal-body.dark-card-body
-          form#adjustStockForm
-            input(type='hidden', id='adjustMaterialId')
+          label.form-label.text-muted-light(for='newStoreName') Store name
+          input.form-control#newStoreName(type='text', placeholder='e.g. Main Store')
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary(type='button', id='createStoreBtn')
+            span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='createStoreSpinner')
+            | Create
+
+  // Adjust Modal
+  .modal.fade(id='adjustStockModal', tabindex='-1', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title.text-white Adjust stocked quantity
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          form
+            input(type='hidden', id='adjustStockId')
             input(type='hidden', id='adjustCurrentStock')
 
-            // Mode selector
             .mb-3
               label.form-label.text-muted-light Adjustment mode
               .form-check
-                input.form-check-input(
-                  type='radio'
-                  name='adjustMode'
-                  id='adjustModeDelta'
-                  value='delta'
-                  checked
-                )
-                label.form-check-label(for='adjustModeDelta')
-                  | Apply Delta ( +5 / -3 )
-
+                input.form-check-input(type='radio', name='adjustMode', id='adjustModeDelta', value='delta', checked)
+                label.form-check-label(for='adjustModeDelta') Apply Delta ( +5 / -3 )
               .form-check
-                input.form-check-input(
-                  type='radio'
-                  name='adjustMode'
-                  id='adjustModeAbsolute'
-                  value='absolute'
-                )
-                label.form-check-label(for='adjustModeAbsolute')
-                  | Set Absolute Value
+                input.form-check-input(type='radio', name='adjustMode', id='adjustModeAbsolute', value='absolute')
+                label.form-check-label(for='adjustModeAbsolute') Set Absolute Value (resets Used)
 
-            // Value input
             .mb-3
-              label.form-label.text-muted-light(for='adjustStockInput')
-                | Value
-              input.form-control.form-control-dark(
-                type='text'
-                id='adjustStockInput'
-                placeholder='+5 or -3 (default) / 120 (absolute)'
-                required
-              )
+              label.form-label.text-muted-light(for='adjustStockInput') Value
+              input.form-control#adjustStockInput(type='text', placeholder='+5 or -3 / 120', required)
+
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary(type='button', id='saveAdjustStockBtn')
-            span.spinner-border.spinner-border-sm.me-2(
-              id='saveAdjustSpinner'
-              style='display:none;'
-            )
+            span.spinner-border.spinner-border-sm.me-2(id='saveAdjustSpinner', style='display:none;')
             span#saveAdjustLabel Save
 
-  // Delete Confirmation Modal (shared)
-  .modal.fade(id='deleteConfirmModal', tabindex='-1', aria-labelledby='deleteConfirmModalLabel', aria-hidden='true')
+  // Transfer Modal
+  .modal.fade(id='transferModal', tabindex='-1', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title.text-white Transfer stock
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          input(type='hidden', id='transferStockId')
+          .mb-3
+            label.form-label.text-muted-light(for='transferToStore') To store
+            select.form-select#transferToStore
+              if stores && stores.length
+                each s in stores
+                  if !selectedStore || String(s._id) !== String(selectedStore._id)
+                    option(value=s._id)= s.name
+          .mb-3
+            label.form-label.text-muted-light(for='transferQty') Quantity
+            input.form-control#transferQty(type='number', min='1', step='1', value='1')
+
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary(type='button', id='confirmTransferBtn')
+            span.spinner-border.spinner-border-sm.me-2(id='transferSpinner', style='display:none;')
+            | Transfer
+
+  // Activity Modal
+  .modal.fade(id='activityModal', tabindex='-1', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered.modal-lg
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title.text-white Stock activity
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          div#activityMeta.text-muted-light.small.mb-2
+          .table-responsive
+            table.table.table-sm
+              thead
+                tr
+                  th.text-muted-light Date
+                  th.text-muted-light Type
+                  th.text-muted-light Qty
+                  th.text-muted-light Details
+              tbody#activityTbody
+                tr
+                  td.text-muted(colspan='4') Select "View" to load activity.
+
+  // Remove confirm modal
+  .modal.fade(id='deleteConfirmModal', tabindex='-1', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
       .modal-content
         .modal-header
-          h5.modal-title(id='deleteConfirmModalLabel') Confirm delete
+          h5.modal-title Confirm remove
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
         .modal-body
-          p#deleteConfirmMessage Are you sure you want to delete this item?
-          p.text-muted.small.mt-2 Deleting cannot be undone.
+          p#deleteConfirmMessage Remove this stock item from the store list?
+          p.text-muted.small.mt-2 History remains; item can be re-added later.
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
-          button.btn.btn-danger(type='button', id='confirmDeleteBtn') Yes, delete
+          button.btn.btn-danger(type='button', id='confirmDeleteBtn') Yes, remove
 
 block append scripts
-  script(src='/public/javascripts/stock.js')
+  script(src='/public/javascripts/store_stock.js')

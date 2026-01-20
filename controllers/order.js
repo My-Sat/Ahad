@@ -10,6 +10,9 @@ const Material = require('../models/material');
 const { MaterialUsage, MaterialAggregate } = require('../models/material_usage');
 const { ObjectId } = require('mongoose').Types;
 const DiscountConfig = require('../models/discount');
+const Store = require('../models/store');
+const StoreStock = require('../models/store_stock');
+
 
 function customerTypeLabel(category) {
   const c = String(category || '').toLowerCase();
@@ -454,98 +457,95 @@ const selectionsForOrder = (pr.selections || []).map(s => ({
       console.error('Failed to attach handler to order', e);
     }
 
-    // -----------------------------
-// MATERIAL STOCK PRE-CHECK (BLOCK ORDER IF INSUFFICIENT)
-// Uses same matching logic as recording section.
-// Remaining = max(0, stocked - usedAggregate)
+// -----------------------------
+// MATERIAL STOCK PRE-CHECK (MULTI-STORE)
+// Only the OPERATIONAL store is consumable.
+// Track only materials added (active) in operational store.
 // -----------------------------
 try {
-  const mats = await Material.find().select('_id name stocked stock selections').lean();
-
-  // Helper (same as below)
-  function materialMatchesItem(matSelections, itemSelections) {
-    const itemSet = new Set((itemSelections || []).map(s => `${String(s.unit)}:${String(s.subUnit)}`));
-    for (const ms of (matSelections || [])) {
-      const key = `${String(ms.unit)}:${String(ms.subUnit)}`;
-      if (!itemSet.has(key)) return false;
-    }
-    return true;
+  const opStore = await Store.findOne({ isOperational: true }).lean();
+  if (!opStore) {
+    return res.status(409).json({
+      error: 'No operational store configured. Ask Admin to set an operational store in Stock dashboard.'
+    });
   }
 
-  // 1) Compute required counts per material for THIS order
-  const requiredByMaterial = new Map(); // materialId -> countNeeded
+  const opStocks = await StoreStock.find({ store: opStore._id, active: true })
+    .populate('material', '_id name selections')
+    .lean();
 
-  for (let idx = 0; idx < builtItems.length; idx++) {
-    const it = builtItems[idx];
-    const itemSelections = it.selections || [];
+  if (opStocks && opStocks.length) {
+    const requiredByMaterial = new Map(); // materialId -> needed
 
-    // Determine count like your recording logic
-    const pages = Number(it.pages) || 1;
-    const isFb = !!it.fb;
-    const baseCount = (!pages || pages <= 0) ? 1 : (isFb ? Math.ceil(pages / 2) : pages);
-
-    const spoiled = (it.spoiled !== undefined && it.spoiled !== null)
-      ? Math.floor(Number(it.spoiled) || 0)
-      : 0;
-
-    // ✅ apply factor for printing services (when printer exists on this item)
-    const factorMul = (it.printer && it.factor !== undefined && it.factor !== null)
-      ? Math.max(1, Math.floor(Number(it.factor) || 1))
-      : 1;
-
-    // ✅ count materials as sheets consumed = (baseCount + spoiled) × factor
-    const countNeeded = (Math.max(0, baseCount) + Math.max(0, spoiled)) * factorMul;
-
-    if (countNeeded <= 0) continue;
-
-    // match materials
-    for (const m of mats) {
-      if (!m.selections || !m.selections.length) continue;
-      if (!materialMatchesItem(m.selections, itemSelections)) continue;
-
-      const mid = String(m._id);
-      requiredByMaterial.set(mid, (requiredByMaterial.get(mid) || 0) + countNeeded);
-    }
-  }
-
-  // If no materials matched, nothing to check
-  if (requiredByMaterial.size) {
-    // 2) Load aggregates for just matched materials
-    const matIds = Array.from(requiredByMaterial.keys()).map(id => new mongoose.Types.ObjectId(id));
-    const aggDocs = await MaterialAggregate.find({ material: { $in: matIds } }).lean();
-    const aggMap = {};
-    aggDocs.forEach(a => { aggMap[String(a.material)] = Number(a.total || 0); });
-
-    // 3) Validate remaining
-    const blocks = [];
-
-    for (const m of mats) {
-      const mid = String(m._id);
-      if (!requiredByMaterial.has(mid)) continue;
-
-      const used = aggMap[mid] || 0;
-      const stocked =
-        (typeof m.stocked === 'number') ? Number(m.stocked) :
-        ((typeof m.stock === 'number') ? Number(m.stock) : 0);
-
-      const remaining = Math.max(0, stocked - used);
-      const need = requiredByMaterial.get(mid) || 0;
-
-      if (remaining <= 0) {
-        blocks.push(`"${m.name}" is out of stock (Remaining: 0). Contact admin to restock.`);
-      } else if (need > remaining) {
-        blocks.push(`"${m.name}" insufficient stock (Needed: ${need}, Remaining: ${remaining}). Contact admin to restock.`);
+    // cache source stock info
+    const stockInfo = new Map(); // materialId -> { name, stocked }
+    for (const st of opStocks) {
+      if (st && st.material && st.material._id) {
+        stockInfo.set(String(st.material._id), { name: st.material.name, stocked: Number(st.stocked || 0) });
       }
     }
 
-    if (blocks.length) {
-      // 409 is good for "conflict / stock changed"
-      return res.status(409).json({ error: 'Some materials in this order are out of stock, contact Admin to make stock adjustments at stock page', details: blocks });
+    // compute required needs
+    for (let idx = 0; idx < builtItems.length; idx++) {
+      const it = builtItems[idx];
+      const itemSelections = it.selections || [];
+
+      const pages = Number(it.pages) || 1;
+      const isFb = !!it.fb;
+      const baseCount = (!pages || pages <= 0) ? 1 : (isFb ? Math.ceil(pages / 2) : pages);
+
+      const spoiled = (it.spoiled !== undefined && it.spoiled !== null)
+        ? Math.floor(Number(it.spoiled) || 0)
+        : 0;
+
+      const factorMul = (it.printer && it.factor !== undefined && it.factor !== null)
+        ? Math.max(1, Math.floor(Number(it.factor) || 1))
+        : 1;
+
+      const countNeeded = (Math.max(0, baseCount) + Math.max(0, spoiled)) * factorMul;
+      if (countNeeded <= 0) continue;
+
+      for (const st of opStocks) {
+        const m = st.material;
+        if (!m || !m.selections || !m.selections.length) continue;
+
+        if (materialMatchesItem(m.selections, itemSelections)) {
+          const mid = String(m._id);
+          requiredByMaterial.set(mid, (requiredByMaterial.get(mid) || 0) + countNeeded);
+        }
+      }
+    }
+
+    if (requiredByMaterial.size) {
+      const matIds = Array.from(requiredByMaterial.keys()).map(id => new mongoose.Types.ObjectId(id));
+      const aggDocs = await MaterialAggregate.find({ store: opStore._id, material: { $in: matIds } }).lean();
+
+      const aggMap = {};
+      aggDocs.forEach(a => { aggMap[String(a.material)] = Number(a.total || 0); });
+
+      const blocks = [];
+      for (const [mid, need] of requiredByMaterial.entries()) {
+        const info = stockInfo.get(mid);
+        const stocked = info ? Number(info.stocked || 0) : 0;
+        const used = aggMap[mid] || 0;
+        const remaining = Math.max(0, stocked - used);
+
+        const name = info ? info.name : 'Material';
+        if (remaining <= 0) blocks.push(`"${name}" is out of stock in operational store (Remaining: 0).`);
+        else if (need > remaining) blocks.push(`"${name}" insufficient in operational store (Needed: ${need}, Remaining: ${remaining}).`);
+      }
+
+      if (blocks.length) {
+        return res.status(409).json({
+          error: 'Some materials in this order are out of stock in the operational store. Contact Admin to restock or transfer stock.',
+          details: blocks,
+          operationalStore: { _id: opStore._id, name: opStore.name }
+        });
+      }
     }
   }
 } catch (stockCheckErr) {
   console.error('Material stock pre-check error', stockCheckErr);
-  // If you want to be strict: block order on check failure
   return res.status(500).json({ error: 'Failed to verify material stock' });
 }
 
@@ -719,71 +719,64 @@ try {
         console.error('post-order regular update + SMS error', e);
       }
 
-    // --- MATERIAL MATCHING & RECORDING ---
-    try {
-      // load all materials (global + those scoped to services involved)
-      const serviceIds = Array.from(new Set(builtItems.map(it => String(it.service))));
-      const mats = await Material.find().lean();
+// --- MATERIAL MATCHING & RECORDING (OPERATIONAL STORE ONLY) ---
+try {
+  const opStore = await Store.findOne({ isOperational: true }).lean();
+  if (!opStore) {
+    // No operational store => no tracking
+    return;
+  }
 
-      function materialMatchesItem(matSelections, itemSelections) {
-        const itemSet = new Set((itemSelections || []).map(s => `${String(s.unit)}:${String(s.subUnit)}`));
-        for (const ms of (matSelections || [])) {
-          const key = `${String(ms.unit)}:${String(ms.subUnit)}`;
-          if (!itemSet.has(key)) return false;
-        }
-        return true;
-      }
+  const opStocks = await StoreStock.find({ store: opStore._id, active: true })
+    .populate('material', '_id selections')
+    .lean();
 
-      for (let idx = 0; idx < builtItems.length; idx++) {
-        const it = builtItems[idx];
-        const itemSelections = it.selections || [];
+  if (!opStocks.length) return;
 
-        for (const m of mats) {
-          if (!m.selections || !m.selections.length) continue;
-          if (materialMatchesItem(m.selections, itemSelections)) {
-            // Determine final count using pages & fb detection:
-        let pages = Number(it.pages) || 1;
+  for (let idx = 0; idx < builtItems.length; idx++) {
+    const it = builtItems[idx];
+    const itemSelections = it.selections || [];
+
+    for (const st of opStocks) {
+      const m = st.material;
+      if (!m || !m.selections || !m.selections.length) continue;
+
+      if (materialMatchesItem(m.selections, itemSelections)) {
+        const pages = Number(it.pages) || 1;
         const isFb = !!it.fb;
-
-        let baseCount;
-        if (!pages || pages <= 0) baseCount = 1;
-        else baseCount = isFb ? Math.ceil(pages / 2) : pages;
+        const baseCount = (!pages || pages <= 0) ? 1 : (isFb ? Math.ceil(pages / 2) : pages);
 
         const spoiled = (it.spoiled !== undefined && it.spoiled !== null)
           ? Math.floor(Number(it.spoiled) || 0)
           : 0;
 
-        // ✅ apply factor for printing services (when printer exists)
         const factorMul = (it.printer && it.factor !== undefined && it.factor !== null)
           ? Math.max(1, Math.floor(Number(it.factor) || 1))
           : 1;
 
-        // ✅ sheets consumed = (baseCount + spoiled) × factor
         const count = (Math.max(0, baseCount) + Math.max(0, spoiled)) * factorMul;
 
-            // create usage record
-            await MaterialUsage.create({
-              material: m._id,
-              orderId: order.orderId,
-              orderRef: order._id,
-              itemIndex: idx,
-              count
-            });
+        await MaterialUsage.create({
+          store: opStore._id,
+          material: m._id,
+          orderId: order.orderId,
+          orderRef: order._id,
+          itemIndex: idx,
+          count
+        });
 
-            // update aggregate total (atomic increment)
-            await MaterialAggregate.findOneAndUpdate(
-              { material: m._id },
-              { $inc: { total: count } },
-              { upsert: true, new: true }
-            );
-
-          }
-        }
+        await MaterialAggregate.findOneAndUpdate(
+          { store: opStore._id, material: m._id },
+          { $inc: { total: count } },
+          { upsert: true, new: true }
+        );
       }
-    } catch (matErr) {
-      // material recording failure should not block order creation, but we log it
-      console.error('Material matching/recording error', matErr);
     }
+  }
+} catch (matErr) {
+  console.error('Material matching/recording error', matErr);
+}
+
         // --- PRINTER USAGE RECORDING ---
 try {
   const PrinterUsage = require('../models/printer_usage');

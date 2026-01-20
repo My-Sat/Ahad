@@ -76,19 +76,35 @@ router.post('/service-categories', ensureAdmin, serviceCategoryController.create
 router.put('/service-categories/:id', ensureAdmin, serviceCategoryController.update);
 router.delete('/service-categories/:id', ensureAdmin, serviceCategoryController.remove);
 
-// Materials
+// ----------------------
+// Catalogue (Materials)
+// ----------------------
+router.get('/catalogue', ensureAdmin, materialsController.cataloguePage);
+
+// JSON catalogue endpoints (keep same /materials path so existing JS works easily)
+router.get('/materials', ensureAdmin, materialsController.listCatalogues);
+router.post('/materials', ensureAdmin, materialsController.createCatalogue);
+router.delete('/materials/:id', ensureAdmin, materialsController.removeCatalogue);
+
+// Materials for orders page (operational store only)
 router.get('/materials/for-orders', ensureHasPermission('/orders/new'), materialsController.listForOrders);
-router.get('/materials', ensureAdmin, materialsController.list);
-router.post('/materials', ensureAdmin, materialsController.create);
-router.delete('/materials/:id', ensureAdmin, materialsController.remove);
-// Set stocked value
-router.post('/materials/:id/stock', ensureAdmin, materialsController.setStock);
 
-// Stock page
-router.get('/stock', ensureAdmin, materialsController.stock);
+// ----------------------
+// Stores + Stock Dashboard
+// ----------------------
+router.get('/stock', ensureAdmin, materialsController.stockPage);
 
-// Simple API to adjust stock for a material (AJAX)
-router.post('/materials/:id/stock', ensureAdmin, materialsController.setStock);
+// stores
+router.get('/stores', ensureAdmin, materialsController.listStores);
+router.post('/stores', ensureAdmin, materialsController.createStore);
+router.post('/stores/:id/operational', ensureAdmin, materialsController.setOperationalStore);
+
+// store stock
+router.post('/stores/:storeId/stocks', ensureAdmin, materialsController.addStockToStore);
+router.post('/stores/:storeId/stocks/:stockId/adjust', ensureAdmin, materialsController.adjustStoreStock);
+router.post('/stores/:storeId/stocks/:stockId/transfer', ensureAdmin, materialsController.transferStoreStock);
+router.delete('/stores/:storeId/stocks/:stockId', ensureAdmin, materialsController.removeStockFromStore);
+router.get('/stores/:storeId/stocks/:stockId/activity', ensureAdmin, materialsController.stockActivity);
 
 // Printers
 router.get('/printers', ensureAdmin, printersController.list);
