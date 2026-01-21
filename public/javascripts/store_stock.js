@@ -39,6 +39,13 @@ document.addEventListener('DOMContentLoaded', function () {
   const activityMeta = document.getElementById('activityMeta');
   const activityTbody = document.getElementById('activityTbody');
 
+    // Operational confirm
+  const operationalConfirmModalEl = document.getElementById('operationalConfirmModal');
+  const operationalConfirmMessage = document.getElementById('operationalConfirmMessage');
+  const confirmSetOperationalBtn = document.getElementById('confirmSetOperationalBtn');
+  let pendingOperationalStoreId = null;
+
+
   // Remove confirm
   const deleteConfirmModalEl = document.getElementById('deleteConfirmModal');
   const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
@@ -60,20 +67,54 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // Set operational
-  if (setOperationalBtn) {
-    setOperationalBtn.addEventListener('click', async function () {
+  // Set operational (now requires confirmation)
+  if (setOperationalBtn && setOperationalBtn.dataset.bound !== '1') {
+    setOperationalBtn.dataset.bound = '1';
+
+    setOperationalBtn.addEventListener('click', function () {
       const sid = storeSelect ? storeSelect.value : '';
       if (!sid) return;
 
-      setOperationalBtn.disabled = true;
+      if (!operationalConfirmModalEl) {
+        // fallback if modal missing
+        if (confirm('Set this store as the operational store? Orders will consume stock from it.')) {
+          pendingOperationalStoreId = sid;
+          confirmSetOperationalBtn?.click();
+        }
+        return;
+      }
+
+      pendingOperationalStoreId = sid;
+
+      const storeName = storeSelect?.selectedOptions?.[0]?.textContent?.trim() || 'this store';
+      if (operationalConfirmMessage) {
+        operationalConfirmMessage.textContent =
+          `Set "${storeName}" as the operational store? Orders will consume stock from it.`;
+      }
+
+      bootstrap.Modal.getOrCreateInstance(operationalConfirmModalEl).show();
+    });
+  }
+
+    // Confirm set operational
+  if (confirmSetOperationalBtn && confirmSetOperationalBtn.dataset.bound !== '1') {
+    confirmSetOperationalBtn.dataset.bound = '1';
+
+    confirmSetOperationalBtn.addEventListener('click', async function () {
+      const sid = pendingOperationalStoreId;
+      if (!sid) return;
+
+      confirmSetOperationalBtn.disabled = true;
+
       try {
         const res = await fetch(`/admin/stores/${encodeURIComponent(sid)}/operational`, {
           method: 'POST',
           headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         const j = await res.json().catch(() => null);
+
         if (res.ok) {
+          bootstrap.Modal.getInstance(operationalConfirmModalEl)?.hide();
           showToast('Operational store updated', 1200);
           window.location.reload();
         } else {
@@ -83,10 +124,12 @@ document.addEventListener('DOMContentLoaded', function () {
         console.error(err);
         alert('Failed to set operational store');
       } finally {
-        setOperationalBtn.disabled = false;
+        confirmSetOperationalBtn.disabled = false;
+        pendingOperationalStoreId = null;
       }
     });
   }
+
 
   // Create store modal open
   if (openCreateStoreBtn && createStoreModalEl) {
