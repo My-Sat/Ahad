@@ -24,7 +24,15 @@ block content
               option(value='') No stores yet
 
         .col-12.col-md-3
-          button.btn.btn-primary.w-100(type='button', id='openCreateStoreBtn') Create Store
+          .d-grid.gap-2
+            button.btn.btn-primary(type='button', id='openCreateStoreBtn') Create Store
+            button.btn.btn-outline-light-custom(
+              type='button'
+              id='openManageStoreBtn'
+              disabled=(!selectedStore)
+            )
+              i.bi.bi-pencil-square.me-1
+              | Manage Store
 
         .col-12.col-md-4.text-md-end
           if operationalStore
@@ -152,6 +160,45 @@ block content
           button.btn.btn-primary(type='button', id='createStoreBtn')
             span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='createStoreSpinner')
             | Create
+
+    // Manage Store Modal
+  .modal.fade(id='manageStoreModal', tabindex='-1', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title.text-white Manage Store
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          input(type='hidden', id='editStoreId')
+          label.form-label.text-muted-light(for='editStoreName') Store name
+          input.form-control#editStoreName(type='text', placeholder='e.g. Main Store')
+          hr
+          p.text-muted-light.small.mb-2 Danger zone
+          button.btn.btn-outline-danger(type='button', id='openDeleteStoreBtn')
+            i.bi.bi-trash.me-1
+            | Delete this store
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary(type='button', id='saveStoreBtn')
+            span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='saveStoreSpinner')
+            | Save changes
+
+  // Delete Store Confirmation Modal
+  .modal.fade(id='deleteStoreConfirmModal', tabindex='-1', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title Confirm delete store
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body
+          p#deleteStoreConfirmMessage Delete this store?
+          p.text-muted.small.mb-0
+            | This will permanently remove the store and clear its stock items + related logs.
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-danger(type='button', id='confirmDeleteStoreBtn') Yes, delete store
+          
+
 
   // Adjust Modal
   .modal.fade(id='adjustStockModal', tabindex='-1', aria-hidden='true')

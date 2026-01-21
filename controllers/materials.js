@@ -195,6 +195,116 @@ exports.createStore = async (req, res) => {
   }
 };
 
+// Update store name (JSON)
+exports.updateStore = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid store id' });
+
+    const name = String(req.body.name || '').trim();
+    if (!name) return res.status(400).json({ error: 'Store name required' });
+
+    const st = await Store.findById(id);
+    if (!st) return res.status(404).json({ error: 'Store not found' });
+
+    // If name unchanged, return OK
+    if (String(st.name).trim().toLowerCase() === name.toLowerCase()) {
+      return res.json({ ok: true, store: { _id: st._id, name: st.name, isOperational: !!st.isOperational } });
+    }
+
+    // Check duplicate store name (case-insensitive)
+    const dup = await Store.findOne({
+      _id: { $ne: st._id },
+      name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+    }).lean();
+
+    if (dup) return res.status(409).json({ error: 'Another store already has this name' });
+
+    st.name = name;
+    await st.save();
+
+    return res.json({ ok: true, store: { _id: st._id, name: st.name, isOperational: !!st.isOperational } });
+  } catch (err) {
+    console.error('materials.updateStore error', err);
+    if (err && err.code === 11000) return res.status(409).json({ error: 'Store name already exists' });
+    return res.status(500).json({ error: 'Error updating store' });
+  }
+};
+
+// Delete store (JSON) — FULL cleanup: stocks + logs + aggregates + operational swap
+exports.deleteStore = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid store id' });
+
+    const st = await Store.findById(id).lean();
+    if (!st) return res.status(404).json({ error: 'Store not found' });
+
+    const storeCount = await Store.countDocuments({});
+    if (storeCount <= 1) {
+      return res.status(409).json({ error: 'You cannot delete the last store.' });
+    }
+
+    // Collect all stock items belonging to store
+    const stocks = await StoreStock.find({ store: id }).select('_id material').lean();
+    const stockIds = stocks.map(s => s._id);
+    const materialIds = stocks.map(s => s.material).filter(Boolean);
+
+    // ✅ delete logs for those stock items
+    if (stockIds.length) {
+      await StoreStockAdjustment.deleteMany({ stock: { $in: stockIds } });
+
+      // delete transfers referencing this store's stock items
+      await StoreStockTransfer.deleteMany({
+        $or: [
+          { fromStock: { $in: stockIds } },
+          { toStock: { $in: stockIds } },
+          // extra safety for older data
+          { fromStore: new mongoose.Types.ObjectId(id) },
+          { toStore: new mongoose.Types.ObjectId(id) }
+        ]
+      });
+    } else {
+      // still clear store-level transfers (older logs may not have fromStock/toStock)
+      await StoreStockTransfer.deleteMany({
+        $or: [
+          { fromStore: new mongoose.Types.ObjectId(id) },
+          { toStore: new mongoose.Types.ObjectId(id) }
+        ]
+      });
+    }
+
+    // ✅ delete operational consumption logs + aggregates for this store
+    try {
+      await MaterialUsage.deleteMany({ store: id });
+    } catch (e) {}
+    try {
+      await MaterialAggregate.deleteMany({ store: id });
+    } catch (e) {}
+
+    // ✅ delete the store stock rows
+    await StoreStock.deleteMany({ store: id });
+
+    // If it was operational, move operational flag to another store BEFORE deleting
+    if (st.isOperational) {
+      const replacement = await Store.findOne({ _id: { $ne: id } }).sort({ createdAt: -1 }).lean();
+      if (replacement) {
+        await Store.updateMany({}, { $set: { isOperational: false } });
+        await Store.findByIdAndUpdate(replacement._id, { $set: { isOperational: true } });
+      }
+    }
+
+    // ✅ delete store
+    await Store.findByIdAndDelete(id);
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('materials.deleteStore error', err);
+    return res.status(500).json({ error: 'Error deleting store' });
+  }
+};
+
+
 // Set operational store (JSON)
 exports.setOperationalStore = async (req, res) => {
   try {

@@ -98,6 +98,8 @@ router.get('/stock', ensureAdmin, materialsController.stockPage);
 router.get('/stores', ensureAdmin, materialsController.listStores);
 router.post('/stores', ensureAdmin, materialsController.createStore);
 router.post('/stores/:id/operational', ensureAdmin, materialsController.setOperationalStore);
+router.put('/stores/:id', ensureAdmin, materialsController.updateStore);
+router.delete('/stores/:id', ensureAdmin, materialsController.deleteStore);
 
 // store stock
 router.post('/stores/:storeId/stocks', ensureAdmin, materialsController.addStockToStore);
