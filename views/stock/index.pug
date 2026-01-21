@@ -12,6 +12,16 @@ block content
   // Store selector + create + operational
   .card.mb-3.dark-surface
     .card-body.dark-card-body
+
+      // Operational store status (top of card)
+      .d-flex.justify-content-end.mb-2
+        if operationalStore
+          .d-inline-flex.align-items-center.gap-2
+            span.text-muted-dark OPERATIONAL STORE:
+            span.badge.bg-info #{operationalStore.name}
+        else
+          span.badge.bg-warning.text-dark No operational store set
+
       .row.g-2.align-items-end
         .col-12.col-md-5
           label.form-label.text-muted-light(for='storeSelect') Select store
@@ -35,13 +45,7 @@ block content
               | Manage Store
 
         .col-12.col-md-4.text-md-end
-          if operationalStore
-            div.small.text-muted-light.mb-1 Operational store:
-            span.badge.bg-success #{operationalStore.name}
-          else
-            span.badge.bg-warning.text-dark No operational store set
-
-          button.btn.btn-outline-light-custom.ms-2(type='button', id='setOperationalBtn' disabled=(!selectedStore)) Set Selected as Operational
+          button.btn.btn-outline-light-custom(type='button', id='setOperationalBtn' disabled=(!selectedStore)) Set Selected as Operational
 
   // Store stock table
   .card.mb-4.dark-surface
