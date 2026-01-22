@@ -119,6 +119,17 @@ function makeOrderId() {
   return (Date.now().toString(36) + crypto.randomBytes(3).toString('hex')).slice(-10).toUpperCase();
 }
 
+// helper: subset match (material selections must be contained in item selections)
+function materialMatchesItem(matSelections, itemSelections) {
+  const itemSet = new Set((itemSelections || []).map(s => `${String(s.unit)}:${String(s.subUnit)}`));
+  for (const ms of (matSelections || [])) {
+    const key = `${String(ms.unit)}:${String(ms.subUnit)}`;
+    if (!itemSet.has(key)) return false;
+  }
+  return true;
+}
+
+
 // Render order creation page
 exports.newOrderPage = async (req, res) => {
   try {
