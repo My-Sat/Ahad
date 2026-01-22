@@ -72,63 +72,85 @@ exports.createCatalogue = async (req, res) => {
     if (!Array.isArray(selections) || selections.length === 0) {
       return res.status(400).json({ error: 'Selections must be a non-empty array' });
     }
-    if (!name || !String(name).trim()) return res.status(400).json({ error: 'Name required' });
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'Name required' });
+    }
 
     // validate and normalize selections
     const normalized = [];
     for (const s of selections) {
-      if (!s || !s.unit || !s.subUnit) return res.status(400).json({ error: 'Each selection must include unit and subUnit' });
+      if (!s || !s.unit || !s.subUnit) {
+        return res.status(400).json({ error: 'Each selection must include unit and subUnit' });
+      }
       if (!mongoose.Types.ObjectId.isValid(s.unit) || !mongoose.Types.ObjectId.isValid(s.subUnit)) {
         return res.status(400).json({ error: 'Invalid unit/subUnit id in selections' });
       }
+
+      // validate existence + relationship
       const unit = await ServiceCostUnit.findById(s.unit).lean();
       if (!unit) return res.status(400).json({ error: `Unit ${s.unit} not found` });
+
       const sub = await ServiceCostSubUnit.findById(s.subUnit).lean();
       if (!sub) return res.status(400).json({ error: `SubUnit ${s.subUnit} not found` });
-      if (sub.unit.toString() !== unit._id.toString()) {
+
+      if (String(sub.unit) !== String(unit._id)) {
         return res.status(400).json({ error: `SubUnit ${s.subUnit} does not belong to Unit ${s.unit}` });
       }
-      normalized.push({ unit: new mongoose.Types.ObjectId(s.unit), subUnit: new mongoose.Types.ObjectId(s.subUnit) });
+
+      normalized.push({
+        unit: new mongoose.Types.ObjectId(s.unit),
+        subUnit: new mongoose.Types.ObjectId(s.subUnit)
+      });
     }
 
     // compute stable key
-    const parts = normalized.map(s => `${s.unit.toString()}:${s.subUnit.toString()}`).sort();
+    const parts = normalized
+      .map(s => `${s.unit.toString()}:${s.subUnit.toString()}`)
+      .sort();
     const key = parts.join('|');
 
-    // only set fields on insert
     const filter = { key };
-    const update = {
-      $setOnInsert: {
-        name: String(name).trim(),
-        selections: normalized,
-        key
-      }
+    const insertDoc = {
+      name: String(name).trim(),
+      selections: normalized,
+      key
     };
-    const opts = { upsert: true, new: true, setDefaultsOnInsert: true, rawResult: true };
 
-    const raw = await Material.findOneAndUpdate(filter, update, opts);
+    // ✅ IMPORTANT:
+    // Avoid relying on findOneAndUpdate(rawResult/lastErrorObject) because Mongoose versions differ.
+    // updateOne() reliably exposes upsertedCount/upsertedId.
+    const r = await Material.updateOne(
+      filter,
+      { $setOnInsert: insertDoc },
+      { upsert: true }
+    );
 
-    let doc = null;
-    let wasInserted = false;
-    if (raw && raw.value !== undefined) {
-      doc = raw.value;
-      wasInserted = !!(raw.lastErrorObject && raw.lastErrorObject.upserted);
-    } else if (raw && raw._id) {
-      doc = raw;
-      wasInserted = false;
-    } else {
-      doc = await Material.findOne(filter).lean();
-      if (!doc) return res.status(500).json({ error: 'Unexpected error creating catalogue' });
-      wasInserted = false;
-    }
+    // Mongoose/Mongo driver versions return slightly different shapes; support all
+    const wasInserted =
+      (r && (
+        (typeof r.upsertedCount === 'number' && r.upsertedCount > 0) ||
+        (r.upsertedId != null) ||
+        (r.result && r.result.upserted) ||
+        (r.upserted && Array.isArray(r.upserted) && r.upserted.length > 0)
+      ));
 
     if (wasInserted) {
-      const populated = await Material.findById(doc._id).populate('selections.unit selections.subUnit').lean();
+      const populated = await Material.findOne(filter)
+        .populate('selections.unit selections.subUnit')
+        .lean();
+
       return res.status(201).json({ ok: true, material: populated });
     }
 
-    const existing = await Material.findOne(filter).populate('selections.unit selections.subUnit').lean();
-    return res.status(409).json({ error: 'A catalogue with this exact selection already exists', existing });
+    // Not inserted => it already exists
+    const existing = await Material.findOne(filter)
+      .populate('selections.unit selections.subUnit')
+      .lean();
+
+    return res.status(409).json({
+      error: 'A catalogue with this exact selection already exists',
+      existing
+    });
   } catch (err) {
     console.error('materials.createCatalogue error', err);
     if (err && err.code === 11000) {
