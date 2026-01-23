@@ -31,7 +31,7 @@ block content
                         - const labels = m.selections.map(s => (s.unit && s.unit.name ? s.unit.name + ': ' + (s.subUnit && s.subUnit.name ? s.subUnit.name : s.subUnit) : '')).filter(Boolean);
                         = labels.join(' + ')
                   td.text-center
-                    button.btn.btn-sm.btn-danger.delete-catalogue-btn(data-id=m._id type='button') Delete
+                    button.btn.btn-sm.btn-outline-danger.delete-catalogue-btn(data-id=m._id type='button') Delete
             else
               tr
                 td.text-muted(colspan='2') No catalogue items defined.
@@ -83,7 +83,7 @@ block content
           p.text-muted.small.mt-2 Deleting cannot be undone.
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
-          button.btn.btn-danger(type='button', id='confirmDeleteBtn') Yes, delete
+          button.btn.btn-outline-danger(type='button', id='confirmDeleteBtn') Yes, delete
 
 block append scripts
   script(src='/public/javascripts/catalogue.js')
