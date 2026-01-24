@@ -34,6 +34,16 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
   const debtorsCount = document.getElementById('debtorsCount');
   const fullPaymentModalEl = document.getElementById('fullPaymentConfirmModal');
   const fullPaymentModal = fullPaymentModalEl ? new bootstrap.Modal(fullPaymentModalEl) : null;
+  const debtorsSearchInput = document.getElementById('debtorsSearchInput');
+  const debtorsSearchClearBtn = document.getElementById('debtorsSearchClearBtn');
+
+  let debtorsSearchTimer = null;
+  const DEBTORS_SEARCH_DEBOUNCE = 220;
+
+  // cache last fetched debtors so we can filter locally too
+  let _debtorsCache = [];
+  let _debtorsLastQuery = '';
+
 
   const fullPaymentConfirmText = document.getElementById('fullPaymentConfirmText');
   const fullPaymentMethod = document.getElementById('fullPaymentMethod');
@@ -1179,13 +1189,15 @@ if (cashiersTable) {
   // each debtor row ideally: { orderId, debtorName, amountDue, paidSoFar, outstanding }
   // If you don't have this endpoint yet, the client will show a message. Implement server side to populate.
   // -------------------------
-  async function fetchDebtorsList() {
+async function fetchDebtorsList(q = '') {
     if (!debtorsTable || !debtorsCount) return;
     debtorsCount.textContent = 'Loading...';
     const tbody = debtorsTable.querySelector('tbody');
     if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">Loading...</td></tr>`;
     try {
-      const res = await fetch('/orders/debtors', { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+        const query = (q || '').toString().trim();
+        const url = '/orders/debtors' + (query ? ('?q=' + encodeURIComponent(query)) : '');
+        const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
       if (!res.ok) {
         const j = await res.json().catch(()=>null);
         const msg = (j && j.error) ? j.error : `Failed to fetch debtors (${res.status})`;
@@ -1200,14 +1212,41 @@ if (cashiersTable) {
         return;
       }
       const rows = j.debtors;
-      if (!rows.length) {
+      // cache for client-side filtering as fallback
+      _debtorsCache = Array.isArray(rows) ? rows.slice() : [];
+
+      // If backend doesn't support ?q=, still filter locally.
+      // We filter by debtorName, orderId, and any phone-like fields if present.
+      const qNorm = (query || '').toLowerCase().trim();
+      let filtered = rows;
+
+      if (qNorm) {
+        filtered = (rows || []).filter(d => {
+          const hay = [
+            d.debtorName,
+            d.orderId,
+            d.customerPhone,
+            d.phone,
+            d.customer && d.customer.phone,
+            d.customer && d.customer.firstName,
+            d.customer && d.customer.businessName
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+
+          return hay.includes(qNorm);
+        });
+      }
+
+      if (!filtered.length) {
         if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">No debtors found.</td></tr>`;
         debtorsCount.textContent = '0 results';
         return;
       }
 // -------- Group by debtor name --------
 const grouped = {};
-rows.forEach(d => {
+filtered.forEach(d => {
   const key = d.debtorName || 'Unknown';
   if (!grouped[key]) grouped[key] = [];
   grouped[key].push(d);
@@ -1311,7 +1350,7 @@ html += `
 });
 
       if (tbody) tbody.innerHTML = html;
-      debtorsCount.textContent = `${rows.length} result${rows.length > 1 ? 's' : ''}`;
+      debtorsCount.textContent = `${filtered.length} result${filtered.length > 1 ? 's' : ''}`;
     } catch (err) {
       console.error('fetch debtors err', err);
       if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">Network error while fetching debtors.</td></tr>`;
@@ -1319,12 +1358,55 @@ html += `
     }
   }
 
-  if (openDebtorsBtn) {
-    openDebtorsBtn.addEventListener('click', function () {
-      if (debtorsModal) debtorsModal.show();
-      fetchDebtorsList();
-    });
-  }
+  function scheduleDebtorsSearch() {
+  if (!debtorsSearchInput) return;
+
+  const q = debtorsSearchInput.value || '';
+  _debtorsLastQuery = q;
+
+  if (debtorsSearchTimer) clearTimeout(debtorsSearchTimer);
+  debtorsSearchTimer = setTimeout(() => {
+    fetchDebtorsList(q);
+  }, DEBTORS_SEARCH_DEBOUNCE);
+}
+
+if (debtorsSearchInput) {
+  debtorsSearchInput.addEventListener('input', scheduleDebtorsSearch);
+
+  // ESC clears
+  debtorsSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      debtorsSearchInput.value = '';
+      _debtorsLastQuery = '';
+      fetchDebtorsList('');
+    }
+  });
+}
+
+if (debtorsSearchClearBtn) {
+  debtorsSearchClearBtn.addEventListener('click', () => {
+    if (debtorsSearchInput) debtorsSearchInput.value = '';
+    _debtorsLastQuery = '';
+    fetchDebtorsList('');
+    try { debtorsSearchInput && debtorsSearchInput.focus(); } catch(e){}
+  });
+}
+
+
+if (openDebtorsBtn) {
+  openDebtorsBtn.addEventListener('click', function () {
+    if (debtorsModal) debtorsModal.show();
+
+    // reset search each time modal opens
+    if (debtorsSearchInput) debtorsSearchInput.value = '';
+    _debtorsLastQuery = '';
+
+    fetchDebtorsList('');
+
+    // focus for quick typing
+    setTimeout(() => { try { debtorsSearchInput && debtorsSearchInput.focus(); } catch(e){} }, 80);
+  });
+}
 
 // delegate click in debtors table - view order (open that order in the pay page)
 if (debtorsTable) {

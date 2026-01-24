@@ -1576,6 +1576,16 @@ exports.apiGetDebtors = async (req, res) => {
       console.warn('apiGetDebtors: could not determine user filter', e);
     }
 
+        const q = String(req.query.q || '').trim();
+
+    // Escape regex input to avoid regex injection / invalid patterns
+    function escapeRegex(s) {
+      return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    const qRegex = q ? new RegExp(escapeRegex(q), 'i') : null;
+
+
     // aggregate: compute paidSoFar and outstanding per order then filter outstanding > 0
     const pipeline = [
       // optionally restrict to orders for this user
@@ -1595,6 +1605,18 @@ exports.apiGetDebtors = async (req, res) => {
           foreignField: '_id',
           as: 'customer_doc'
       } },
+
+            // Pull customer phone (if customer exists) for phone search + display
+      { $addFields: {
+        customerPhone: {
+          $cond: [
+            { $gt: [ { $size: '$customer_doc' }, 0 ] },
+            { $let: { vars: { c: { $arrayElemAt: ['$customer_doc', 0] } }, in: { $ifNull: ['$$c.phone', ''] } } },
+            ''
+          ]
+        }
+      }},
+
 
       // derive a debtorName: prefer explicit order.customerName,
       // otherwise use customer_doc info (artist -> businessName|phone, else firstName|businessName|phone),
@@ -1639,6 +1661,19 @@ exports.apiGetDebtors = async (req, res) => {
           ]
         }
       }},
+
+            // Optional search filter: debtor name / phone / order id
+      ...(qRegex ? [{
+        $match: {
+          $or: [
+            { debtorName: { $regex: qRegex } },
+            { customerPhone: { $regex: qRegex } },
+            { orderId: { $regex: qRegex } },
+            { customerName: { $regex: qRegex } } // if you store it sometimes
+          ]
+        }
+      }] : []),
+
       // project fields useful for frontend
       { $project: {
           orderId: 1,
@@ -1646,6 +1681,7 @@ exports.apiGetDebtors = async (req, res) => {
           paidSoFar: 1,
           outstanding: 1,
           debtorName: 1,
+          customerPhone: 1,   // <-- add this
           createdAt: 1,
           status: 1
       } },
@@ -1660,6 +1696,7 @@ exports.apiGetDebtors = async (req, res) => {
     const out = (rows || []).map(r => ({
       orderId: r.orderId,
       debtorName: r.debtorName || '',
+      customerPhone: r.customerPhone || '',   // <-- add this
       amountDue: Number((r.total || 0).toFixed(2)),
       paidSoFar: Number((r.paidSoFar || 0).toFixed(2)),
       outstanding: Number((r.outstanding || 0).toFixed(2)),

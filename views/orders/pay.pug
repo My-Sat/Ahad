@@ -245,6 +245,19 @@ block content
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
         .modal-body.dark-card-body
           p.text-muted.small#debtorsCount Loading...
+                    // Search (filters by debtor/order id/phone)
+          .mb-2
+            .input-group.input-group-sm
+              span.input-group-text.bg-transparent.text-muted-light
+                i.bi.bi-search
+              input.form-control.form-control-sm.form-control-dark#debtorsSearchInput(
+                type='text',
+                placeholder='Search by debtor name / order id / phone...',
+                autocomplete='off'
+              )
+              button.btn.btn-outline-light-custom#debtorsSearchClearBtn(type='button') Clear
+            .small.text-muted-light.mt-1 Type to filter debtors as you type.
+
           .table-responsive
             table.table.table-sm.table-hover#debtorsTable
               thead
