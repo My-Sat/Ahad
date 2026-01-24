@@ -60,10 +60,37 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
   let currentOrderTotal = 0;
   let currentOrderStatus = null;
 
+  // --- NEW: customer account context for fetched order ---
+  let currentHasCustomer = false;
+  let currentCustomerId = null;
+  let currentCustomerBalance = 0;
+  let currentOutstanding = 0;
+
   // Helper: format money
   function fmt(n) {
     return Number(n).toFixed(2);
   }
+
+    function computeOutstanding(order) {
+    if (!order) return 0;
+
+    if (typeof order.outstanding !== 'undefined' && order.outstanding !== null) {
+      const o = Number(order.outstanding);
+      return isNaN(o) ? 0 : Number(o.toFixed(2));
+    }
+
+    let paid = 0;
+    if (order.payments && Array.isArray(order.payments)) {
+      order.payments.forEach(p => {
+        const a = Number(p.amount || 0);
+        if (!isNaN(a)) paid += a;
+      });
+    }
+
+    const out = Number((Number(order.total || 0) - paid).toFixed(2));
+    return isNaN(out) ? 0 : out;
+  }
+
 
   // Escape helper for safety
   function escapeHtml(s) {
@@ -268,6 +295,13 @@ function discountAppliedLabel(order) {
     currentOrderTotal = order.total;
     currentOrderStatus = order.status;
 
+        // reset customer/account state
+    currentHasCustomer = false;
+    currentCustomerId = null;
+    currentCustomerBalance = 0;
+    currentOutstanding = 0;
+
+
     let itemsHtml = '';
     if (order.items && order.items.length) {
       itemsHtml += `<div class="list-group mb-2">`;
@@ -373,18 +407,8 @@ function discountAppliedLabel(order) {
     }
 
 
-    // compute outstanding: prefer server-supplied, otherwise compute from payments
-    let outstanding = null;
-    if (typeof order.outstanding !== 'undefined' && order.outstanding !== null) {
-      outstanding = Number(order.outstanding);
-    } else {
-      // sum payments if present
-      let paid = 0;
-      if (order.payments && Array.isArray(order.payments)) {
-        order.payments.forEach(p => { const a = Number(p.amount || 0); if (!isNaN(a)) paid += a; });
-      }
-      outstanding = Number((Number(order.total || 0) - paid).toFixed(2));
-    }
+    const outstanding = computeOutstanding(order);
+    currentOutstanding = outstanding;
 
     // --- NEW: compute customer display text similar to views/orders/view.pug ---
     let customerDisplay = '';
@@ -402,6 +426,28 @@ function discountAppliedLabel(order) {
       }
     }
     // -----------------------------------------------------------------------
+
+        // --- NEW: customerId + balance (if customer object is populated) ---
+    let customerObj = null;
+    if (order.customer && typeof order.customer === 'object') {
+      customerObj = order.customer;
+    }
+
+    if (customerObj && customerObj._id) {
+      currentHasCustomer = true;
+      currentCustomerId = String(customerObj._id);
+      if (typeof customerObj.accountBalance !== 'undefined' && customerObj.accountBalance !== null) {
+        const b = Number(customerObj.accountBalance || 0);
+        currentCustomerBalance = isNaN(b) ? 0 : Number(b.toFixed(2));
+      }
+    } else if (order.customer && typeof order.customer === 'string') {
+      // if API returns only customer id (string)
+      currentHasCustomer = true;
+      currentCustomerId = String(order.customer);
+      // balance unknown unless backend includes it; UI will show 0.00
+      currentCustomerBalance = 0;
+    }
+
 
     // --- NEW: compute handler display (Handled By) if present ---
     let handlerDisplay = '';
@@ -443,6 +489,32 @@ if (hasDiscount) {
   `;
 }
 
+    const accountHtml = currentHasCustomer ? `
+      <div class="mt-3 p-2 rounded dark-surface" style="border:1px solid rgba(255,255,255,.12);">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <div class="small text-muted-light">Customer Account Balance</div>
+            <div class="text-white">
+              <strong id="custAccountBalance">GH₵ ${fmt(currentCustomerBalance)}</strong>
+            </div>
+          </div>
+
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="payFromAccountToggle">
+            <label class="form-check-label" for="payFromAccountToggle">Pay from account</label>
+          </div>
+        </div>
+
+        <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+          <button class="btn btn-sm btn-outline-light-custom" id="applyAccountBtn" type="button" disabled>
+            Apply account
+          </button>
+          <small class="text-muted-light" id="accountHint"></small>
+        </div>
+      </div>
+    ` : '';
+
+
     orderInfo.innerHTML = `
       ${ handlerDisplay ? `<p><strong>Handled by:</strong> ${escapeHtml(handlerDisplay)}</p>` : '' }
       ${ customerDisplay ? `<p><strong>Customer:</strong> ${escapeHtml(customerDisplay)}</p>` : '' }
@@ -451,8 +523,13 @@ if (hasDiscount) {
       ${itemsHtml}
       ${discountHtml}
       <p class="text-end"><strong>Total to pay: GH₵ ${fmt(order.total)}</strong></p>
-      ${ (outstanding !== null && outstanding > 0) ? `<p class="text-end"><strong>Remaining: GH₵ ${fmt(outstanding)}</strong></p>` : '' }
+      ${ (outstanding > 0) ? `<p class="text-end"><strong>Remaining: GH₵ ${fmt(outstanding)}</strong></p>` : '' }
+      ${accountHtml}
+      ${paymentsHtml}
     `;
+
+    bindCustomerAccountControls();
+
 
 
     // show payment controls only if not paid
@@ -481,6 +558,125 @@ if (hasDiscount) {
       partAmountInput && (partAmountInput.value = '');
     }
   }
+
+    function bindCustomerAccountControls() {
+    const toggle = document.getElementById('payFromAccountToggle');
+    const applyBtn = document.getElementById('applyAccountBtn');
+    const hint = document.getElementById('accountHint');
+
+    if (!toggle || !applyBtn) return;
+
+    function refreshState() {
+      const canApply =
+        !!toggle.checked &&
+        currentHasCustomer &&
+        !!currentCustomerId &&
+        Number(currentCustomerBalance || 0) > 0 &&
+        Number(currentOutstanding || 0) > 0 &&
+        currentOrderStatus !== 'paid';
+
+      applyBtn.disabled = !canApply;
+
+      if (hint) {
+        if (!currentHasCustomer) hint.textContent = '';
+        else if (Number(currentOutstanding || 0) <= 0) hint.textContent = 'No outstanding amount.';
+        else if (Number(currentCustomerBalance || 0) <= 0) hint.textContent = 'Customer has no account credit.';
+        else if (toggle.checked) hint.textContent = 'This will deduct from customer balance and reduce the remaining amount.';
+        else hint.textContent = 'Enable to deduct from customer balance.';
+      }
+    }
+
+    toggle.addEventListener('change', refreshState);
+
+    applyBtn.addEventListener('click', async function () {
+      if (!currentOrderId || !currentCustomerId) return;
+
+      // if Part Payment is ON, we interpret that as: customer is NOT necessarily topping up the rest
+      const mode = (partToggle && partToggle.checked) ? 'part' : 'auto';
+
+      await applyCustomerAccountToOrder(currentOrderId, currentCustomerId, mode);
+    });
+
+    refreshState();
+  }
+
+  async function applyCustomerAccountToOrder(orderId, customerId, mode) {
+    // IMPORTANT:
+    // You MUST implement this endpoint on backend (recommended):
+    // POST /orders/:orderId/pay-from-account
+    // body: { mode: 'auto'|'part' }
+    //
+    // expected response example:
+    // { ok:true, usedFromAccount: 10, newBalance: 5, outstanding: 40, status:'part-paid'|'paid' }
+
+    try {
+      const res = await fetch(`/orders/${encodeURIComponent(orderId)}/pay-from-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify({ mode })
+      });
+
+      const j = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        showAlertModal((j && j.error) ? j.error : 'Failed to apply account balance', 'Account payment error');
+        return;
+      }
+
+      // Update cached balance/outstanding from either response shape
+      if (j) {
+        // preferred (new) response
+        if (typeof j.newBalance !== 'undefined') {
+          const b = Number(j.newBalance || 0);
+          if (!isNaN(b)) currentCustomerBalance = Number(b.toFixed(2));
+        }
+        if (typeof j.outstanding !== 'undefined') {
+          const o = Number(j.outstanding || 0);
+          if (!isNaN(o)) currentOutstanding = Number(o.toFixed(2));
+        }
+
+        // fallback: old response { ok, order }
+        if (j.order) {
+          try {
+            const ob = j.order.customer && typeof j.order.customer === 'object'
+              ? Number(j.order.customer.accountBalance || 0)
+              : null;
+            if (ob !== null && !isNaN(ob)) currentCustomerBalance = Number(ob.toFixed(2));
+            currentOutstanding = computeOutstanding(j.order);
+          } catch (e) {}
+        }
+      }
+
+      const used =
+        (j && typeof j.usedFromAccount !== 'undefined') ? Number(j.usedFromAccount || 0) :
+        (j && j.order && j.order.payments && Array.isArray(j.order.payments))
+          ? null
+          : null;
+
+      if (used !== null) {
+        showAlertModal(
+          `Account applied: GH₵ ${fmt(used)}\nNew balance: GH₵ ${fmt(currentCustomerBalance)}\nRemaining: GH₵ ${fmt(currentOutstanding)}`,
+          'Account applied'
+        );
+      } else {
+        showAlertModal('Account applied successfully.', 'Account applied');
+      }
+
+      // If mode === 'part' and there is still outstanding, turn on part payment and prefill amount with outstanding
+      if (mode === 'part' && currentOutstanding > 0 && partToggle && partAmountInput) {
+        partToggle.checked = true;
+        partWrapper && (partWrapper.style.display = '');
+        partAmountInput.value = fmt(currentOutstanding);
+      }
+
+      // Refresh the order view so UI reflects new payments/status
+      await fetchOrderById(orderId);
+    } catch (err) {
+      console.error('applyCustomerAccountToOrder err', err);
+      showAlertModal('Network error while applying account', 'Network error');
+    }
+  }
+
 
   // Fetch order by id and render
   async function fetchOrderById(id) {
@@ -567,6 +763,21 @@ if (hasDiscount) {
         return;
       }
 
+            // If cashier enabled "Pay from account" but didn't click Apply,
+      // auto-apply once before continuing.
+      const payFromToggle = document.getElementById('payFromAccountToggle');
+      if (payFromToggle && payFromToggle.checked && currentHasCustomer && currentCustomerId
+          && Number(currentCustomerBalance || 0) > 0 && Number(currentOutstanding || 0) > 0) {
+        const mode = (partToggle && partToggle.checked) ? 'part' : 'auto';
+        await applyCustomerAccountToOrder(currentOrderId, currentCustomerId, mode);
+
+        // if order became paid after applying account, stop here
+        if (Number(currentOutstanding || 0) <= 0 || currentOrderStatus === 'paid') {
+          return;
+        }
+      }
+
+
       // validate fields depending on method & part payment
       const method = paymentMethodSel ? paymentMethodSel.value : 'cash';
       const isPart = partToggle ? !!partToggle.checked : false;
@@ -582,10 +793,12 @@ if (hasDiscount) {
           showAlertModal('Enter a valid part payment amount (> 0)', 'Invalid amount');
           return;
         }
-        // do not allow part payment larger than order total (basic guard)
-        if (partAmount > Number(currentOrderTotal)) {
-          showAlertModal('Part payment amount cannot exceed total', 'Invalid amount');
-          return;
+        // Overpayment is allowed ONLY when order has a customer (excess will be credited server-side)
+        if (!currentHasCustomer) {
+          if (partAmount > Number(currentOutstanding || currentOrderTotal || 0)) {
+            showAlertModal('Part payment amount cannot exceed the outstanding amount for walk-in orders.', 'Invalid amount');
+            return;
+          }
         }
       }
 
@@ -605,7 +818,14 @@ if (hasDiscount) {
       }
 
       // Confirm using modal
-      const confirmMsg = isPart ? `Record a part payment of GH₵ ${fmt(partAmount)} for order ${escapeHtml(currentOrderId)}?` : `Mark order ${escapeHtml(currentOrderId)} as paid?`;
+      let confirmMsg = isPart
+        ? `Record a payment of GH₵ ${fmt(partAmount)} for order ${escapeHtml(currentOrderId)}?`
+        : `Mark order ${escapeHtml(currentOrderId)} as paid?`;
+
+      if (isPart && currentHasCustomer && Number(partAmount) > Number(currentOutstanding || 0)) {
+        const excess = Number((Number(partAmount) - Number(currentOutstanding || 0)).toFixed(2));
+        confirmMsg += `\n\nExcess (GH₵ ${fmt(excess)}) will be credited to the customer's account.`;
+      }
       const ok = await showConfirmModal(confirmMsg, 'Confirm payment');
       if (!ok) return;
 
@@ -1322,8 +1542,16 @@ async function fetchCustomers() {
 
       const tr = document.createElement('tr');
 
+      const accountUrl = `/customers/${encodeURIComponent(c._id)}/account`;
+
       tr.innerHTML = `
-        <td>${escapeHtml(name)}</td>
+        <td>
+          <a class="text-white text-decoration-underline"
+             href="${accountUrl}"
+             title="Open customer account">
+            ${escapeHtml(name)}
+          </a>
+        </td>
         <td>${escapeHtml(c.phone || '')}</td>
         <td>
           <span class="badge bg-secondary">

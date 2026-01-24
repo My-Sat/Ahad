@@ -2,6 +2,7 @@
 const Customer = require('../models/customer');
 const Order = require('../models/order');
 const mongoose = require('mongoose');
+const CustomerAccountTxn = require('../models/customer_account_txn');
 
 /**
  * Render front desk page
@@ -259,5 +260,125 @@ exports.apiListCustomers = async (req, res) => {
   } catch (err) {
     console.error('apiListCustomers error', err);
     return res.status(500).json({ error: 'Failed to load customers' });
+  }
+};
+
+// GET /customers/:id/account
+exports.accountPage = async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.params.id).lean();
+    if (!customer) return res.status(404).send('Customer not found');
+
+    const txns = await CustomerAccountTxn.find({ customer: customer._id })
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
+
+    return res.render('customers/account', {
+      title: 'Customer Account',
+      customer,
+      txns
+    });
+  } catch (e) {
+    console.error('accountPage error', e);
+    return res.status(500).send('Server error');
+  }
+};
+
+// GET /customers/:id/account/api
+exports.apiGetAccount = async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.params.id).lean();
+    if (!customer) return res.status(404).json({ ok: false, error: 'Customer not found' });
+
+    const txns = await CustomerAccountTxn.find({ customer: customer._id })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+
+    return res.json({ ok: true, customer: { _id: customer._id, accountBalance: Number(customer.accountBalance || 0) }, txns });
+  } catch (e) {
+    console.error('apiGetAccount error', e);
+    return res.status(500).json({ ok: false, error: 'Server error' });
+  }
+};
+
+// POST /customers/:id/account/adjust { type: 'credit'|'debit', amount, note }
+exports.apiAdjustAccount = async (req, res) => {
+  let session = null;
+
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ ok: false, error: 'Invalid customer id' });
+    }
+
+    const type = String(req.body.type || '').toLowerCase().trim();
+    const rawAmount = Number(req.body.amount || 0);
+    const note = String(req.body.note || '').trim();
+
+    if (!['credit', 'debit'].includes(type)) {
+      return res.status(400).json({ ok: false, error: 'Invalid type' });
+    }
+    if (!rawAmount || isNaN(rawAmount) || rawAmount <= 0) {
+      return res.status(400).json({ ok: false, error: 'Enter a valid amount' });
+    }
+
+    const amount = Number(rawAmount.toFixed(2));
+
+    const recordedBy = req.user?._id || null;
+    const recordedByName = req.user?.name || req.user?.username || '';
+
+    session = await mongoose.startSession();
+    let updatedCustomer = null;
+
+    await session.withTransaction(async () => {
+      if (type === 'debit') {
+        updatedCustomer = await Customer.findOneAndUpdate(
+          { _id: id, accountBalance: { $gte: amount } },
+          { $inc: { accountBalance: -amount } },
+          { new: true, session }
+        );
+
+        if (!updatedCustomer) {
+          const e = new Error('Insufficient balance to debit');
+          e.statusCode = 400;
+          throw e;
+        }
+      } else {
+        updatedCustomer = await Customer.findByIdAndUpdate(
+          id,
+          { $inc: { accountBalance: amount } },
+          { new: true, session }
+        );
+
+        if (!updatedCustomer) {
+          const e = new Error('Customer not found');
+          e.statusCode = 404;
+          throw e;
+        }
+      }
+
+      await CustomerAccountTxn.create(
+        [{
+          customer: updatedCustomer._id,
+          type,
+          amount,
+          note,
+          recordedBy,
+          recordedByName
+        }],
+        { session }
+      );
+    });
+
+    return res.json({ ok: true, balance: Number(updatedCustomer.accountBalance || 0) });
+  } catch (e) {
+    console.error('apiAdjustAccount error', e);
+    if (e && e.statusCode) return res.status(e.statusCode).json({ ok: false, error: e.message });
+    return res.status(500).json({ ok: false, error: 'Server error' });
+  } finally {
+    try { if (session) session.endSession(); } catch (e) {}
   }
 };

@@ -40,4 +40,25 @@ router.delete(
 // API: search suggestions (for typeahead)
 router.get('/search', ensureHasPermission('/search'), customerController.apiSearch);
 
+// ✅ Customer account page (Admin use via Pay page customer modal)
+router.get(
+  '/:id/account',
+  ensureHasPermission('/customers'),
+  customerController.accountPage
+);
+
+// ✅ API: fetch account info
+router.get(
+  '/:id/account/api',
+  ensureHasPermission('/customers'),
+  customerController.apiGetAccount
+);
+
+// ✅ API: debit/credit customer account
+router.post(
+  '/:id/account/adjust',
+  ensureHasPermission('/customers'),
+  customerController.apiAdjustAccount
+);
+
 module.exports = router;

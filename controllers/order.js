@@ -4,6 +4,7 @@ const Service = require('../models/service');
 const ServicePrice = require('../models/service_price');
 const Order = require('../models/order');
 const Customer = require('../models/customer');
+const CustomerAccountTxn = require('../models/customer_account_txn');
 const Printer = require('../models/printer');
 const mongoose = require('mongoose');
 const Material = require('../models/material');
@@ -21,6 +22,115 @@ function customerTypeLabel(category) {
   if (c === 'organisation') return 'Organisation';
   return 'One-time';
 }
+
+function paidSoFar(order) {
+  const pays = order.payments || [];
+  return pays.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+}
+
+exports.apiPayFromCustomerAccount = async (req, res) => {
+  let session = null;
+
+  try {
+    const orderId = req.params.orderId;
+    const mode = (req.body && req.body.mode) ? String(req.body.mode).toLowerCase() : 'auto';
+
+    session = await mongoose.startSession();
+    let result = null;
+
+    await session.withTransaction(async () => {
+      const order = await Order.findOne({ orderId }).session(session);
+      if (!order) {
+        const e = new Error('Order not found');
+        e.statusCode = 404;
+        throw e;
+      }
+      if (!order.customer) {
+        const e = new Error('Order has no customer attached');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      const total = Number(order.total || 0);
+      const paid = (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const outstanding = Number((total - paid).toFixed(2));
+
+      if (outstanding <= 0) {
+        const e = new Error('Order already settled');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      const customer = await Customer.findById(order.customer).session(session);
+      if (!customer) {
+        const e = new Error('Customer not found');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      const bal = Number(customer.accountBalance || 0);
+      const apply = Number(Math.min(bal, outstanding).toFixed(2));
+
+      if (apply <= 0) {
+        const e = new Error('Customer account balance is 0.00');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      // debit customer
+      customer.accountBalance = Number((bal - apply).toFixed(2));
+      await customer.save({ session });
+
+      // ledger txn
+      await CustomerAccountTxn.create([{
+        customer: customer._id,
+        type: 'debit',
+        amount: apply,
+        note: `Paid order ${order.orderId} from account`,
+        recordedBy: req.user?._id || null,
+        recordedByName: req.user?.name || req.user?.username || ''
+      }], { session });
+
+      // record payment on order
+      order.payments = order.payments || [];
+      order.payments.push({
+        method: 'account',
+        amount: apply,
+        meta: { source: 'customer_account', mode },
+        note: 'Paid from customer account',
+        recordedBy: req.user?._id || null,
+        recordedByName: req.user?.name || req.user?.username || '',
+        createdAt: new Date()
+      });
+
+      const newPaid = paid + apply;
+      const newOutstanding = Number((total - newPaid).toFixed(2));
+
+      if (newOutstanding <= 0) {
+        order.status = 'paid';
+        order.paidAt = new Date();
+      }
+
+      await order.save({ session });
+
+      result = {
+        ok: true,
+        usedFromAccount: apply,
+        newBalance: Number(customer.accountBalance || 0),
+        outstanding: newOutstanding,
+        status: order.status
+      };
+    });
+
+    return res.json(result);
+  } catch (e) {
+    console.error('apiPayFromCustomerAccount error', e);
+    if (e && e.statusCode) return res.status(e.statusCode).json({ ok: false, error: e.message });
+    return res.status(500).json({ ok: false, error: 'Server error' });
+  } finally {
+    try { if (session) session.endSession(); } catch (e) {}
+  }
+};
 
 function buildThankYouSms(category) {
   const label = customerTypeLabel(category);
@@ -842,101 +952,155 @@ for (let idx = 0; idx < builtItems.length; idx++) {
 };
 
 // API: fetch order by orderId (returns order summary)
-// API: fetch order by orderId (returns order summary)
 exports.apiGetOrderById = async (req, res) => {
   try {
     const { orderId } = req.params;
     if (!orderId) return res.status(400).json({ error: 'No orderId provided' });
 
-    const order = await Order.findOne({ orderId }).lean();
+    // Pull raw order first (lean), then we enrich deliberately
+    const order = await Order.findOne({ orderId })
+      .lean();
+
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    // Populate printer names for items that reference a printer (keep existing behavior otherwise)
+    // -----------------------------
+    // Populate printer names for items that reference a printer
+    // Keep your old behavior (printer becomes name string),
+    // but ALSO preserve original id in printerId to avoid future breakage.
+    // -----------------------------
     try {
-      const printerIds = Array.from(new Set((order.items || []).filter(it => it.printer).map(it => String(it.printer))));
+      const printerIds = Array.from(
+        new Set((order.items || [])
+          .filter(it => it && it.printer)
+          .map(it => String(it.printer)))
+      );
+
       if (printerIds.length) {
-        const printers = await Printer.find({ _id: { $in: printerIds } }).select('_id name').lean();
+        const printers = await Printer.find({ _id: { $in: printerIds } })
+          .select('_id name')
+          .lean();
+
         const pmap = {};
         printers.forEach(p => { pmap[String(p._id)] = p.name || String(p._id); });
-        // replace item.printer (id) with printer name string for client convenience
+
         order.items = (order.items || []).map(it => {
-          if (it.printer) {
+          if (it && it.printer) {
             const pid = String(it.printer);
-            return Object.assign({}, it, { printer: (pmap[pid] || pid) });
+            return Object.assign({}, it, {
+              printerId: it.printer,               // preserve original id
+              printerName: pmap[pid] || pid,       // explicit name field
+              printer: (pmap[pid] || pid)          // keep existing behavior: replace printer with name string
+            });
           }
           return it;
         });
       }
     } catch (pErr) {
-      // If printer lookup fails, keep original ids (do not block response)
       console.error('Failed to populate printer names for order items', pErr);
+      // keep original values
     }
 
-    // Populate service names for order items
-try {
-  const serviceIds = Array.from(new Set(
-    (order.items || [])
-      .filter(it => it.service)
-      .map(it => String(it.service))
-  ));
+    // -----------------------------
+    // Populate service names for order items (unchanged, but safer)
+    // -----------------------------
+    try {
+      const serviceIds = Array.from(new Set(
+        (order.items || [])
+          .filter(it => it && it.service)
+          .map(it => String(it.service))
+      ));
 
-  if (serviceIds.length) {
-    const Service = require('../models/service');
-    const services = await Service.find({ _id: { $in: serviceIds } })
-      .select('_id name')
-      .lean();
+      if (serviceIds.length) {
+        const Service = require('../models/service');
+        const services = await Service.find({ _id: { $in: serviceIds } })
+          .select('_id name')
+          .lean();
 
-    const smap = {};
-    services.forEach(s => {
-      smap[String(s._id)] = s.name;
-    });
+        const smap = {};
+        services.forEach(s => { smap[String(s._id)] = s.name; });
 
-    order.items = (order.items || []).map(it => {
-      if (it.service) {
-        const sid = String(it.service);
-        return Object.assign({}, it, {
-          serviceName: smap[sid] || it.serviceName || 'Service'
+        order.items = (order.items || []).map(it => {
+          if (it && it.service) {
+            const sid = String(it.service);
+            return Object.assign({}, it, {
+              serviceName: smap[sid] || it.serviceName || 'Service'
+            });
+          }
+          return Object.assign({}, it, { serviceName: it?.serviceName || 'Service' });
         });
+      } else {
+        order.items = (order.items || []).map(it =>
+          Object.assign({}, it, { serviceName: it?.serviceName || 'Service' })
+        );
       }
-      return Object.assign({}, it, {
-        serviceName: it.serviceName || 'Service'
-      });
-    });
-  }
-} catch (sErr) {
-  console.error('Failed to populate service names for order items', sErr);
-  // ensure serviceName always exists
-  order.items = (order.items || []).map(it =>
-    Object.assign({}, it, { serviceName: it.serviceName || 'Service' })
-  );
-}
-
-
-    // Populate customer (if present)
-    let customerInfo = null;
-    if (order.customer) {
-      try {
-        const Customer = require('../models/customer');
-        const c = await Customer.findById(order.customer).select('_id firstName businessName phone category').lean();
-        if (c) {
-          customerInfo = c;
-        }
-      } catch (e) { console.error('Failed to populate customer', e); }
+    } catch (sErr) {
+      console.error('Failed to populate service names for order items', sErr);
+      order.items = (order.items || []).map(it =>
+        Object.assign({}, it, { serviceName: it?.serviceName || 'Service' })
+      );
     }
 
-    // --- Populate payments.recordedBy user objects if present ---
+    // -----------------------------
+    // Populate customer info (INCLUDING account balance)
+    // IMPORTANT: do not strip account fields like before
+    // -----------------------------
+    let customerInfo = null;
+    let customerAccountBalance = 0;
+
+    try {
+      const Customer = require('../models/customer');
+
+      // order.customer could be ObjectId, string, or already an object (depending on how it was created)
+      const customerId =
+        order.customer && typeof order.customer === 'object'
+          ? (order.customer._id ? String(order.customer._id) : String(order.customer))
+          : (order.customer ? String(order.customer) : null);
+
+      if (customerId) {
+        const c = await Customer.findById(customerId)
+          .select('_id firstName businessName phone category accountBalance creditBalance account')
+          .lean();
+
+        if (c) {
+          // Support multiple schema shapes
+          customerAccountBalance = Number(
+            c.accountBalance ??
+            c.account?.balance ??
+            c.creditBalance ??
+            0
+          ) || 0;
+
+          customerInfo = Object.assign({}, c, {
+            accountBalance: customerAccountBalance
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to populate customer', e);
+    }
+
+    // -----------------------------
+    // Populate payments.recordedBy user objects if present
+    // -----------------------------
     try {
       if (order.payments && Array.isArray(order.payments) && order.payments.length) {
-        const recIds = Array.from(new Set(order.payments
-          .filter(p => p && p.recordedBy)
-          .map(p => String(p.recordedBy))
-          .filter(Boolean)));
+        const recIds = Array.from(new Set(
+          order.payments
+            .filter(p => p && p.recordedBy)
+            .map(p => String(p.recordedBy))
+            .filter(Boolean)
+        ));
+
         if (recIds.length) {
           const User = require('../models/user');
-          const users = await User.find({ _id: { $in: recIds } }).select('_id name username').lean();
+          const users = await User.find({ _id: { $in: recIds } })
+            .select('_id name username')
+            .lean();
+
           const umap = {};
           users.forEach(u => { umap[String(u._id)] = u; });
-          order.payments = (order.payments || []).map(p => {
+
+          order.payments = order.payments.map(p => {
             if (p && p.recordedBy) {
               const id = String(p.recordedBy);
               const u = umap[id];
@@ -945,12 +1109,12 @@ try {
                 recordedByName: (p.recordedByName || (u && (u.name || u.username)) || '')
               });
             }
-            // ensure recordedByName exists even if no recordedBy id
-            return Object.assign({}, p, { recordedByName: (p.recordedByName || '') });
+            return Object.assign({}, p, { recordedByName: (p && p.recordedByName) ? p.recordedByName : '' });
           });
         } else {
-          // ensure every payment has recordedByName at least as an empty string for consistency
-          order.payments = (order.payments || []).map(p => Object.assign({}, p, { recordedByName: (p && p.recordedByName) ? p.recordedByName : '' }));
+          order.payments = order.payments.map(p =>
+            Object.assign({}, p, { recordedByName: (p && p.recordedByName) ? p.recordedByName : '' })
+          );
         }
       } else {
         order.payments = order.payments || [];
@@ -960,7 +1124,9 @@ try {
       order.payments = order.payments || [];
     }
 
-    // Compute payments summary (backwards-compatible: may be undefined)
+    // -----------------------------
+    // Compute payments summary
+    // -----------------------------
     let paidSoFar = 0;
     if (order.payments && Array.isArray(order.payments)) {
       for (const p of order.payments) {
@@ -968,48 +1134,69 @@ try {
         if (!isNaN(a)) paidSoFar += a;
       }
     }
-    // round to 2 decimals
     paidSoFar = Number(paidSoFar.toFixed(2));
-    const total = Number((order.total || 0));
+
+    const total = Number(order.total || 0);
     const outstanding = Number((total - paidSoFar).toFixed(2));
 
-    // Populate handler info if present
+    // -----------------------------
+    // Populate handler info (safe for id/object)
+    // -----------------------------
     let handlerInfo = null;
-    if (order.handledBy) {
-      try {
-        const User = require('../models/user');
-        const h = await User.findById(order.handledBy).select('_id name username').lean();
+    try {
+      const User = require('../models/user');
+      const handlerId =
+        order.handledBy && typeof order.handledBy === 'object'
+          ? (order.handledBy._id ? String(order.handledBy._id) : String(order.handledBy))
+          : (order.handledBy ? String(order.handledBy) : null);
+
+      if (handlerId) {
+        const h = await User.findById(handlerId).select('_id name username').lean();
         if (h) handlerInfo = h;
-      } catch (e) {
-        console.error('Failed to populate handler for apiGetOrderById', e);
       }
+    } catch (e) {
+      console.error('Failed to populate handler for apiGetOrderById', e);
     }
 
-    // return minimal data plus payments summary
-  return res.json({
-    ok: true,
-    order: {
-      orderId: order.orderId,
+    // -----------------------------
+    // Return minimal data plus payments summary + customer account balance
+    // -----------------------------
+    return res.json({
+      ok: true,
 
-      // totals
-      total: order.total,
+      // ✅ this helps orders_pay.js show balance reliably
+      customerAccountBalance: Number(customerAccountBalance.toFixed(2)),
 
-      // ✅ add discount fields needed by pay page
-      totalBeforeDiscount: order.totalBeforeDiscount,
-      discountAmount: order.discountAmount,
-      discountBreakdown: order.discountBreakdown,
+      order: {
+        orderId: order.orderId,
 
-      status: order.status,
-      items: order.items,
-      createdAt: order.createdAt,
-      paidAt: order.paidAt,
-      paidSoFar,
-      outstanding,
-      payments: order.payments || [],
-      customer: customerInfo,
-      handledBy: handlerInfo
-    }
-  });
+        // totals
+        total: order.total,
+
+        // discount fields needed by pay page
+        totalBeforeDiscount: order.totalBeforeDiscount,
+        discountAmount: order.discountAmount,
+        discountBreakdown: order.discountBreakdown,
+
+        status: order.status,
+        items: order.items || [],
+        createdAt: order.createdAt,
+        paidAt: order.paidAt,
+
+        paidSoFar,
+        outstanding,
+
+        payments: order.payments || [],
+
+        // ✅ customer now includes account balance
+        customer: customerInfo
+          ? Object.assign({}, customerInfo, { accountBalance: customerAccountBalance })
+          : null,
+
+        handledBy: handlerInfo
+      }
+    });
+
   } catch (err) {
     console.error('apiGetOrderById error', err);
     return res.status(500).json({ error: 'Error fetching order' });
@@ -1019,114 +1206,219 @@ try {
 // API: mark order paid (record payment)
 // POST /api/orders/:orderId/pay
 exports.apiPayOrder = async (req, res) => {
+  let session = null;
+
   try {
     const { orderId } = req.params;
     if (!orderId) return res.status(400).json({ error: 'No orderId provided' });
 
     // Accept JSON body for payment metadata:
-    // { paymentMethod, momoNumber, momoTxId, chequeNumber, partPayment (bool), partPaymentAmount (number), note }
+    // { paymentMethod, momoNumber, momoTxId, chequeNumber, partPayment (bool), partPaymentAmount (number), note, meta }
     const body = req.body || {};
-    const method = (body.paymentMethod || 'cash').toString().toLowerCase();
+    const rawMethod = (body.paymentMethod || 'cash').toString().toLowerCase().trim();
     const isPart = !!body.partPayment;
 
-    let amount = null;
+    // NOTE: "account" payments should go through /orders/:orderId/pay-from-account
+    if (rawMethod === 'account') {
+      return res.status(400).json({ error: 'Use "Pay from account" option for account payments.' });
+    }
+
+    // Normalize method (only allow these to be stored as-is)
+    const allowed = ['cash', 'momo', 'cheque', 'other'];
+    const method = allowed.includes(rawMethod) ? rawMethod : 'other';
+
+    // Determine received amount (what cashier typed / received physically)
+    // - If partPayment toggle is ON: must provide partPaymentAmount
+    // - If partPayment toggle is OFF: if partPaymentAmount provided, treat it as received (allows overpay for customers)
+    //   otherwise default to remaining outstanding (i.e. full settlement)
+    let receivedAmount = null;
+
     if (isPart) {
-      amount = Number(body.partPaymentAmount || 0);
-      if (isNaN(amount) || amount <= 0) {
+      receivedAmount = Number(body.partPaymentAmount || 0);
+      if (isNaN(receivedAmount) || receivedAmount <= 0) {
         return res.status(400).json({ error: 'Invalid part payment amount' });
       }
-    }
-
-    // Load order
-    const order = await Order.findOne({ orderId });
-    if (!order) return res.status(404).json({ error: 'Order not found' });
-
-    // Track if order was already fully paid before this request
-    const currentPaid = order.paidSoFar
-      ? order.paidSoFar()
-      : (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
-
-    const wasPaidAlready = (order.status === 'paid' && (Number(currentPaid) >= Number(order.total || 0)));
-
-    // If already fully paid, short-circuit
-    if (wasPaidAlready) {
-      return res.status(400).json({ error: 'Order already paid' });
-    }
-
-    // Determine payment amount to record
-    let toRecordAmount = 0;
-    if (isPart) {
-      toRecordAmount = Number(amount);
     } else {
-      // full payment: if client supplied partPaymentAmount treat it as amount, otherwise use remaining outstanding
-      if (body.partPaymentAmount) {
-        toRecordAmount = Number(body.partPaymentAmount);
-      } else {
-        const remaining = Number(order.total || 0) - Number(currentPaid || 0);
-        toRecordAmount = remaining > 0 ? remaining : 0;
+      if (body.partPaymentAmount !== undefined && body.partPaymentAmount !== null && String(body.partPaymentAmount).trim() !== '') {
+        receivedAmount = Number(body.partPaymentAmount);
+        if (isNaN(receivedAmount) || receivedAmount <= 0) {
+          return res.status(400).json({ error: 'Invalid payment amount' });
+        }
       }
+      // else we’ll set it after we compute outstanding (default full settlement)
     }
 
-    if (toRecordAmount <= 0) {
-      return res.status(400).json({ error: 'Payment amount must be greater than zero' });
-    }
+    // Start transaction (keeps order payment + customer credit atomic)
+    session = await mongoose.startSession();
+    let result = null;
 
-    // Build meta object for momo/cheque etc
-    const meta = {};
-    if (method === 'momo') {
-      if (body.momoNumber) meta.momoNumber = String(body.momoNumber);
-      if (body.momoTxId) meta.momoTxId = String(body.momoTxId);
-    } else if (method === 'cheque') {
-      if (body.chequeNumber) meta.chequeNumber = String(body.chequeNumber);
-    }
-    if (body.meta && typeof body.meta === 'object') {
-      Object.assign(meta, body.meta);
-    }
-
-    // Create payment record and push
-    const payment = {
-      method: ['cash', 'momo', 'cheque', 'other'].includes(method) ? method : 'other',
-      amount: Number(toRecordAmount),
-      meta,
-      note: body.note || (isPart ? 'part-payment' : 'full-payment'),
-      createdAt: new Date(),
-      recordedBy: null,
-      recordedByName: ''
-    };
-
-    try {
-      if (req.user && req.user._id) {
-        payment.recordedBy = new mongoose.Types.ObjectId(req.user._id);
-        payment.recordedByName = (req.user.name || req.user.username || '').toString();
+    await session.withTransaction(async () => {
+      // Load order inside the session
+      const order = await Order.findOne({ orderId }).session(session);
+      if (!order) {
+        // throw to abort transaction; we’ll return proper response outside
+        const e = new Error('Order not found');
+        e.statusCode = 404;
+        throw e;
       }
-    } catch (e) {
-      console.error('Failed to attach recordedBy to payment', e);
-    }
 
-    order.payments = order.payments || [];
-    order.payments.push(payment);
+      // Compute current paid + outstanding BEFORE this payment
+      const currentPaid = order.paidSoFar
+        ? order.paidSoFar()
+        : (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
 
-    // recompute paid so far
-    const newPaidSoFar = order.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    const outstanding = Number((Number(order.total || 0) - newPaidSoFar).toFixed(2));
+      const total = Number(order.total || 0);
+      const outstandingBefore = Number((total - Number(currentPaid || 0)).toFixed(2));
 
-    // If fully paid now, mark paid and set paidAt
-    let becamePaidNow = false;
-    if (outstanding <= 0) {
-      order.status = 'paid';
-      order.paidAt = new Date();
-      becamePaidNow = true;
-    }
+      const wasPaidAlready = (order.status === 'paid' && (Number(currentPaid) >= total));
+      if (wasPaidAlready || outstandingBefore <= 0) {
+        const e = new Error('Order already paid');
+        e.statusCode = 400;
+        throw e;
+      }
 
-    await order.save();
+      // Default received amount for “full payment” (no manual amount provided)
+      if (receivedAmount === null) {
+        receivedAmount = outstandingBefore;
+      }
 
-    // -----------------------------
-    // AUTO SMS ON PAY (dynamic)
+      if (!receivedAmount || isNaN(receivedAmount) || receivedAmount <= 0) {
+        const e = new Error('Payment amount must be greater than zero');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      // Overpayment rule:
+      // - If order has a customer: allow overpay and credit excess to customer account
+      // - If no customer: block overpay
+      const hasCustomer = !!order.customer;
+
+      let toRecordAmount = Number(receivedAmount);
+      let creditExcess = 0;
+
+      if (toRecordAmount > outstandingBefore) {
+        if (!hasCustomer) {
+          const e = new Error('Payment cannot exceed outstanding for walk-in orders');
+          e.statusCode = 400;
+          throw e;
+        }
+        creditExcess = Number((toRecordAmount - outstandingBefore).toFixed(2));
+        toRecordAmount = Number(outstandingBefore.toFixed(2));
+      }
+
+      // Basic guards
+      if (toRecordAmount <= 0) {
+        const e = new Error('Nothing to pay on this order');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      // Validate momo/cheque details if method needs them (light validation)
+      const meta = {};
+      if (method === 'momo') {
+        if (body.momoNumber) meta.momoNumber = String(body.momoNumber);
+        if (body.momoTxId) meta.momoTxId = String(body.momoTxId);
+      } else if (method === 'cheque') {
+        if (body.chequeNumber) meta.chequeNumber = String(body.chequeNumber);
+      }
+
+      // Attach extra meta
+      if (body.meta && typeof body.meta === 'object') Object.assign(meta, body.meta);
+
+      // Always store what was received + what was credited (if any)
+      meta.receivedAmount = Number(receivedAmount.toFixed(2));
+      if (creditExcess > 0) meta.creditExcess = Number(creditExcess.toFixed(2));
+
+      // Build note
+      const baseNote = String(body.note || (isPart ? 'part-payment' : 'full-payment')).trim();
+      const note =
+        creditExcess > 0
+          ? `${baseNote ? baseNote + ' — ' : ''}Overpayment credited: GH₵ ${creditExcess.toFixed(2)}`
+          : baseNote;
+
+      const payment = {
+        method,
+        amount: Number(toRecordAmount.toFixed(2)),
+        meta,
+        note,
+        createdAt: new Date(),
+        recordedBy: null,
+        recordedByName: ''
+      };
+
+      try {
+        if (req.user && req.user._id) {
+          payment.recordedBy = new mongoose.Types.ObjectId(req.user._id);
+          payment.recordedByName = (req.user.name || req.user.username || '').toString();
+        }
+      } catch (e) {
+        console.error('Failed to attach recordedBy to payment', e);
+      }
+
+      order.payments = order.payments || [];
+      order.payments.push(payment);
+
+      // Recompute after adding payment
+      const newPaidSoFar = order.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const outstandingAfter = Number((total - newPaidSoFar).toFixed(2));
+
+      let becamePaidNow = false;
+      if (outstandingAfter <= 0) {
+        order.status = 'paid';
+        order.paidAt = new Date();
+        becamePaidNow = true;
+      }
+
+      await order.save({ session });
+
+      // If overpayment and has customer, credit customer account + ledger record
+      if (creditExcess > 0 && hasCustomer) {
+        const customerId = order.customer; // ObjectId
+        const customer = await Customer.findById(customerId).session(session);
+        if (!customer) {
+          const e = new Error('Customer not found for overpayment credit');
+          e.statusCode = 400;
+          throw e;
+        }
+
+        const beforeBal = Number(customer.accountBalance || 0);
+        customer.accountBalance = Number((beforeBal + creditExcess).toFixed(2));
+        await customer.save({ session });
+
+        await CustomerAccountTxn.create(
+          [
+            {
+              customer: customer._id,
+              type: 'credit',
+              amount: Number(creditExcess.toFixed(2)),
+              note: `Overpayment credit from order ${order.orderId}`,
+              recordedBy: payment.recordedBy || null,
+              recordedByName: payment.recordedByName || ''
+            }
+          ],
+          { session }
+        );
+      }
+
+      result = {
+        ok: true,
+        orderId: order.orderId,
+        paidSoFar: Number(newPaidSoFar.toFixed(2)),
+        outstanding: Number(outstandingAfter.toFixed(2)),
+        status: order.status,
+        receivedAmount: Number(receivedAmount.toFixed(2)),
+        creditedToAccount: Number(creditExcess.toFixed(2)),
+        becamePaidNow,
+        // used by SMS logic after commit
+        _customerId: order.customer || null
+      };
+    });
+
+    // --- AUTO SMS ON PAY (dynamic) ---
     // only when this request transitions order -> paid
-    // -----------------------------
     try {
-      if (!wasPaidAlready && becamePaidNow && order.customer) {
-        const cust = await Customer.findById(order.customer)
+      if (result && result.ok && result.becamePaidNow && result._customerId) {
+        const cust = await Customer.findById(result._customerId)
           .select('_id phone category firstName businessName')
           .lean();
 
@@ -1136,18 +1428,12 @@ exports.apiPayOrder = async (req, res) => {
             cust,
             'pay',
             {
-              orderId: order.orderId,
-              amount: order.total,
-              totalBeforeDiscount: order.totalBeforeDiscount ?? '',
-              discountAmount: order.discountAmount ?? ''
+              orderId: result.orderId,
+              amount: undefined // keep template free; if you want, you can re-fetch order total here
             }
           );
 
-          // If disabled, do nothing
-          if (auto && auto.enabled === false) {
-            // no-op
-          } else {
-            // fallback if pay template empty
+          if (!(auto && auto.enabled === false)) {
             const fallback = 'Thank you for your payment. We appreciate doing business with you.';
             const msg = (auto && auto.content) ? String(auto.content) : fallback;
 
@@ -1162,16 +1448,21 @@ exports.apiPayOrder = async (req, res) => {
       console.error('Failed to send PAY auto SMS', smsErr);
     }
 
-    return res.json({
-      ok: true,
-      orderId: order.orderId,
-      paidSoFar: Number(newPaidSoFar.toFixed(2)),
-      outstanding: Number(outstanding.toFixed(2)),
-      status: order.status
-    });
+    // Cleanup extra internal field
+    if (result && result._customerId !== undefined) delete result._customerId;
+
+    return res.json(result || { ok: true });
   } catch (err) {
     console.error('apiPayOrder error', err);
+
+    // If we threw an error with a statusCode inside the transaction
+    if (err && err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message || 'Request failed' });
+    }
+
     return res.status(500).json({ error: 'Error paying order' });
+  } finally {
+    try { if (session) session.endSession(); } catch (e) {}
   }
 };
 

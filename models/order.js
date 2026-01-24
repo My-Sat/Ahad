@@ -31,12 +31,12 @@ const OrderItemSchema = new mongoose.Schema({
 }, { _id: false });
 
 const PaymentSchema = new mongoose.Schema({
-  method: { type: String, enum: ['cash', 'momo', 'cheque', 'other'], default: 'cash' },
+  // ✅ add 'account'
+  method: { type: String, enum: ['cash', 'momo', 'cheque', 'account', 'other'], default: 'cash' },
   amount: { type: Number, required: true },
-  // store optional metadata: momoNumber, momoTxId, chequeNumber, any free-form note
   meta: { type: mongoose.Schema.Types.Mixed, default: {} },
   note: { type: String, default: '' },
-   recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   recordedByName: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }
 }, { _id: true });

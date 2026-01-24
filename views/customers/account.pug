@@ -1,0 +1,71 @@
+extends ../layout
+
+block content
+  .container
+    .row.justify-content-center
+      .col-12.col-lg-10
+        .card.shadow-sm.dark-surface
+          .card-body.dark-card-body
+            .d-flex.justify-content-between.align-items-center.mb-3
+              h4.mb-0.text-white Customer Account
+              a.btn.btn-outline-light-custom.btn-sm(href='/orders/pay')
+                | Back to Pay
+
+            p.text-muted-light.mb-2
+              strong.text-white Customer:
+              |  #{customer.displayName || customer.phone}
+
+            p.text-muted-light.mb-3
+              strong.text-white Balance:
+              |  GH₵ 
+              span#acctBalance #{Number(customer.accountBalance || 0).toFixed(2)}
+
+            hr
+
+            .row.g-3
+              .col-md-6
+                h6.text-white Credit account
+                .input-group.mb-2
+                  input.form-control.form-control-dark(type='number', min='0.01', step='0.01', id='creditAmount', placeholder='Amount')
+                  button.btn.btn-success#creditBtn(type='button') Credit
+                input.form-control.form-control-dark#creditNote(type='text', placeholder='Note (optional)')
+
+              .col-md-6
+                h6.text-white Debit account
+                .input-group.mb-2
+                  input.form-control.form-control-dark(type='number', min='0.01', step='0.01', id='debitAmount', placeholder='Amount')
+                  button.btn.btn-danger#debitBtn(type='button') Debit
+                input.form-control.form-control-dark#debitNote(type='text', placeholder='Note (optional)')
+
+            hr
+
+            h6.text-white Transactions
+            .table-responsive
+              table.table.table-sm.table-hover
+                thead
+                  tr
+                    th Date
+                    th Type
+                    th.text-end Amount
+                    th Note
+                    th Recorded by
+                tbody#txnBody
+                  if txns && txns.length
+                    each t in txns
+                      - var dt = ''
+                      - try { dt = t.createdAt ? new Date(t.createdAt).toLocaleString() : '' } catch(e){ dt='' }
+                      tr
+                        td #{dt}
+                        td #{String(t.type || '').toUpperCase()}
+                        td.text-end GH₵ #{Number(t.amount || 0).toFixed(2)}
+                        td #{t.note || ''}
+                        td #{t.recordedByName || ''}
+                  else
+                    tr
+                      td.text-muted(colspan='5') No transactions yet.
+
+block append scripts
+  script.
+    window.__CUSTOMER_ID__ = "#{customer._id}";
+  script(src='/javascripts/customer_account.js')
+

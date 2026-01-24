@@ -67,4 +67,12 @@ router.get(
   orderController.apiGetOrderById
 );
 
+// ✅ Apply customer account to reduce outstanding (must be before /:orderId if you want)
+router.post(
+  '/:orderId/pay-from-account',
+  ensureHasPermission('/orders/:orderId/pay'),
+  orderController.apiPayFromCustomerAccount
+);
+
+
 module.exports = router;

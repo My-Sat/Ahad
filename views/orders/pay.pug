@@ -71,6 +71,18 @@ block content
 
                 // Payment controls (appear after order is fetched)
                 .mt-3#paymentControls(style='display:none;')
+                  // inside .mt-3#paymentControls (before Payment method selector is fine)
+                  #customerAccountControls.mb-3(style='display:none;')
+                    .d-flex.justify-content-between.align-items-center
+                      div
+                        div.small.text-muted-light Customer Account Balance:
+                        strong#customerAccountBalance GH₵ 0.00
+                      button.btn.btn-outline-light-custom.btn-sm#payFromAccountBtn(type='button')
+                        i.bi.bi-wallet2.me-1
+                        | Pay from account
+                    div.small.text-muted-light.mt-1
+                      | Uses available balance to reduce outstanding before payment.
+
                   // Payment method selector
                   .mb-2
                     label.form-label.mb-1(for='paymentMethod') Payment method
@@ -96,7 +108,7 @@ block content
                   // Part payment toggle and amount
                   .form-check.mb-2
                     input.form-check-input(type='checkbox', id='partPaymentToggle')
-                    label.form-check-label(for='partPaymentToggle') Part payment (manual amount)
+                    label.form-check-label(for='partPaymentToggle') Manual amount (Part payment / Overpay)
                   .mb-2#partPaymentAmountWrapper(style='display:none;')
                     label.form-label.mb-0(for='partPaymentAmount') Enter amount to pay now (GH₵)
                     input.form-control.form-control-sm.form-control-dark(type='number', id='partPaymentAmount', min='0.01', step='0.01', placeholder='Amount')
@@ -312,6 +324,6 @@ block content
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
 block append scripts
-  script(src='/public/javascripts/customer_editor.js')
-  script(src='/public/javascripts/customers_front.js')
-  script(src='/public/javascripts/orders_pay.js')
+  script(src='/javascripts/customer_editor.js')
+  script(src='/javascripts/customers_front.js')
+  script(src='/javascripts/orders_pay.js')
