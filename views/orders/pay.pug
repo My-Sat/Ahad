@@ -171,6 +171,20 @@ block content
         .modal-body.dark-card-body
           p.text-muted.small#customersCount Loading...
 
+                    // Search (filters by phone/name)
+          .mb-2
+            .input-group.input-group-sm
+              span.input-group-text.bg-transparent.text-muted-light
+                i.bi.bi-search
+              input.form-control.form-control-sm.form-control-dark#customersSearchInput(
+                type='text',
+                placeholder='Search by name or phone...',
+                autocomplete='off'
+              )
+              button.btn.btn-outline-light-custom#customersSearchClearBtn(type='button') Clear
+            .small.text-muted-light.mt-1 Type to filter customers by phone or name.
+
+
           .table-responsive
             table.table.table-hover.table-sm#customersTable
               thead

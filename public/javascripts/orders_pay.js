@@ -1499,15 +1499,27 @@ if (confirmFullPaymentBtn) {
 const customersModalEl = document.getElementById('customersModal');
 const customersModal = customersModalEl ? new bootstrap.Modal(customersModalEl) : null;
 const openCustomersBtn = document.getElementById('openCustomersBtn');
+const customersSearchInput = document.getElementById('customersSearchInput');
+const customersSearchClearBtn = document.getElementById('customersSearchClearBtn');
+
+let customersSearchTimer = null;
+const CUSTOMERS_SEARCH_DEBOUNCE = 220;
+
 
 if (openCustomersBtn) {
   openCustomersBtn.addEventListener('click', async () => {
     if (customersModal) customersModal.show();
-    await fetchCustomers();
+
+    // reset search each time modal opens
+    if (customersSearchInput) customersSearchInput.value = '';
+    await fetchCustomers('');
+
+    // focus cursor for quick search
+    setTimeout(() => { try { customersSearchInput && customersSearchInput.focus(); } catch(e){} }, 80);
   });
 }
 
-async function fetchCustomers() {
+async function fetchCustomers(q = '') {
   const tbody = document.querySelector('#customersTable tbody');
   const countEl = document.getElementById('customersCount');
 
@@ -1517,9 +1529,17 @@ async function fetchCustomers() {
   if (countEl) countEl.textContent = 'Loading...';
 
   try {
-    const res = await fetch('/customers/api/list', {
+    const query = (q || '').toString().trim();
+    const limit = query ? 200 : 200;
+
+    const url =
+      '/customers/api/list'
+      + `?limit=${encodeURIComponent(limit)}`
+      + (query ? `&q=${encodeURIComponent(query)}` : '');
+
+    const res = await fetch(url, {
       headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    }); 
+    });
 
     const j = await res.json().catch(() => null);
     if (!j || !j.ok || !Array.isArray(j.customers)) {
@@ -1541,7 +1561,6 @@ async function fetchCustomers() {
           : (c.firstName || '-');
 
       const tr = document.createElement('tr');
-
       const accountUrl = `/customers/${encodeURIComponent(c._id)}/account`;
 
       tr.innerHTML = `
@@ -1560,97 +1579,117 @@ async function fetchCustomers() {
         </td>
         <td>${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '-'}</td>
         <td class="text-center">
-          <button
-            type="button"
-            class="btn btn-sm btn-primary me-1 edit-customer-btn">
-            Edit
-          </button>
-          <button
-            type="button"
-            class="btn btn-sm btn-danger delete-customer-btn">
-            Delete
-          </button>
+          <button type="button" class="btn btn-sm btn-primary me-1 edit-customer-btn">Edit</button>
+          <button type="button" class="btn btn-sm btn-danger delete-customer-btn">Delete</button>
         </td>
       `;
 
-      // ---- EDIT HANDLER (clean + safe) ----
+      // edit
       const editBtn = tr.querySelector('.edit-customer-btn');
       if (editBtn) {
         editBtn.addEventListener('click', () => {
-          if (typeof openEditCustomerModal === 'function') {
-            openEditCustomerModal(c);
-          } else {
-            console.error('openEditCustomerModal is not defined');
+          if (typeof openEditCustomerModal === 'function') openEditCustomerModal(c);
+          else console.error('openEditCustomerModal is not defined');
+        });
+      }
+
+      // delete
+      const deleteBtn = tr.querySelector('.delete-customer-btn');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', async () => {
+          const nameLabel =
+            (c.category === 'artist' || c.category === 'organisation')
+              ? (c.businessName || c.phone)
+              : (c.firstName || c.phone);
+
+          const ok = confirm(
+            `Delete customer "${nameLabel}"?\n\nThis cannot be undone.\nCustomers with orders cannot be deleted.`
+          );
+          if (!ok) return;
+
+          deleteBtn.disabled = true;
+          deleteBtn.textContent = 'Deleting...';
+
+          try {
+            const res = await fetch(`/customers/${encodeURIComponent(c._id)}`, {
+              method: 'DELETE',
+              headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+
+            const j = await res.json().catch(() => null);
+            if (!res.ok) {
+              alert((j && j.error) ? j.error : 'Delete failed');
+              return;
+            }
+
+            // refresh current query
+            await fetchCustomers(customersSearchInput ? customersSearchInput.value : '');
+
+          } catch (err) {
+            console.error('delete customer error', err);
+            alert('Network error while deleting customer');
+          } finally {
+            deleteBtn.disabled = false;
+            deleteBtn.textContent = 'Delete';
           }
         });
       }
 
       tbody.appendChild(tr);
-
-      // ---- DELETE HANDLER (safe + confirmed) ----
-const deleteBtn = tr.querySelector('.delete-customer-btn');
-if (deleteBtn) {
-  deleteBtn.addEventListener('click', async () => {
-    const nameLabel =
-      (c.category === 'artist' || c.category === 'organisation')
-        ? (c.businessName || c.phone)
-        : (c.firstName || c.phone);
-
-    const ok = confirm(
-      `Delete customer "${nameLabel}"?\n\nThis cannot be undone.\nCustomers with orders cannot be deleted.`
-    );
-    if (!ok) return;
-
-    deleteBtn.disabled = true;
-    deleteBtn.textContent = 'Deleting...';
-
-    try {
-      const res = await fetch(`/customers/${encodeURIComponent(c._id)}`, {
-        method: 'DELETE',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-      });
-
-      const j = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        alert((j && j.error) ? j.error : 'Delete failed');
-        return;
-      }
-
-      // Refresh customers list
-      await fetchCustomers();
-
-    } catch (err) {
-      console.error('delete customer error', err);
-      alert('Network error while deleting customer');
-    } finally {
-      deleteBtn.disabled = false;
-      deleteBtn.textContent = 'Delete';
-    }
-  });
-}
-
     });
 
-    if (countEl) countEl.textContent = `${j.customers.length} customers`;
+    if (countEl) {
+      const label = query ? `Matches: ${j.customers.length}` : `${j.customers.length} customers`;
+      countEl.textContent = label;
+    }
 
   } catch (err) {
     console.error('fetchCustomers error', err);
     tbody.innerHTML = `
       <tr>
-        <td colspan="5" class="text-danger">
-          Failed to load customers
-        </td>
+        <td colspan="5" class="text-danger">Failed to load customers</td>
       </tr>
     `;
+    const countEl = document.getElementById('customersCount');
     if (countEl) countEl.textContent = 'Error';
   }
 }
 
+function scheduleCustomersSearch() {
+  if (!customersSearchInput) return;
+  const q = customersSearchInput.value || '';
+
+  if (customersSearchTimer) clearTimeout(customersSearchTimer);
+  customersSearchTimer = setTimeout(() => {
+    fetchCustomers(q);
+  }, CUSTOMERS_SEARCH_DEBOUNCE);
+}
+
+if (customersSearchInput) {
+  customersSearchInput.addEventListener('input', scheduleCustomersSearch);
+
+  // optional: press ESC to clear
+  customersSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      customersSearchInput.value = '';
+      fetchCustomers('');
+    }
+  });
+}
+
+if (customersSearchClearBtn) {
+  customersSearchClearBtn.addEventListener('click', () => {
+    if (customersSearchInput) customersSearchInput.value = '';
+    fetchCustomers('');
+    try { customersSearchInput && customersSearchInput.focus(); } catch(e){}
+  });
+}
+
+
 // Refresh customers list after edit
 document.addEventListener('customer:updated', async () => {
   if (customersModalEl && customersModalEl.classList.contains('show')) {
-    await fetchCustomers();
+    await fetchCustomers(customersSearchInput ? customersSearchInput.value : '');
   }
 });
 

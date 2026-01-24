@@ -245,14 +245,30 @@ exports.apiSearch = async (req, res) => {
 };
 
 
-/**
- * API: list all customers (admin only)
- * GET /api/customers
- */
 exports.apiListCustomers = async (req, res) => {
   try {
-    const customers = await Customer.find({})
+    const qRaw = (req.query.q || '').toString().trim();
+    const q = qRaw;
+
+    // safety caps (don’t allow someone to request 50k)
+    let limit = parseInt(req.query.limit, 10);
+    if (isNaN(limit) || limit <= 0) limit = 200;
+    limit = Math.min(limit, 500);
+
+    const filter = {};
+    if (q) {
+      const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(esc, 'i');
+      filter.$or = [
+        { phone: regex },
+        { firstName: regex },
+        { businessName: regex }
+      ];
+    }
+
+    const customers = await Customer.find(filter)
       .sort({ createdAt: -1 })
+      .limit(limit)
       .select('_id category firstName businessName phone createdAt')
       .lean();
 
