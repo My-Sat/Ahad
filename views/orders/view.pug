@@ -237,3 +237,6 @@ block content
 
             // Actions (record payment -> jumps to /orders/pay with id)
             .d-flex.justify-content-end.mt-3
+              - var orderIdEncoded = encodeURIComponent(order.orderId || '')
+              if outstanding > 0
+                a.btn.btn-sm.btn-primary(href=`/orders/pay?orderId=${orderIdEncoded}`) Update
