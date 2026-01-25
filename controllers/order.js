@@ -1201,6 +1201,89 @@ exports.apiGetOrderById = async (req, res) => {
     console.error('apiGetOrderById error', err);
     return res.status(500).json({ error: 'Error fetching order' });
   }
+  };
+
+// API: apply manual discount to existing order (admin only)
+exports.apiApplyManualDiscount = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    if (!orderId) return res.status(400).json({ error: 'No orderId provided' });
+
+    const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
+    if (!isAdmin) return res.status(403).json({ error: 'Admin access required' });
+
+    const order = await Order.findOne({ orderId });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    const hasDiscount = Number(order.discountAmount || 0) > 0;
+    if (hasDiscount) return res.status(400).json({ error: 'Order already has a discount applied' });
+
+    const mode = String(req.body?.mode || '').toLowerCase();
+    const value = Number(req.body?.value || 0);
+
+    if (!['amount', 'percent'].includes(mode)) {
+      return res.status(400).json({ error: 'Invalid discount mode' });
+    }
+    if (!isFinite(value) || value <= 0) {
+      return res.status(400).json({ error: 'Invalid discount value' });
+    }
+    if (mode === 'percent' && value > 100) {
+      return res.status(400).json({ error: 'Percentage discount cannot exceed 100%' });
+    }
+
+    const baseTotal =
+      (order.totalBeforeDiscount !== undefined && order.totalBeforeDiscount !== null)
+        ? Number(order.totalBeforeDiscount)
+        : Number(order.total || 0);
+
+    if (!isFinite(baseTotal) || baseTotal <= 0) {
+      return res.status(400).json({ error: 'Invalid order total' });
+    }
+
+    const discountAmount = computeDiscountAmount(baseTotal, { mode, value });
+    if (!isFinite(discountAmount) || discountAmount <= 0) {
+      return res.status(400).json({ error: 'Discount amount must be greater than zero' });
+    }
+
+    const paidSoFar = (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    const newTotal = Number(Math.max(0, baseTotal - discountAmount).toFixed(2));
+
+    if (newTotal < paidSoFar) {
+      return res.status(400).json({ error: 'Discount exceeds remaining balance' });
+    }
+
+    order.totalBeforeDiscount = Number(baseTotal.toFixed(2));
+    order.discountAmount = Number(discountAmount.toFixed(2));
+    order.discountBreakdown = {
+      scope: 'manual',
+      mode,
+      value,
+      computed: Number(discountAmount.toFixed(2)),
+      label: 'Manual discount'
+    };
+    order.total = newTotal;
+
+    const outstandingAfter = Number((newTotal - paidSoFar).toFixed(2));
+    if (outstandingAfter <= 0) {
+      order.status = 'paid';
+      if (!order.paidAt) order.paidAt = new Date();
+    }
+
+    await order.save();
+
+    return res.json({
+      ok: true,
+      orderId: order.orderId,
+      total: order.total,
+      totalBeforeDiscount: order.totalBeforeDiscount,
+      discountAmount: order.discountAmount,
+      discountBreakdown: order.discountBreakdown,
+      outstanding: outstandingAfter
+    });
+  } catch (err) {
+    console.error('apiApplyManualDiscount error', err);
+    return res.status(500).json({ error: 'Error applying discount' });
+  }
 };
 
 // API: mark order paid (record payment)

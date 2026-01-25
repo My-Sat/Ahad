@@ -8,6 +8,10 @@ document.addEventListener('DOMContentLoaded', function () {
   const dailyOrdersSelect = document.getElementById('dailyOrdersSelect');
   const orderInfo = document.getElementById('orderInfo');
   const payNowBtn = document.getElementById('payNowBtn');
+  const payManualDiscountCard = document.getElementById('payManualDiscountCard');
+  const payManualDiscountMode = document.getElementById('payManualDiscountMode');
+  const payManualDiscountValue = document.getElementById('payManualDiscountValue');
+  const applyManualDiscountBtn = document.getElementById('applyManualDiscountBtn');
 
   const openCashiersBtn = document.getElementById('openCashiersBtn');
 const cashiersModalEl = document.getElementById('cashiersModal');
@@ -76,10 +80,23 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
   let currentCustomerId = null;
   let currentCustomerBalance = 0;
   let currentOutstanding = 0;
+  let currentHasDiscount = false;
+  const isAdminUser = (typeof window._isAdmin !== 'undefined')
+    ? (window._isAdmin === true || window._isAdmin === 'true')
+    : false;
 
   // Helper: format money
   function fmt(n) {
     return Number(n).toFixed(2);
+  }
+
+  function setPayManualDiscountVisibility(show) {
+    if (!payManualDiscountCard) return;
+    payManualDiscountCard.style.display = show ? '' : 'none';
+    if (!show) {
+      if (payManualDiscountValue) payManualDiscountValue.value = '';
+      if (payManualDiscountMode) payManualDiscountMode.value = 'amount';
+    }
   }
 
   function isoDate(d) {
@@ -341,9 +358,11 @@ function discountAppliedLabel(order) {
       if (paymentControls) paymentControls.style.display = 'none';
       payNowBtn.style.display = 'none';
       payNowBtn.disabled = true;
+      setPayManualDiscountVisibility(false);
       currentOrderId = null;
       currentOrderTotal = 0;
       currentOrderStatus = null;
+      currentHasDiscount = false;
       return;
     }
 
@@ -487,17 +506,20 @@ function discountAppliedLabel(order) {
     }
     // ------------------------------------------------------------
 
-const hasDiscount = Number(order.discountAmount || 0) > 0;
+    const hasDiscount = Number(order.discountAmount || 0) > 0;
+    currentHasDiscount = hasDiscount;
+    const showManualDiscount = isAdminUser && !hasDiscount && order.status !== 'paid';
+    setPayManualDiscountVisibility(showManualDiscount);
 
-let discountHtml = '';
-if (hasDiscount) {
-  const before = (typeof order.totalBeforeDiscount !== 'undefined' && order.totalBeforeDiscount !== null)
-    ? Number(order.totalBeforeDiscount)
-    : Number(order.total || 0) + Number(order.discountAmount || 0);
+    let discountHtml = '';
+    if (hasDiscount) {
+      const before = (typeof order.totalBeforeDiscount !== 'undefined' && order.totalBeforeDiscount !== null)
+        ? Number(order.totalBeforeDiscount)
+        : Number(order.total || 0) + Number(order.discountAmount || 0);
 
-  const applied = discountAppliedLabel(order);
+      const applied = discountAppliedLabel(order);
 
-  discountHtml = `
+      discountHtml = `
     <div class="mt-2">
       <p class="text-end mb-1">
         <span class="text-muted">Discount Applied:</span>
@@ -513,7 +535,7 @@ if (hasDiscount) {
       </p>
     </div>
   `;
-}
+    }
 
     const accountHtml = currentHasCustomer ? `
       <div class="mt-3 p-2 rounded dark-surface" style="border:1px solid rgba(255,255,255,.12);">
@@ -699,6 +721,32 @@ if (hasDiscount) {
     } catch (err) {
       console.error('applyCustomerAccountToOrder err', err);
       showAlertModal('Network error while applying account', 'Network error');
+    }
+  }
+
+  async function applyManualDiscountToOrder(orderId, mode, value) {
+    try {
+      const res = await fetch(`/orders/${encodeURIComponent(orderId)}/discount`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({ mode, value })
+      });
+
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg = (j && j.error) ? j.error : 'Failed to apply discount';
+        showAlertModal(msg, 'Discount error');
+        return;
+      }
+
+      showAlertModal('Manual discount applied.', 'Discount');
+      await fetchOrderById(orderId);
+    } catch (err) {
+      console.error('applyManualDiscountToOrder err', err);
+      showAlertModal('Network error while applying discount', 'Network error');
     }
   }
 
@@ -1585,6 +1633,43 @@ if (confirmFullPaymentBtn) {
       const v = this.value || '';
       if (v && fetchOrderIdInput) {
         fetchOrderIdInput.value = v;
+      }
+    });
+  }
+
+  if (applyManualDiscountBtn) {
+    applyManualDiscountBtn.addEventListener('click', async function () {
+      if (!isAdminUser) return;
+      if (!currentOrderId) {
+        showAlertModal('Fetch an order before applying discount.', 'Missing order');
+        return;
+      }
+      if (currentHasDiscount) {
+        showAlertModal('This order already has a discount applied.', 'Discount');
+        return;
+      }
+
+      const mode = payManualDiscountMode ? payManualDiscountMode.value : 'amount';
+      const raw = payManualDiscountValue ? payManualDiscountValue.value : '';
+      const value = Number(raw);
+
+      if (!isFinite(value) || value <= 0) {
+        showAlertModal('Enter a valid discount value (> 0).', 'Discount');
+        return;
+      }
+      if (mode === 'percent' && value > 100) {
+        showAlertModal('Percentage discount cannot exceed 100%.', 'Discount');
+        return;
+      }
+
+      applyManualDiscountBtn.disabled = true;
+      const originalText = applyManualDiscountBtn.textContent;
+      applyManualDiscountBtn.textContent = 'Applying...';
+      try {
+        await applyManualDiscountToOrder(currentOrderId, mode, value);
+      } finally {
+        applyManualDiscountBtn.disabled = false;
+        applyManualDiscountBtn.textContent = originalText;
       }
     });
   }

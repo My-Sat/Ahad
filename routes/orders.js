@@ -53,6 +53,13 @@ router.post(
   orderController.apiPayBulkDebtor
 );
 
+// apply manual discount to order (admin only)
+router.post(
+  '/:orderId/discount',
+  ensureHasPermission('/orders/:orderId/discount'),
+  orderController.apiApplyManualDiscount
+);
+
 // pay single order (cashier)
 router.post(
   '/:orderId/pay',

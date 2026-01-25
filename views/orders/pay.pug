@@ -85,6 +85,20 @@ block content
                         | Pay from account
                     div.small.text-muted-light.mt-1
                       | Uses available balance to reduce outstanding before payment.
+                  if currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin'
+                    .card.mb-3.dark-surface#payManualDiscountCard(style='display:none;border:1px solid rgba(255,255,255,.08);')
+                      .card-body.dark-card-body.py-2
+                        .row.g-2.align-items-end
+                          .col-12.col-md-3
+                            label.form-label.mb-1(for='payManualDiscountMode') Discount mode
+                            select.form-select.form-select-sm.form-select-dark#payManualDiscountMode
+                              option(value='amount') Amount (GHâ‚µ)
+                              option(value='percent') Percent (%)
+                          .col-12.col-md-3
+                            label.form-label.mb-1(for='payManualDiscountValue') Value
+                            input.form-control.form-control-sm.form-control-dark#payManualDiscountValue(type='number', min='0', step='0.01', placeholder='e.g. 5 or 10')
+                          .col-12.col-md-6.d-flex.gap-2.justify-content-end
+                            button.btn.btn-sm.btn-outline-light-custom#applyManualDiscountBtn(type='button') Apply Discount
 
                   // Payment method selector
                   .mb-2
@@ -354,6 +368,8 @@ block content
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
 block append scripts
+  script.
+    window._isAdmin = !{JSON.stringify((typeof currentUser !== 'undefined' && currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin') ? true : false)};
   script(src='/javascripts/customer_editor.js')
   script(src='/javascripts/customers_front.js')
   script(src='/javascripts/orders_pay.js')
