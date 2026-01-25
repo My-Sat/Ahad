@@ -922,6 +922,10 @@ function addToCart({
   pricesList.addEventListener('click', async function (e) {
     const btn = e.target.closest('.apply-price-btn');
     if (!btn) return;
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+    try {
     const prId = btn.dataset.prId;
     const serviceId = serviceSelect ? serviceSelect.value : null;
     const priceObj = prices.find(p => String(p._id) === String(prId));
@@ -1068,6 +1072,10 @@ function addToCart({
     }
 
     if (typeof showGlobalToast === 'function') showGlobalToast('Added to cart', 1600);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
   });
 
   // remove from cart
