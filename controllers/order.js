@@ -1746,11 +1746,23 @@ exports.apiListOrders = async (req, res) => {
     // Query orders in range, newest first, limit to 1000 for safety
     const q = { createdAt: { $gte: start, $lte: end } };
 
+    const listScope = String(req.query.scope || '').toLowerCase();
+    const isPayScope = listScope === 'pay';
+
     // IMPORTANT: restrict list to current user unless admin
     try {
       const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
       if (!isAdmin && req.user && req.user._id) {
-        q.handledBy = new mongoose.Types.ObjectId(req.user._id);
+        if (isPayScope) {
+          const User = require('../models/user');
+          const admins = await User.find({ role: 'admin' }).select('_id').lean();
+          const adminIds = admins.map(a => a._id).filter(Boolean);
+          if (adminIds.length) {
+            q.handledBy = { $nin: adminIds };
+          }
+        } else {
+          q.handledBy = new mongoose.Types.ObjectId(req.user._id);
+        }
       }
       // If req.user is missing we fall back to existing behavior (no extra filter).
     } catch (e) {

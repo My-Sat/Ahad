@@ -60,6 +60,9 @@ block content
             form#fetchOrderForm(class='row g-2 mb-3', novalidate)
               .col
                 input.form-control.form-control-dark(type='text', id='fetchOrderId', placeholder='Order ID', required)
+              .col
+                select.form-select.form-select-dark(id='dailyOrdersSelect')
+                  option(value='') Select today's orders...
               .col-auto
                 button.btn.btn-primary(type='submit', id='fetchOrderBtn') Fetch
 

@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const fetchForm = document.getElementById('fetchOrderForm');
   const fetchOrderIdInput = document.getElementById('fetchOrderId');
   const fetchOrderBtn = document.getElementById('fetchOrderBtn');
+  const dailyOrdersSelect = document.getElementById('dailyOrdersSelect');
   const orderInfo = document.getElementById('orderInfo');
   const payNowBtn = document.getElementById('payNowBtn');
 
@@ -79,6 +80,51 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
   // Helper: format money
   function fmt(n) {
     return Number(n).toFixed(2);
+  }
+
+  function isoDate(d) {
+    const dt = d ? new Date(d) : new Date();
+    const yr = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yr}-${mm}-${dd}`;
+  }
+
+  async function loadDailyOrdersDropdown() {
+    if (!dailyOrdersSelect) return;
+
+    dailyOrdersSelect.innerHTML = '<option value="">Loading today\'s orders...</option>';
+
+    try {
+      const today = isoDate(new Date());
+      const url = `/orders/list?from=${encodeURIComponent(today)}&to=${encodeURIComponent(today)}&scope=pay`;
+      const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const j = await res.json().catch(() => null);
+
+      if (!res.ok || !j || !Array.isArray(j.orders)) {
+        throw new Error('Invalid response');
+      }
+
+      if (!j.orders.length) {
+        dailyOrdersSelect.innerHTML = '<option value="">No orders today</option>';
+        return;
+      }
+
+      const options = ['<option value="">Select today\'s orders...</option>'];
+      j.orders.forEach(o => {
+        const id = String(o.orderId || '').trim();
+        if (!id) return;
+        const name = String(o.name || '').trim();
+        const showName = name && name.toLowerCase() !== 'walk-in';
+        const label = showName ? `${name} — ${id}` : id;
+        options.push(`<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`);
+      });
+
+      dailyOrdersSelect.innerHTML = options.join('');
+    } catch (err) {
+      console.error('loadDailyOrdersDropdown error', err);
+      dailyOrdersSelect.innerHTML = '<option value="">Failed to load today\'s orders</option>';
+    }
   }
 
     function computeOutstanding(order) {
@@ -387,36 +433,6 @@ function discountAppliedLabel(order) {
 
     const statusLabel = order.status ? escapeHtml(order.status) : 'unknown';
 
-        // build payments HTML (if any) to show payment history and cashier names
-    let paymentsHtml = '';
-    if (order.payments && order.payments.length) {
-      paymentsHtml += `<div class="mt-3"><h6 class="mb-2">Payment History</h6><div class="list-group">`;
-      order.payments.forEach(pay => {
-        const dt = pay.createdAt ? new Date(pay.createdAt).toLocaleString() : '';
-        const method = (pay.method || 'unknown').toUpperCase();
-        const amount = Number(pay.amount || 0).toFixed(2);
-        // determine recorded by display
-        let recorder = '';
-        if (pay.recordedBy && typeof pay.recordedBy === 'object') {
-          recorder = pay.recordedBy.name || pay.recordedBy.username || '';
-        } else if (pay.recordedByName) {
-          recorder = pay.recordedByName;
-        }
-        paymentsHtml += `
-          <div class="list-group-item d-flex justify-content-between align-items-center">
-            <div>
-              <div><strong>${escapeHtml(method)}</strong> — ${escapeHtml(dt)}</div>
-              <div class="small text-muted">GH₵ ${escapeHtml(amount)}</div>
-              ${ recorder ? `<div class="small text-muted">Recorded by: ${escapeHtml(recorder)}</div>` : '' }
-            </div>
-            <div class="text-end small text-muted">${escapeHtml(pay.note || '')}</div>
-          </div>
-        `;
-      });
-      paymentsHtml += `</div></div>`;
-    }
-
-
     const outstanding = computeOutstanding(order);
     currentOutstanding = outstanding;
 
@@ -535,7 +551,6 @@ if (hasDiscount) {
       <p class="text-end"><strong>Total to pay: GH₵ ${fmt(order.total)}</strong></p>
       ${ (outstanding > 0) ? `<p class="text-end"><strong>Remaining: GH₵ ${fmt(outstanding)}</strong></p>` : '' }
       ${accountHtml}
-      ${paymentsHtml}
     `;
 
     bindCustomerAccountControls();
@@ -1563,6 +1578,16 @@ if (confirmFullPaymentBtn) {
 
   // Initial state
   renderOrderDetails(null);
+  loadDailyOrdersDropdown();
+
+  if (dailyOrdersSelect) {
+    dailyOrdersSelect.addEventListener('change', function () {
+      const v = this.value || '';
+      if (v && fetchOrderIdInput) {
+        fetchOrderIdInput.value = v;
+      }
+    });
+  }
 
   // at the end of orders_pay.js (after initial render)
 (function prefillFromQuery() {
