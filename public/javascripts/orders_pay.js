@@ -793,6 +793,12 @@ function discountAppliedLabel(order) {
       } finally {
         fetchOrderBtn.disabled = false;
         fetchOrderBtn.textContent = 'Fetch';
+        if (window.__FormSpinner && typeof window.__FormSpinner.hide === 'function') {
+          window.__FormSpinner.hide(fetchOrderBtn);
+        } else if (fetchOrderBtn) {
+          fetchOrderBtn.classList.remove('loading');
+          fetchOrderBtn.removeAttribute('data-spinner-active');
+        }
       }
     });
   }
