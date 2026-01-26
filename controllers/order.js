@@ -118,9 +118,58 @@ exports.apiPayFromCustomerAccount = async (req, res) => {
         usedFromAccount: apply,
         newBalance: Number(customer.accountBalance || 0),
         outstanding: newOutstanding,
-        status: order.status
+        status: order.status,
+        // used by SMS logic after commit
+        _customerId: order.customer || null,
+        _orderId: order.orderId,
+        _paymentAmount: Number(apply.toFixed(2)),
+        _totalBeforeDiscount: order.totalBeforeDiscount ?? null,
+        _discountAmount: order.discountAmount ?? null
       };
     });
+
+    // --- AUTO SMS ON PAY (dynamic) ---
+    try {
+      if (result && result.ok && result._customerId) {
+        const cust = await Customer.findById(result._customerId)
+          .select('_id phone category firstName businessName')
+          .lean();
+
+        if (cust && cust.phone) {
+          const messagingController = require('./messaging');
+          const auto = await messagingController.buildAutoMessageForCustomer(
+            cust,
+            'pay',
+            {
+              orderId: result._orderId,
+              amount: result._paymentAmount,
+              totalBeforeDiscount: result._totalBeforeDiscount ?? '',
+              discountAmount: result._discountAmount ?? '',
+              outstanding: result.outstanding
+            }
+          );
+
+          if (!(auto && auto.enabled === false)) {
+            const fallback = 'Thank you for your payment. We appreciate doing business with you.';
+            const msg = (auto && auto.content) ? String(auto.content) : fallback;
+
+            if (msg && msg.trim()) {
+              const { sendSms } = require('../utilities/hubtel_sms');
+              await sendSms({ to: cust.phone, content: msg });
+            }
+          }
+        }
+      }
+    } catch (smsErr) {
+      console.error('Failed to send PAY auto SMS (account)', smsErr);
+    }
+
+    // Cleanup extra internal fields
+    if (result && result._customerId !== undefined) delete result._customerId;
+    if (result && result._orderId !== undefined) delete result._orderId;
+    if (result && result._paymentAmount !== undefined) delete result._paymentAmount;
+    if (result && result._totalBeforeDiscount !== undefined) delete result._totalBeforeDiscount;
+    if (result && result._discountAmount !== undefined) delete result._discountAmount;
 
     return res.json(result);
   } catch (e) {
@@ -1492,15 +1541,16 @@ exports.apiPayOrder = async (req, res) => {
         receivedAmount: Number(receivedAmount.toFixed(2)),
         creditedToAccount: Number(creditExcess.toFixed(2)),
         becamePaidNow,
+        _totalBeforeDiscount: order.totalBeforeDiscount ?? null,
+        _discountAmount: order.discountAmount ?? null,
         // used by SMS logic after commit
         _customerId: order.customer || null
       };
     });
 
     // --- AUTO SMS ON PAY (dynamic) ---
-    // only when this request transitions order -> paid
     try {
-      if (result && result.ok && result.becamePaidNow && result._customerId) {
+      if (result && result.ok && result._customerId) {
         const cust = await Customer.findById(result._customerId)
           .select('_id phone category firstName businessName')
           .lean();
@@ -1512,7 +1562,10 @@ exports.apiPayOrder = async (req, res) => {
             'pay',
             {
               orderId: result.orderId,
-              amount: undefined // keep template free; if you want, you can re-fetch order total here
+              amount: result.receivedAmount,
+              totalBeforeDiscount: result._totalBeforeDiscount ?? '',
+              discountAmount: result._discountAmount ?? '',
+              outstanding: result.outstanding
             }
           );
 
@@ -1533,6 +1586,8 @@ exports.apiPayOrder = async (req, res) => {
 
     // Cleanup extra internal field
     if (result && result._customerId !== undefined) delete result._customerId;
+    if (result && result._totalBeforeDiscount !== undefined) delete result._totalBeforeDiscount;
+    if (result && result._discountAmount !== undefined) delete result._discountAmount;
 
     return res.json(result || { ok: true });
   } catch (err) {
