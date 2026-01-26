@@ -132,7 +132,7 @@ exports.apiPayFromCustomerAccount = async (req, res) => {
     try {
       if (result && result.ok && result._customerId) {
         const cust = await Customer.findById(result._customerId)
-          .select('_id phone category firstName businessName')
+          .select('_id phone category firstName businessName accountBalance')
           .lean();
 
         if (cust && cust.phone) {
@@ -846,7 +846,7 @@ try {
     let cust = updatedCustomer;
     if (!cust) {
       try {
-        cust = await Customer.findById(order.customer).select('_id phone category').lean();
+        cust = await Customer.findById(order.customer).select('_id phone category accountBalance').lean();
       } catch (e) {
         console.error('Failed to reload customer after order', String(order.customer), e);
       }
@@ -1552,7 +1552,7 @@ exports.apiPayOrder = async (req, res) => {
     try {
       if (result && result.ok && result._customerId) {
         const cust = await Customer.findById(result._customerId)
-          .select('_id phone category firstName businessName')
+          .select('_id phone category firstName businessName accountBalance')
           .lean();
 
         if (cust && cust.phone) {
@@ -1653,7 +1653,7 @@ exports.apiPayBulkDebtor = async (req, res) => {
       try {
         if (!wasPaidAlready && order.customer) {
           const cust = await Customer.findById(order.customer)
-            .select('_id phone category firstName businessName')
+            .select('_id phone category firstName businessName accountBalance')
             .lean();
 
           if (cust && cust.phone) {

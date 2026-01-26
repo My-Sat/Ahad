@@ -24,7 +24,7 @@ function categoryLabel(category) {
 function applyTemplate(template, ctx) {
   // Very small safe templating:
   // {name}, {category}, {phone}, {orderId}, {amount}, {totalBeforeDiscount}, {discountAmount},
-  // {outstanding}, {ordersCount}
+  // {outstanding}, {ordersCount}, {accBalance}
   let t = String(template || '');
   t = t.replaceAll('{name}', ctx.name || '');
   t = t.replaceAll('{category}', ctx.categoryLabel || '');
@@ -38,6 +38,7 @@ function applyTemplate(template, ctx) {
   // ✅ NEW: debtors placeholders
   t = t.replaceAll('{outstanding}', ctx.outstanding || '');
   t = t.replaceAll('{ordersCount}', ctx.ordersCount || '');
+  t = t.replaceAll('{accBalance}', ctx.accBalance || '');
 
   return t.trim();
 }
@@ -219,9 +220,9 @@ exports.apiSendManual = async (req, res) => {
     customers = await Customer.find({
         _id: { $in: ids },
         phone: { $exists: true, $ne: '' }
-    }).select('_id phone firstName businessName category').lean();
+    }).select('_id phone firstName businessName category accountBalance').lean();
     } else {
-    customers = await Customer.find(q).select('_id phone firstName businessName category').lean();
+    customers = await Customer.find(q).select('_id phone firstName businessName category accountBalance').lean();
     }
 
     const campaign = new MessageCampaign({
@@ -302,6 +303,9 @@ const ctx = {
     : '',
   ordersCount: (orderCtx && orderCtx.ordersCount !== undefined && orderCtx.ordersCount !== null)
     ? String(orderCtx.ordersCount)
+    : '',
+  accBalance: (customerDoc && customerDoc.accountBalance !== undefined && customerDoc.accountBalance !== null)
+    ? String(customerDoc.accountBalance)
     : ''
 };
 
@@ -410,7 +414,7 @@ exports.runDebtorsAutoCampaign = async function runDebtorsAutoCampaign() {
   const customers = await Customer.find({
     _id: { $in: ids },
     phone: { $exists: true, $ne: '' }
-  }).select('_id phone firstName businessName category').lean();
+  }).select('_id phone firstName businessName category accountBalance').lean();
 
   // map customer -> outstanding info
   const grpMap = {};
