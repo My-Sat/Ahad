@@ -203,7 +203,7 @@ exports.apiSendManual = async (req, res) => {
         { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
         // outstanding = total - paidSoFar
         { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
-        { $match: { outstanding: { $gt: 0 }, customer: { $ne: null } } },
+        { $match: { outstanding: { $gt: 0 }, customer: { $ne: null }, createdAt: { $lte: cutoff } } },
         { $group: { _id: '$customer' } }
     ];
 
@@ -366,6 +366,21 @@ function computeNextRun({ frequency, hour, minute }, now = new Date()) {
   return new Date(y, mo + 1, 1, h, m, 0, 0);
 }
 
+function computeDebtorsCutoff(frequency, now = new Date()) {
+  const freq = ['daily', 'weekly', 'monthly'].includes(String(frequency)) ? String(frequency) : 'weekly';
+  const cutoff = new Date(now);
+  if (freq === 'daily') {
+    cutoff.setHours(cutoff.getHours() - 24);
+    return cutoff;
+  }
+  if (freq === 'weekly') {
+    cutoff.setHours(cutoff.getHours() - (24 * 7));
+    return cutoff;
+  }
+  // monthly: treat as 30 days
+  cutoff.setHours(cutoff.getHours() - (24 * 30));
+  return cutoff;
+}
 exports.runDebtorsAutoCampaign = async function runDebtorsAutoCampaign() {
   const cfg = await MessagingConfig.findOne().sort({ updatedAt: -1 });
   if (!cfg || !cfg.auto || !cfg.auto.debtors) return { ok: true, skipped: true, reason: 'no-config' };
@@ -375,13 +390,15 @@ exports.runDebtorsAutoCampaign = async function runDebtorsAutoCampaign() {
   // disabled => no-op
   if (dc.enabled === false) return { ok: true, skipped: true, reason: 'disabled' };
 
+  const cutoff = computeDebtorsCutoff(dc.frequency, new Date());
+
   // Load debtors grouped by customer with total outstanding + count
   const Order = require('../models/order');
 
   const pipeline = [
     { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
     { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
-    { $match: { outstanding: { $gt: 0 }, customer: { $ne: null } } },
+    { $match: { outstanding: { $gt: 0 }, customer: { $ne: null }, createdAt: { $lte: cutoff } } },
     {
       $group: {
         _id: '$customer',
@@ -527,4 +544,6 @@ exports.schedulerTickDebtors = async function schedulerTickDebtors() {
     console.error('Debtors scheduler campaign error', e);
   }
 };
+
+
 
