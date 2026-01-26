@@ -28,7 +28,7 @@ block content
           label.form-label.text-muted-light(for="autoEventSelect") Auto event
           select.form-select.form-select-dark#autoEventSelect
             option(value="order" selected) Order (when order is placed)
-            option(value="pay") Pay (when order is fully paid)
+            option(value="pay") Pay (when order is fully/partially paid)
             option(value="debtors") Debtors (periodic reminders)
 
       // -------------------------
@@ -102,12 +102,12 @@ block content
               .card-body.dark-card-body
                 h5.mb-2.text-white Auto Message Settings — Pay
                 p.text-muted-light.small.mb-3
-                  | These messages are sent automatically when an order becomes fully paid.
+                  | These messages are sent automatically when an order becomes fully/partially paid.
 
                 .form-check.form-switch.mb-2
                   input.form-check-input(type="checkbox" id="pay_autoEnabled")
                   label.form-check-label.text-muted-light(for="pay_autoEnabled")
-                    | Enable auto SMS when an order is fully paid
+                    | Enable auto SMS when an order is fully/partially paid
 
                 .form-check.form-switch.mb-3
                   input.form-check-input(type="checkbox" id="pay_usePerType")
