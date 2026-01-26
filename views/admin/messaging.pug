@@ -255,6 +255,11 @@ block content
                 option(value="debtors") Debtors (customers with outstanding balance)
 
               label.form-label.text-muted-light.mt-2#manualCustomerTypeLabel Customer type
+              input.form-control.form-control-dark.mt-2#manualDebtorSearch(
+                type="text"
+                placeholder="Search debtors by name or phone..."
+                disabled
+              )
               select.form-select.form-select-dark#manualCustomerType(disabled)
                 option(value="one_time") One-time
                 option(value="regular") Regular

@@ -125,6 +125,8 @@ function toggleAutoSections() {
   // -------------------------
   // MANUAL
   // -------------------------
+  let cachedDebtors = [];
+
   function setSelectOptions(select, options) {
     if (!select) return;
     select.innerHTML = '';
@@ -136,21 +138,35 @@ function toggleAutoSections() {
     });
   }
 
+  function applyDebtorFilter(typeSel, searchTerm) {
+    const term = String(searchTerm || '').trim().toLowerCase();
+    const options = [{ value: '', label: 'All debtors' }];
+    const filtered = term
+      ? cachedDebtors.filter(d => {
+          const name = String(d.name || '').toLowerCase();
+          const phone = String(d.phone || '').toLowerCase();
+          return name.includes(term) || phone.includes(term);
+        })
+      : cachedDebtors;
+
+    filtered.forEach(d => {
+      const name = d.name || d.phone || 'Unknown';
+      const phone = d.phone ? ` (${d.phone})` : '';
+      const outstanding = d.outstanding ? ` - GHS ${d.outstanding}` : '';
+      options.push({ value: d.id, label: `${name}${phone}${outstanding}` });
+    });
+    setSelectOptions(typeSel, options);
+  }
+
   async function loadDebtorsList(typeSel) {
     if (!typeSel) return;
     setSelectOptions(typeSel, [{ value: '', label: 'Loading debtors...' }]);
     try {
       const j = await fetchJson('/admin/messaging/api/debtors', { method: 'GET' });
-      const list = (j && j.debtors) ? j.debtors : [];
-      const options = [{ value: '', label: 'All debtors' }];
-      list.forEach(d => {
-        const name = d.name || d.phone || 'Unknown';
-        const phone = d.phone ? ` (${d.phone})` : '';
-        const outstanding = d.outstanding ? ` - GHS ${d.outstanding}` : '';
-        options.push({ value: d.id, label: `${name}${phone}${outstanding}` });
-      });
-      setSelectOptions(typeSel, options);
+      cachedDebtors = (j && j.debtors) ? j.debtors : [];
+      applyDebtorFilter(typeSel, $('manualDebtorSearch') ? $('manualDebtorSearch').value : '');
     } catch (e) {
+      cachedDebtors = [];
       setSelectOptions(typeSel, [{ value: '', label: 'Failed to load debtors' }]);
     }
   }
@@ -159,7 +175,14 @@ function toggleAutoSections() {
     const targetSel = $('manualTarget');
     const typeSel = $('manualCustomerType');
     const typeLabel = $('manualCustomerTypeLabel');
+    let debtorSearch = $('manualDebtorSearch');
     if (!targetSel || !typeSel) return;
+
+    if (debtorSearch) {
+      const b = debtorSearch.cloneNode(true);
+      debtorSearch.parentNode.replaceChild(b, debtorSearch);
+      debtorSearch = b;
+    }
 
     const defaultOptions = Array.from(typeSel.options).map(o => ({
       value: o.value,
@@ -171,21 +194,42 @@ function toggleAutoSections() {
       const v = targetSel.value;
       if (v === 'customer_type') {
         if (typeLabel) typeLabel.textContent = defaultLabel;
+        if (debtorSearch) {
+          debtorSearch.value = '';
+          debtorSearch.disabled = true;
+          debtorSearch.style.display = 'none';
+        }
         typeSel.disabled = false;
         setSelectOptions(typeSel, defaultOptions);
         return;
       }
       if (v === 'debtors') {
         if (typeLabel) typeLabel.textContent = 'Debtor';
+        if (debtorSearch) {
+          debtorSearch.value = '';
+          debtorSearch.disabled = false;
+          debtorSearch.style.display = '';
+        }
         typeSel.disabled = false;
         await loadDebtorsList(typeSel);
         return;
       }
       if (typeLabel) typeLabel.textContent = defaultLabel;
+      if (debtorSearch) {
+        debtorSearch.value = '';
+        debtorSearch.disabled = true;
+        debtorSearch.style.display = 'none';
+      }
       typeSel.disabled = true;
       setSelectOptions(typeSel, defaultOptions);
     }
     targetSel.addEventListener('change', toggle);
+    if (debtorSearch) {
+      debtorSearch.addEventListener('input', function () {
+        if (targetSel.value !== 'debtors') return;
+        applyDebtorFilter(typeSel, debtorSearch.value);
+      });
+    }
     toggle();
   }
 
