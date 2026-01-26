@@ -125,14 +125,65 @@ function toggleAutoSections() {
   // -------------------------
   // MANUAL
   // -------------------------
+  function setSelectOptions(select, options) {
+    if (!select) return;
+    select.innerHTML = '';
+    options.forEach(opt => {
+      const el = document.createElement('option');
+      el.value = opt.value;
+      el.textContent = opt.label;
+      select.appendChild(el);
+    });
+  }
+
+  async function loadDebtorsList(typeSel) {
+    if (!typeSel) return;
+    setSelectOptions(typeSel, [{ value: '', label: 'Loading debtors...' }]);
+    try {
+      const j = await fetchJson('/admin/messaging/api/debtors', { method: 'GET' });
+      const list = (j && j.debtors) ? j.debtors : [];
+      const options = [{ value: '', label: 'All debtors' }];
+      list.forEach(d => {
+        const name = d.name || d.phone || 'Unknown';
+        const phone = d.phone ? ` (${d.phone})` : '';
+        const outstanding = d.outstanding ? ` - GHS ${d.outstanding}` : '';
+        options.push({ value: d.id, label: `${name}${phone}${outstanding}` });
+      });
+      setSelectOptions(typeSel, options);
+    } catch (e) {
+      setSelectOptions(typeSel, [{ value: '', label: 'Failed to load debtors' }]);
+    }
+  }
+
   function wireManualTarget() {
     const targetSel = $('manualTarget');
     const typeSel = $('manualCustomerType');
+    const typeLabel = $('manualCustomerTypeLabel');
     if (!targetSel || !typeSel) return;
 
-    function toggle() {
+    const defaultOptions = Array.from(typeSel.options).map(o => ({
+      value: o.value,
+      label: o.textContent || ''
+    }));
+    const defaultLabel = typeLabel ? (typeLabel.textContent || 'Customer type') : 'Customer type';
+
+    async function toggle() {
       const v = targetSel.value;
-      typeSel.disabled = (v !== 'customer_type');
+      if (v === 'customer_type') {
+        if (typeLabel) typeLabel.textContent = defaultLabel;
+        typeSel.disabled = false;
+        setSelectOptions(typeSel, defaultOptions);
+        return;
+      }
+      if (v === 'debtors') {
+        if (typeLabel) typeLabel.textContent = 'Debtor';
+        typeSel.disabled = false;
+        await loadDebtorsList(typeSel);
+        return;
+      }
+      if (typeLabel) typeLabel.textContent = defaultLabel;
+      typeSel.disabled = true;
+      setSelectOptions(typeSel, defaultOptions);
     }
     targetSel.addEventListener('change', toggle);
     toggle();
@@ -147,6 +198,7 @@ function toggleAutoSections() {
 
     const target = $('manualTarget') ? $('manualTarget').value : 'all';
     const customerType = $('manualCustomerType') ? $('manualCustomerType').value : 'one_time';
+    const debtorId = (target === 'debtors' && $('manualCustomerType')) ? $('manualCustomerType').value : '';
 
     const btn = $('sendManualBtn');
     const result = $('manualResult');
@@ -157,7 +209,7 @@ function toggleAutoSections() {
     try {
       const j = await fetchJson('/admin/messaging/api/send', {
         method: 'POST',
-        body: JSON.stringify({ message: msg, target, customerType })
+        body: JSON.stringify({ message: msg, target, customerType, debtorId })
       });
 
       if (result) {

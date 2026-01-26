@@ -46,6 +46,7 @@ const messagingController = require('../controllers/messaging');
 router.get('/messaging', ensureAdmin, messagingController.page);
 router.get('/messaging/api/config', ensureAdmin, messagingController.apiGetConfig);
 router.post('/messaging/api/config', ensureAdmin, messagingController.apiSaveConfig);
+router.get('/messaging/api/debtors', ensureAdmin, messagingController.apiGetDebtorsList);
 router.post('/messaging/api/send', ensureAdmin, messagingController.apiSendManual);
 
 

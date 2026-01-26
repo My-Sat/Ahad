@@ -170,12 +170,78 @@ exports.apiSaveConfig = async (req, res) => {
   }
 };
 
+exports.apiGetDebtorsList = async (req, res) => {
+  try {
+    const Order = require('../models/order');
+
+    const pipeline = [
+      { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
+      { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
+      { $match: { outstanding: { $gt: 0 }, customer: { $ne: null } } },
+      {
+        $group: {
+          _id: '$customer',
+          totalOutstanding: { $sum: '$outstanding' },
+          ordersCount: { $sum: 1 }
+        }
+      }
+    ];
+
+    const debtorGroups = await Order.aggregate(pipeline);
+    const ids = (debtorGroups || []).map(d => d?._id).filter(Boolean);
+
+    if (!ids.length) return res.json({ ok: true, debtors: [] });
+
+    const customers = await Customer.find({
+      _id: { $in: ids },
+      phone: { $exists: true, $ne: '' }
+    }).select('_id phone firstName businessName category').lean();
+
+    const grpMap = {};
+    debtorGroups.forEach(g => {
+      if (g && g._id) {
+        grpMap[String(g._id)] = {
+          outstanding: Number(g.totalOutstanding || 0).toFixed(2),
+          ordersCount: Number(g.ordersCount || 0)
+        };
+      }
+    });
+
+    const debtors = customers.map(c => {
+      const cat = normalizeCategory(c?.category);
+      const name = (cat === 'artist' || cat === 'organisation')
+        ? (c?.businessName || c?.firstName || c?.phone || '')
+        : (c?.firstName || c?.businessName || c?.phone || '');
+      const extra = grpMap[String(c._id)] || { outstanding: '0.00', ordersCount: 0 };
+      return {
+        id: String(c._id),
+        name,
+        phone: c?.phone ? String(c.phone) : '',
+        outstanding: String(extra.outstanding),
+        ordersCount: Number(extra.ordersCount || 0)
+      };
+    });
+
+    debtors.sort((a, b) => {
+      const byName = a.name.localeCompare(b.name);
+      if (byName !== 0) return byName;
+      return a.phone.localeCompare(b.phone);
+    });
+
+    return res.json({ ok: true, debtors });
+  } catch (e) {
+    console.error('apiGetDebtorsList error', e);
+    return res.status(500).json({ error: 'Failed to load debtors list' });
+  }
+};
+
 exports.apiSendManual = async (req, res) => {
   try {
     const body = req.body || {};
     const message = String(body.message || '').trim();
     const target = String(body.target || '').toLowerCase(); // all | customer_type
     const customerType = body.customerType ? String(body.customerType) : null;
+    const debtorId = body.debtorId ? String(body.debtorId) : null;
 
     if (!message) return res.status(400).json({ error: 'Message is required' });
     if (!['all', 'customer_type', 'debtors'].includes(target)) {
@@ -183,6 +249,9 @@ exports.apiSendManual = async (req, res) => {
     }
     if (target === 'customer_type' && !['one_time', 'regular', 'artist', 'organisation'].includes(String(customerType))) {
       return res.status(400).json({ error: 'Invalid customer type' });
+    }
+    if (target === 'debtors' && debtorId && !mongoose.Types.ObjectId.isValid(debtorId)) {
+      return res.status(400).json({ error: 'Invalid debtor selection' });
     }
 
     // Find recipients
@@ -193,36 +262,45 @@ exports.apiSendManual = async (req, res) => {
     let customers = [];
 
     if (target === 'debtors') {
-    // Debtors = customers who have at least one order with outstanding > 0
-    // We compute it from Orders (payments vs total), then map to customers.
+      // Debtors = customers who have at least one order with outstanding > 0
+      // We compute it from Orders (payments vs total), then map to customers.
+      const Order = require('../models/order');
 
-    const Order = require('../models/order');
+      const match = { outstanding: { $gt: 0 }, customer: { $ne: null } };
+      if (debtorId) match.customer = new mongoose.Types.ObjectId(debtorId);
 
-    const debtorPipeline = [
+      const debtorPipeline = [
         // paidSoFar = sum(payments.amount)
         { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
         // outstanding = total - paidSoFar
         { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
-        { $match: { outstanding: { $gt: 0 }, customer: { $ne: null }, createdAt: { $lte: cutoff } } },
+        { $match: match },
         { $group: { _id: '$customer' } }
-    ];
+      ];
 
-    const debtorCustomerIds = await Order.aggregate(debtorPipeline);
-    const ids = (debtorCustomerIds || [])
+      const debtorCustomerIds = await Order.aggregate(debtorPipeline);
+      const ids = (debtorCustomerIds || [])
         .map(d => d && d._id ? d._id : null)
         .filter(Boolean);
 
-    // If none, return empty campaign result quickly
-    if (!ids.length) {
+      // If none, return empty campaign result quickly
+      if (!ids.length) {
+        if (debtorId) {
+          return res.status(400).json({ error: 'Selected debtor has no outstanding balance' });
+        }
         return res.json({ ok: true, total: 0, success: 0, failed: 0 });
-    }
+      }
 
-    customers = await Customer.find({
+      customers = await Customer.find({
         _id: { $in: ids },
         phone: { $exists: true, $ne: '' }
-    }).select('_id phone firstName businessName category accountBalance').lean();
+      }).select('_id phone firstName businessName category accountBalance').lean();
+
+      if (debtorId && !customers.length) {
+        return res.status(400).json({ error: 'Selected debtor has no valid phone number' });
+      }
     } else {
-    customers = await Customer.find(q).select('_id phone firstName businessName category accountBalance').lean();
+      customers = await Customer.find(q).select('_id phone firstName businessName category accountBalance').lean();
     }
 
     const campaign = new MessageCampaign({
