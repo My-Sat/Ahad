@@ -164,9 +164,8 @@ exports.apiDeleteCustomer = async (req, res) => {
 
 /**
  * Helper: updateRegularStatus(customerId)
- * - Counts orders in the last 30 days for this customer
- * - If count >= 5 and customer is not an artist, set category='regular'
- * - If count < 5 and category === 'regular', revert to 'one_time' (so status remains accurate)
+ * - If count >= 5 in the last 30 days and customer is not an artist, set category='regular'
+ * - Regular status is maintained only if the customer has at least one order within the last 3 months
  *
  * safe, idempotent, and non-blocking when called
  */
@@ -174,36 +173,52 @@ exports.updateRegularStatus = async (customerId) => {
   if (!customerId) return null;
   try {
     if (!mongoose.Types.ObjectId.isValid(customerId)) return null;
-    // Do nothing if customer is artist (we must not convert artists)
+    // Do nothing if customer is artist/organisation (we must not convert them)
     const cust = await Customer.findById(customerId).exec();
     if (!cust) return null;
     if (cust.category === 'artist' || cust.category === 'organisation') return cust;
-    // compute 30-day window (now - 30 days)
+
     const now = new Date();
-    const since = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+    const since30Days = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+    const since3Months = new Date(now);
+    since3Months.setMonth(since3Months.getMonth() - 3);
 
-    // count orders for this customer with createdAt >= since
-const custObjectId = new mongoose.Types.ObjectId(customerId);
+    const custObjectId = new mongoose.Types.ObjectId(customerId);
 
-// Match orders in last 30 days even if createdAt is missing
-const count = await Order.countDocuments({
-  customer: custObjectId,
-  $or: [
-    { createdAt: { $gte: since } },
-    { createdAt: { $exists: false }, _id: { $gte: mongoose.Types.ObjectId.createFromTime(Math.floor(since.getTime() / 1000)) } }
-  ]
-}).exec();
+    // Count orders in last 30 days (fallback to _id time if createdAt missing)
+    const count = await Order.countDocuments({
+      customer: custObjectId,
+      $or: [
+        { createdAt: { $gte: since30Days } },
+        { createdAt: { $exists: false }, _id: { $gte: mongoose.Types.ObjectId.createFromTime(Math.floor(since30Days.getTime() / 1000)) } }
+      ]
+    }).exec();
 
-    // Decide new category
+    const lastOrder = await Order.findOne({ customer: custObjectId })
+      .sort({ createdAt: -1, _id: -1 })
+      .select('createdAt _id')
+      .lean();
+    const lastOrderAt = lastOrder
+      ? (lastOrder.createdAt || lastOrder._id.getTimestamp())
+      : null;
+
     const shouldBeRegular = (count >= 5);
 
     if (shouldBeRegular && cust.category !== 'regular') {
       cust.category = 'regular';
+      cust.regularSince = lastOrderAt || now;
       await cust.save();
       return cust;
-    } else if (!shouldBeRegular && cust.category === 'regular') {
-      // revert if previously regular but no longer meets criteria
-      cust.category = 'one_time';
+    }
+
+    if (cust.category === 'regular') {
+      if (lastOrderAt && lastOrderAt > (cust.regularSince || new Date(0))) {
+        cust.regularSince = lastOrderAt;
+      }
+      if (!lastOrderAt || lastOrderAt < since3Months) {
+        cust.category = 'one_time';
+        cust.regularSince = null;
+      }
       await cust.save();
       return cust;
     }

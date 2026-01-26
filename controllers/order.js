@@ -91,7 +91,7 @@ exports.apiPayFromCustomerAccount = async (req, res) => {
         recordedByName: req.user?.name || req.user?.username || ''
       }], { session });
 
-      // record payment on order
+      // record payment on order 
       order.payments = order.payments || [];
       order.payments.push({
         method: 'account',
@@ -723,6 +723,16 @@ try {
 // DISCOUNT (server-authoritative)
 // Priority: Manual (admin-only) > Auto rules
 // -----------------------------
+// Ensure regular status is up to date before computing discounts
+try {
+  if (order.customer) {
+    const customerController = require('./customer');
+    await customerController.updateRegularStatus(order.customer);
+  }
+} catch (e) {
+  console.error('pre-discount regular update failed', e);
+}
+
 const baseTotal = Number(total || 0);
 
 // 1) Manual discount (admin only)

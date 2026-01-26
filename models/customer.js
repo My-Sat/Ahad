@@ -11,6 +11,9 @@ const CustomerSchema = new mongoose.Schema({
   // ✅ NEW: customer wallet/account balance (cannot go negative)
   accountBalance: { type: Number, default: 0, min: 0 },
 
+  // Tracks regular status activity window (last order date while regular)
+  regularSince: { type: Date, default: null },
+
   createdAt: { type: Date, default: Date.now }
 });
 
