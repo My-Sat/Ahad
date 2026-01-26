@@ -540,10 +540,10 @@ const selectionsForOrder = (pr.selections || []).map(s => ({
   // Determine printer-type for this price rule (inspect populated subUnit names)
   let printerType = null;
   try {
-    // prefer 'colour' if any subunit contains 'colour' or 'color', otherwise 'monochrome' if present
+    // prefer 'colour' if any subunit indicates colour, otherwise monochrome if present
     const subs = (pr.selections || []).map(s => (s.subUnit && s.subUnit.name) ? String(s.subUnit.name) : '');
-    const hasColour = subs.some(n => /colour|color/i.test(n));
-    const hasMono = subs.some(n => /monochrome/i.test(n));
+    const hasColour = subs.some(n => /(colour|color|c\/l|\bcol\b)/i.test(n));
+    const hasMono = subs.some(n => /(monochrome|\bmono\b|black\s*and\s*white|b\/w)/i.test(n));
     if (hasColour) printerType = 'colour';
     else if (hasMono) printerType = 'monochrome';
   } catch (e) {
