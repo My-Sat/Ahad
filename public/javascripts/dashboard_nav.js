@@ -131,6 +131,10 @@ function setActiveTabByUrl(url) {
   function initializePage() {
     // wrap main content in nice card if not already
     const main = document.getElementById('main-content');
+    if (main) {
+      const wantsWide = !!main.querySelector('[data-main-width="wide"]');
+      main.classList.toggle('wide-content', wantsWide);
+    }
     if (main && !main.classList.contains('content-card')) {
       // optional: keep existing block, but wrap children in .content-card for nicer look
       // only add wrapper if not already present

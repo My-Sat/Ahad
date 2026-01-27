@@ -2,8 +2,9 @@ extends ../layout
 
 block content
   .container
-    .row.justify-content-center
-      .col-md-12
+    .d-none(data-main-width='wide')
+    .row
+      .col-12
         .card.shadow-sm.dark-surface
           .card-body.dark-card-body
             // My cashier summary (visible to cashier when logged in)
