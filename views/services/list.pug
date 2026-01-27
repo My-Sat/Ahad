@@ -378,6 +378,19 @@ block append scripts
             });
         }
 
+        function applyCategoryFilterLocal(id) {
+          const catId = id || '';
+          const rows = servicesTbody ? servicesTbody.querySelectorAll('tr') : [];
+          rows.forEach(r => {
+            const cat = r.dataset.category || '';
+            if (!catId) {
+              r.style.display = '';
+              return;
+            }
+            r.style.display = (cat && String(cat) === String(catId)) ? '' : 'none';
+          });
+        }
+
         const alreadyBound = serviceCategorySelect.dataset._catBound === '1';
         serviceCategorySelect.dataset._catBound = '1';
 
@@ -497,8 +510,12 @@ block append scripts
           if (!s && s !== 0) return '';
           return String(s).replace(/[&<>"'`=\/]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
         }
-
         // initial load + restore selection
+        if (preferredCategoryId || (serviceCategorySelect && serviceCategorySelect.value)) {
+          const immediateId = preferredCategoryId || (serviceCategorySelect ? serviceCategorySelect.value : '');
+          applyCategoryFilterLocal(immediateId || '');
+          if (serviceCategorySelect) serviceCategorySelect.value = immediateId || '';
+        }
         loadCategories().then(() => {
           const currentValue = preferredCategoryId || (serviceCategorySelect ? serviceCategorySelect.value : '');
           if (serviceCategorySelect) serviceCategorySelect.value = currentValue || '';
@@ -510,4 +527,5 @@ block append scripts
       initServiceCategories();
 
     })();
+
 
