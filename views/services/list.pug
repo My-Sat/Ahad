@@ -177,7 +177,9 @@ block content
           p.text-muted.small.mt-2 Deleting cannot be undone.
         .modal-footer
           button.btn.btn-outline-light-custom(type='button', data-bs-dismiss='modal') Cancel
-          button.btn.btn-danger(type='button', id='confirmDeleteBtn') Yes, delete
+          button.btn.btn-danger(type='button', id='confirmDeleteBtn')
+            span.spinner-border.spinner-border-sm.me-2(role='status', aria-hidden='true', style='display:none;', id='deleteConfirmSpinner')
+            | Yes, delete
 
   // Hidden delete form used by modal
   form#hiddenDeleteForm(method='post', action='', style='display:none;')

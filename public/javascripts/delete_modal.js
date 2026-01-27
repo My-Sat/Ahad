@@ -29,6 +29,26 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Confirm button action
   const confirmBtn = document.getElementById('confirmDeleteBtn');
+  const confirmSpinner = document.getElementById('deleteConfirmSpinner');
+  const confirmBtnLabel = confirmBtn ? confirmBtn.textContent : '';
+  function setConfirmLoading(loading) {
+    if (!confirmBtn) return;
+    if (confirmSpinner) confirmSpinner.style.display = loading ? 'inline-block' : 'none';
+    if (loading) {
+      confirmBtn.disabled = true;
+      confirmBtn.setAttribute('aria-disabled', 'true');
+      confirmBtn.textContent = 'Deleting...';
+      if (confirmSpinner) confirmBtn.prepend(confirmSpinner);
+    } else {
+      confirmBtn.disabled = false;
+      confirmBtn.removeAttribute('aria-disabled');
+      if (confirmBtnLabel) confirmBtn.textContent = confirmBtnLabel;
+      if (confirmSpinner) {
+        confirmSpinner.style.display = 'none';
+        confirmBtn.prepend(confirmSpinner);
+      }
+    }
+  }
   if (confirmBtn) {
     confirmBtn.addEventListener('click', async function () {
       if (!pendingAction) {
@@ -39,6 +59,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // If the action looks like a regular form action (method override), submit via fetch
       try {
+        setConfirmLoading(true);
         // parse action URL and method from string; we assume server expects DELETE with ?_method=DELETE or endpoint accepting DELETE
         let url = pendingAction;
         let method = 'POST';
@@ -72,6 +93,7 @@ document.addEventListener('DOMContentLoaded', function () {
           // refresh the services main area
           // reuse the same refresh strategy as services_admin.js: fetch /admin/services and replace .row.g-4
           try {
+            const prevCategoryId = document.getElementById('serviceCategorySelect')?.value || '';
             const fragmentRes = await fetch('/admin/services', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (fragmentRes.ok) {
               const html = await fragmentRes.text();
@@ -81,6 +103,11 @@ document.addEventListener('DOMContentLoaded', function () {
               const old = document.querySelector('.row.g-4');
               if (newMainRow && old && old.parentNode) {
                 old.parentNode.replaceChild(newMainRow, old);
+                if (window.__initServiceCategories) {
+                  setTimeout(() => {
+                    window.__initServiceCategories({ selectedCategoryId: prevCategoryId });
+                  }, 0);
+                }
               } else {
                 window.location.reload();
               }
@@ -106,6 +133,7 @@ document.addEventListener('DOMContentLoaded', function () {
         console.error('delete action failed', err);
         window.location.reload();
       } finally {
+        setConfirmLoading(false);
         pendingAction = null;
       }
     });
