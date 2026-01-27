@@ -51,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function refreshMainRow() {
     try {
+      const prevCategoryId = document.getElementById('serviceCategorySelect')?.value || '';
       const res = await fetch('/admin/services', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
       if (!res.ok) throw new Error(`Failed to reload UI: ${res.status}`);
       const html = await res.text();
@@ -72,6 +73,9 @@ document.addEventListener('DOMContentLoaded', () => {
       // small delay to ensure DOM parsed and scripts/styles applied
       setTimeout(() => {
         initForms(); // rebind handlers for new forms
+        if (window.__initServiceCategories) {
+          window.__initServiceCategories({ selectedCategoryId: prevCategoryId });
+        }
       }, 0);
     } catch (err) {
       console.error('refreshMainRow error', err);
