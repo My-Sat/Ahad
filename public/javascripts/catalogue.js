@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', function () {
         ${labels ? `<br/><small class="text-muted-light">${escapeHtml(labels)}</small>` : ''}
       </td>
       <td class="text-center">
-        <button class="btn btn-sm btn-danger delete-catalogue-btn" data-id="${mat._id}" type="button">Delete</button>
+        <button class="btn btn-sm btn-outline-danger delete-catalogue-btn" data-id="${mat._id}" type="button">Delete</button>
       </td>
     `;
     tbody.insertBefore(tr, tbody.firstChild);
