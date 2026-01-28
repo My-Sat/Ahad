@@ -114,6 +114,11 @@ function initUserDeleteConfirm() {
 
   confirmBtn.addEventListener('click', () => {
     if (!pendingAction) return;
+    const btnText = document.getElementById('deleteUserBtnText');
+    const btnSpinner = document.getElementById('deleteUserBtnSpinner');
+    confirmBtn.disabled = true;
+    if (btnText) btnText.textContent = 'Deleting...';
+    if (btnSpinner) btnSpinner.classList.remove('d-none');
     form.setAttribute('action', pendingAction);
     form.submit();
   });
