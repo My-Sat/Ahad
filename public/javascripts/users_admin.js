@@ -26,20 +26,33 @@ async function openPermissionsModal(userId) {
 }
 
 document.getElementById('savePermissionsBtn')?.addEventListener('click', async () => {
+  const saveBtn = document.getElementById('savePermissionsBtn');
+  const originalText = saveBtn ? saveBtn.textContent : '';
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+  }
   const userId = document.getElementById('permUserId').value;
   const checked = Array.from(document.querySelectorAll('#modalPermissions .form-check-input:checked')).map(i => i.value);
 
-  const res = await fetch(`/admin/users/${userId}/permissions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({ permissions: checked })
-  });
+  try {
+    const res = await fetch(`/admin/users/${userId}/permissions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ permissions: checked })
+    });
 
-  if (res.ok) {
-    location.reload();
-  } else {
+    if (res.ok) {
+      location.reload();
+      return;
+    }
     const err = await res.json().catch(()=>({ error: 'Failed' }));
     alert(err.error || 'Failed to save');
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalText || 'Save';
+    }
   }
 });
 
