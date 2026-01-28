@@ -473,18 +473,20 @@ header .dropdown-menu,
   border-radius: 12px;
   box-shadow: var(--shadow-md);
   padding: .35rem;
-  /* modern dropdown motion */
+  /* modern dropdown motion (soft rise + blur) */
   opacity: 0;
-  transform: translateY(-6px) scale(.98);
+  transform: translateY(6px);
+  filter: blur(2px);
   transform-origin: top right;
-  transition: opacity .16s ease, transform .18s cubic-bezier(.2,.7,.1,1);
-  will-change: transform, opacity;
+  transition: opacity .14s ease, transform .18s ease, filter .18s ease;
+  will-change: transform, opacity, filter;
   pointer-events: none;
 }
 
 .dropdown-menu.show{
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translateY(0);
+  filter: blur(0);
   pointer-events: auto;
 }
 
@@ -500,6 +502,7 @@ header .dropdown-menu,
   .dropdown-menu.show{
     transition: none;
     transform: none;
+    filter: none;
   }
 }
 
