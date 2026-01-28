@@ -246,10 +246,16 @@ nav#topTabs .nav-pills .nav-link:focus{
 }
 
 nav#topTabs .nav-pills .nav-link.active{
-  background: rgba(255,249,238,.96) !important;
-  border-color: rgba(11,15,26,.22);
+  background: var(--accent) !important;
+  border-color: rgba(43,123,187,.85);
   box-shadow: var(--shadow-md);
   transform: translateY(-1px);
+  color: #fff !important;
+}
+
+nav#topTabs .nav-pills .nav-link.active i,
+nav#topTabs .nav-pills .nav-link.active .badge{
+  color: #fff !important;
 }
 
 /* loading state for nav items */
