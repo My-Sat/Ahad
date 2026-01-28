@@ -15,7 +15,7 @@ block content
             if error
               .alert.alert-danger= error
 
-            form(method='post', action='/user-settings/password', novalidate)
+            form#userSettingsForm(method='post', action='/user-settings/password', novalidate)
               .mb-3
                 label.form-label.text-muted-light(for='oldPassword') Old password
                 input#oldPassword.form-control.form-control-dark(type='password', name='oldPassword', required)
@@ -27,6 +27,7 @@ block content
               .mb-3
                 label.form-label.text-muted-light(for='confirmPassword') Confirm new password
                 input#confirmPassword.form-control.form-control-dark(type='password', name='confirmPassword', required)
+                small#userSettingsPasswordMatch.text-muted-light.d-block.mt-1 Type the same password to confirm.
 
               button.btn.btn-primary.w-100(type='submit')
                 i.bi.bi-check2-circle.me-2
@@ -46,6 +47,59 @@ block content
             button.btn.btn-primary(type='button', data-bs-dismiss='modal') OK
 
 block scripts
+  script.
+    (function () {
+      function initPasswordMatch(formId, pwId, confirmId, msgId) {
+        const form = document.getElementById(formId);
+        const pw = document.getElementById(pwId);
+        const confirm = document.getElementById(confirmId);
+        const msg = document.getElementById(msgId);
+        if (!form || !pw || !confirm || !msg) return;
+
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        function setState(state, text) {
+          msg.textContent = text;
+          msg.classList.remove('text-muted-light', 'text-success', 'text-danger');
+          msg.classList.add(state);
+        }
+
+        function update() {
+          const a = pw.value || '';
+          const b = confirm.value || '';
+          if (!a && !b) {
+            setState('text-muted-light', 'Type the same password to confirm.');
+            if (submitBtn) submitBtn.disabled = false;
+            return;
+          }
+          if (!a || !b) {
+            setState('text-muted-light', 'Keep typing to confirm the password.');
+            if (submitBtn) submitBtn.disabled = false;
+            return;
+          }
+          if (a === b) {
+            setState('text-success', 'Passwords match.');
+            if (submitBtn) submitBtn.disabled = false;
+          } else {
+            setState('text-danger', 'Passwords do not match.');
+            if (submitBtn) submitBtn.disabled = true;
+          }
+        }
+
+        pw.addEventListener('input', update);
+        confirm.addEventListener('input', update);
+        form.addEventListener('submit', function (e) {
+          if (pw.value !== confirm.value) {
+            e.preventDefault();
+            setState('text-danger', 'Passwords do not match.');
+            confirm.focus();
+          }
+        });
+        update();
+      }
+
+      initPasswordMatch('userSettingsForm', 'newPassword', 'confirmPassword', 'userSettingsPasswordMatch');
+    })();
   if success
     script.
       (function () {
