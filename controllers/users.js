@@ -40,7 +40,8 @@ if (r === 'clerk') {
     '/orders/pay',              // payments page
     '/orders/debtors',         // debtors
     '/orders/:orderId',        // fetch order by id at payment page
-    '/orders/:orderId/pay'     // pay a specific order
+    '/orders/:orderId/pay',    // pay a specific order
+    '/search'                  // API search/typeahead
   ];
 }
 
@@ -91,7 +92,10 @@ exports.setPermissions = async function (req, res, next) {
     const u = await User.findById(id);
     if (!u) return res.status(404).json({ error: 'User not found' });
 
-    u.permissions = perms;
+    const permSet = new Set(perms);
+    // If front desk or lookup is enabled, ensure search/typeahead is also enabled.
+    if (permSet.has('/customers') || permSet.has('/lookup')) permSet.add('/search');
+    u.permissions = Array.from(permSet);
     await u.save();
     return res.json({ ok: true, permissions: u.permissions });
   } catch (err) { next(err); }

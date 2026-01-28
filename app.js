@@ -53,6 +53,8 @@ mongoose.connect(MONGO_URI)
     // process.exit(1);
   });
 
+// one-time style migration: ensure clerks/cashiers can use customer search
+
   // static assets (single declaration)
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/public', express.static(path.join(__dirname, 'public'))); 
