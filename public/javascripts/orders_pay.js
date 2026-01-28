@@ -1,8 +1,11 @@
 // public/javascripts/orders_pay.js
-document.addEventListener('DOMContentLoaded', function () {
+function initOrdersPay() {
   'use strict';
 
   const fetchForm = document.getElementById('fetchOrderForm');
+  if (!fetchForm) return;
+  if (fetchForm.dataset.ordersPayInit === '1') return;
+  fetchForm.dataset.ordersPayInit = '1';
   const fetchOrderIdInput = document.getElementById('fetchOrderId');
   const fetchOrderBtn = document.getElementById('fetchOrderBtn');
   const dailyOrdersSelect = document.getElementById('dailyOrdersSelect');
@@ -142,6 +145,21 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
       console.error('loadDailyOrdersDropdown error', err);
       dailyOrdersSelect.innerHTML = '<option value="">Failed to load today\'s orders</option>';
     }
+  }
+
+  function startDailyOrdersAutoRefresh() {
+    if (!dailyOrdersSelect) return;
+    if (dailyOrdersSelect.dataset.autoRefresh === '1') return;
+    dailyOrdersSelect.dataset.autoRefresh = '1';
+
+    const refreshMs = 30000;
+    setInterval(() => {
+      try {
+        // avoid unnecessary work if the tab is hidden
+        if (document.hidden) return;
+        loadDailyOrdersDropdown();
+      } catch (e) {}
+    }, refreshMs);
   }
 
     function computeOutstanding(order) {
@@ -1633,6 +1651,7 @@ if (confirmFullPaymentBtn) {
   // Initial state
   renderOrderDetails(null);
   loadDailyOrdersDropdown();
+  startDailyOrdersAutoRefresh();
 
   if (dailyOrdersSelect) {
     dailyOrdersSelect.addEventListener('change', function () {
@@ -2091,6 +2110,14 @@ function renderOrdersList(orders) {
     // set initial defaults (do not auto-fetch)
     setDefaultRangeToToday();
   })();
+}
 
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initOrdersPay, { once: true });
+} else {
+  initOrdersPay();
+}
 
+document.addEventListener('ajax:page:loaded', function () {
+  initOrdersPay();
 });
