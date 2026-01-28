@@ -63,7 +63,7 @@ block content
           h5.modal-title.text-white Create user
           button.btn-close(type='button', data-bs-dismiss='modal' aria-label='Close')
 
-        form(action='/admin/users' method='POST')
+        form#newUserForm(action='/admin/users' method='POST')
           .modal-body.dark-card-body
             .mb-3
               label.form-label.text-muted-light Username
@@ -82,7 +82,12 @@ block content
 
             .mb-3
               label.form-label.text-muted-light Password
-              input.form-control.form-control-dark(type='password' name='password' required)
+              input#newUserPassword.form-control.form-control-dark(type='password' name='password' required)
+
+            .mb-3
+              label.form-label.text-muted-light Confirm password
+              input#newUserPasswordConfirm.form-control.form-control-dark(type='password' name='passwordConfirm' required)
+              small#newUserPasswordMatch.text-muted-light.d-block.mt-1 Type the same password to confirm.
 
             .mb-3
               label.form-label.text-muted-light Email

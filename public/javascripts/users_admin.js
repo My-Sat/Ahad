@@ -42,3 +42,54 @@ document.getElementById('savePermissionsBtn')?.addEventListener('click', async (
     alert(err.error || 'Failed to save');
   }
 });
+
+function initNewUserPasswordMatch() {
+  const form = document.getElementById('newUserForm');
+  const pw = document.getElementById('newUserPassword');
+  const confirm = document.getElementById('newUserPasswordConfirm');
+  const msg = document.getElementById('newUserPasswordMatch');
+  if (!form || !pw || !confirm || !msg) return;
+
+  const submitBtn = form.querySelector('button[type="submit"]');
+
+  function setState(state, text) {
+    msg.textContent = text;
+    msg.classList.remove('text-muted-light', 'text-success', 'text-danger');
+    msg.classList.add(state);
+  }
+
+  function update() {
+    const a = pw.value || '';
+    const b = confirm.value || '';
+    if (!a && !b) {
+      setState('text-muted-light', 'Type the same password to confirm.');
+      if (submitBtn) submitBtn.disabled = false;
+      return;
+    }
+    if (!a || !b) {
+      setState('text-muted-light', 'Keep typing to confirm the password.');
+      if (submitBtn) submitBtn.disabled = false;
+      return;
+    }
+    if (a === b) {
+      setState('text-success', 'Passwords match.');
+      if (submitBtn) submitBtn.disabled = false;
+    } else {
+      setState('text-danger', 'Passwords do not match.');
+      if (submitBtn) submitBtn.disabled = true;
+    }
+  }
+
+  pw.addEventListener('input', update);
+  confirm.addEventListener('input', update);
+  form.addEventListener('submit', function (e) {
+    if (pw.value !== confirm.value) {
+      e.preventDefault();
+      setState('text-danger', 'Passwords do not match.');
+      confirm.focus();
+    }
+  });
+  update();
+}
+
+document.addEventListener('DOMContentLoaded', initNewUserPasswordMatch);
