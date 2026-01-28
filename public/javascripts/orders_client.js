@@ -518,7 +518,7 @@ function renderPrices(bookMode = false) {
     input.min = '1';
     input.className = 'form-control form-control-sm pages-input';
     input.placeholder = serviceRequiresPrinter ? 'Pages' : 'Qty';
-    input.style.width = '90px';
+    input.style.width = serviceRequiresPrinter ? '72px' : '90px';
     mid.appendChild(input);
     
     // factor input (only if printer required)
@@ -530,7 +530,7 @@ function renderPrices(bookMode = false) {
     factorInput.value = '';
     factorInput.className = 'form-control form-control-sm factor-input';
     factorInput.placeholder = 'QTY';
-    factorInput.style.width = '90px';
+    factorInput.style.width = '63px';
     mid.appendChild(factorInput);
     }
 
@@ -561,7 +561,7 @@ function renderPrices(bookMode = false) {
       printerWrap.className = 'd-flex align-items-center';
       const sel = document.createElement('select');
       sel.className = 'form-select form-select-sm printer-select';
-      sel.style.width = '220px';
+      sel.style.width = '145px';
       const defaultOpt = document.createElement('option');
       defaultOpt.value = '';
       defaultOpt.textContent = '-- Select printer --';
@@ -595,7 +595,7 @@ function renderPrices(bookMode = false) {
       spoiledInput.placeholder = 'Jammed';
       spoiledInput.setAttribute('aria-label', 'Spoiled count');
       spoiledInput.className = 'form-control form-control-sm spoiled-input';
-      spoiledInput.style.width = '96px';
+      spoiledInput.style.width = '72px';
       spoiledInput.title = 'Spoiled count';
       spoiledWrap.appendChild(spoiledInput);
       mid.appendChild(spoiledWrap);
