@@ -496,6 +496,19 @@ function discountAppliedLabel(order) {
       customerObj = order.customer;
     }
 
+    const orderDateDisplay = (() => {
+      if (!order.createdAt) return '';
+      const d = new Date(order.createdAt);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleString();
+    })();
+
+    const customerPhone = (() => {
+      if (customerObj && customerObj.phone) return String(customerObj.phone);
+      if (order.customerPhone) return String(order.customerPhone);
+      return '';
+    })();
+
     if (customerObj && customerObj._id) {
       currentHasCustomer = true;
       currentCustomerId = String(customerObj._id);
@@ -584,7 +597,9 @@ function discountAppliedLabel(order) {
     orderInfo.innerHTML = `
       ${ handlerDisplay ? `<p><strong>Handled by:</strong> ${escapeHtml(handlerDisplay)}</p>` : '' }
       ${ customerDisplay ? `<p><strong>Customer:</strong> ${escapeHtml(customerDisplay)}</p>` : '' }
+      ${ customerPhone ? `<p><strong>Customer Phone:</strong> ${escapeHtml(customerPhone)}</p>` : '' }
       <p><strong>Order ID:</strong> ${escapeHtml(order.orderId)}</p>
+      ${ orderDateDisplay ? `<p><strong>Order Date:</strong> ${escapeHtml(orderDateDisplay)}</p>` : '' }
       <p><strong>Status:</strong> ${statusLabel}</p>
       ${itemsHtml}
       ${discountHtml}
