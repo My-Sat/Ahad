@@ -18,7 +18,7 @@ exports.newForm = function (req, res) {
 exports.create = async function (req, res, next) {
   try {
     const { username, name, role, password, email, phone } = req.body;
-    if (!username || !password || !role) {
+    if (!username || !password || !role || !phone) {
       return res.status(400).send('Missing required fields');
     }
 

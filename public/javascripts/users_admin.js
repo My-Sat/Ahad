@@ -93,3 +93,30 @@ function initNewUserPasswordMatch() {
 }
 
 document.addEventListener('DOMContentLoaded', initNewUserPasswordMatch);
+
+function initUserDeleteConfirm() {
+  const modalEl = document.getElementById('modalDeleteUser');
+  const messageEl = document.getElementById('deleteUserMessage');
+  const confirmBtn = document.getElementById('confirmDeleteUserBtn');
+  const form = document.getElementById('deleteUserForm');
+  if (!modalEl || !messageEl || !confirmBtn || !form) return;
+
+  let pendingAction = '';
+  document.querySelectorAll('.open-user-delete').forEach(btn => {
+    btn.addEventListener('click', () => {
+      pendingAction = btn.getAttribute('data-action') || '';
+      const name = btn.getAttribute('data-user-name') || 'this user';
+      messageEl.textContent = `Are you sure you want to delete ${name}?`;
+      const m = new bootstrap.Modal(modalEl);
+      m.show();
+    });
+  });
+
+  confirmBtn.addEventListener('click', () => {
+    if (!pendingAction) return;
+    form.setAttribute('action', pendingAction);
+    form.submit();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', initUserDeleteConfirm);

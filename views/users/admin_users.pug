@@ -50,10 +50,13 @@ block content
                     | Permissions
 
                   // DELETE via POST + method override
-                  form.d-inline(action=`/admin/users/${user._id}?_method=DELETE` method='POST')
-                    button.btn.btn-sm.btn-outline-danger(type='submit')
-                      i.bi.bi-trash.me-1
-                      | Delete
+                  button.btn.btn-sm.btn-outline-danger.open-user-delete(
+                    type='button'
+                    data-action=`/admin/users/${user._id}?_method=DELETE`
+                    data-user-name=(user.name || user.username || 'this user')
+                  )
+                    i.bi.bi-trash.me-1
+                    | Delete
 
   // ---------------- NEW USER MODAL ----------------
   .modal.fade#modalNewUser(tabindex='-1' aria-hidden='true')
@@ -159,6 +162,22 @@ block content
         .modal-footer
           button.btn.btn-secondary(type='button' data-bs-dismiss='modal') Close
           button.btn.btn-primary#savePermissionsBtn(type='button') Save
+
+  // ---------------- DELETE CONFIRM MODAL ----------------
+  .modal.fade#modalDeleteUser(tabindex='-1' aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title.text-white Confirm delete
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          p#deleteUserMessage.text-muted-light Are you sure you want to delete this user?
+          p.text-muted-light.small.mb-0 This action cannot be undone.
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-danger(type='button', id='confirmDeleteUserBtn') Yes, delete
+
+  form#deleteUserForm(method='POST', action='', style='display:none;')
 
 block scripts
   script(src='/javascripts/users_admin.js')
