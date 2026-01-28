@@ -473,6 +473,34 @@ header .dropdown-menu,
   border-radius: 12px;
   box-shadow: var(--shadow-md);
   padding: .35rem;
+  /* modern dropdown motion */
+  opacity: 0;
+  transform: translateY(-6px) scale(.98);
+  transform-origin: top right;
+  transition: opacity .16s ease, transform .18s cubic-bezier(.2,.7,.1,1);
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+.dropdown-menu.show{
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* slightly different origin for left-aligned menus */
+.dropdown-menu.dropdown-menu-start,
+.dropdown-menu.dropdown-menu-start.show{
+  transform-origin: top left;
+}
+
+/* reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce){
+  .dropdown-menu,
+  .dropdown-menu.show{
+    transition: none;
+    transform: none;
+  }
 }
 
 .dropdown-item{
