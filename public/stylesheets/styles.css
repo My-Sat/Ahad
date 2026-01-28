@@ -252,6 +252,37 @@ nav#topTabs .nav-pills .nav-link.active{
   transform: translateY(-1px);
 }
 
+/* loading state for nav items */
+.nav-link.is-loading,
+.dropdown-item.is-loading{
+  position: relative;
+  pointer-events: none;
+  opacity: .85;
+}
+
+.nav-link .tab-spinner,
+.dropdown-item .tab-spinner{
+  width: .85rem;
+  height: .85rem;
+  border: 2px solid rgba(11,15,26,.22);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  display: inline-block;
+  margin-left: .45rem;
+  vertical-align: -0.1rem;
+  animation: navSpin .7s linear infinite;
+}
+
+nav#topTabs .nav-pills .nav-link.is-loading{
+  background: rgba(255,249,238,.92);
+  border-color: rgba(11,15,26,.22);
+  box-shadow: var(--shadow-sm);
+}
+
+@keyframes navSpin{
+  to { transform: rotate(360deg); }
+}
+
 nav#topTabs .nav-pills .badge{
   font-size: .65rem;
   padding: .18rem .45rem;
@@ -264,6 +295,13 @@ nav#topTabs .nav-pills .badge{
 /* keep nav from wrapping weirdly */
 nav#topTabs ul.nav{ white-space: nowrap; }
 nav#topTabs .nav-link{ text-overflow: ellipsis; overflow: hidden; max-width: 11.5rem; }
+
+/* ensure loading spinner stays visible even with ellipsis */
+nav#topTabs .nav-link.is-loading{
+  overflow: visible;
+  text-overflow: clip;
+  max-width: none;
+}
 
 /* smaller screens: tabs wrap */
 @media (max-width: 768px){

@@ -1,13 +1,92 @@
 (function() {
+  function isSameOrigin(url) {
+    try {
+      const target = new URL(url, window.location.href);
+      return target.origin === window.location.origin;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function reExecuteScripts(newRoot, targetRoot) {
+    if (!newRoot || !targetRoot) return;
+    const scripts = newRoot.querySelectorAll('script');
+    if (!scripts.length) return;
+    scripts.forEach(oldScript => {
+      const s = document.createElement('script');
+      // copy attributes (src, type, etc.)
+      for (const attr of oldScript.attributes) {
+        s.setAttribute(attr.name, attr.value);
+      }
+      if (!oldScript.src) {
+        s.textContent = oldScript.textContent || '';
+      }
+      targetRoot.appendChild(s);
+    });
+  }
+
+  function ensureSpinner(el) {
+    if (!el) return null;
+    let sp = el.querySelector('.tab-spinner');
+    if (!sp) {
+      sp = document.createElement('span');
+      sp.className = 'tab-spinner';
+      sp.setAttribute('aria-hidden', 'true');
+      el.appendChild(sp);
+    }
+    return sp;
+  }
+
+  function setTabLoading(el, loading) {
+    if (!el) return;
+    if (loading) {
+      el.classList.add('is-loading');
+      el.setAttribute('aria-busy', 'true');
+      ensureSpinner(el);
+    } else {
+      el.classList.remove('is-loading');
+      el.removeAttribute('aria-busy');
+      const sp = el.querySelector('.tab-spinner');
+      if (sp) sp.parentNode.removeChild(sp);
+    }
+  }
+
+  function relatedTabsFor(el) {
+    const list = [];
+    if (el) list.push(el);
+    const id = el && el.id ? el.id : '';
+    if (id.endsWith('-sm')) {
+      const other = document.getElementById(id.replace(/-sm$/, ''));
+      if (other) list.push(other);
+    }
+    if (id.startsWith('tab-orders-')) {
+      const orders = document.getElementById('tab-orders');
+      if (orders) list.push(orders);
+    }
+    return list;
+  }
+
+  function setTabsLoadingFor(el, loading) {
+    relatedTabsFor(el).forEach(t => setTabLoading(t, loading));
+  }
+
+  function clearAllTabLoading() {
+    document.querySelectorAll('.nav-link.is-loading, .dropdown-item.is-loading').forEach(el => setTabLoading(el, false));
+  }
+
   // fetch a URL and replace #main-content with its #main-content fragment
 // fetch a URL and replace #main-content with its #main-content fragment
-async function loadPage(url, push = true) {
+async function loadPage(url, push = true, sourceEl = null) {
+  const start = Date.now();
   try {
     // Only allow same-origin fetches for safety
     if (!isSameOrigin(url)) {
       window.location.href = url;
       return;
     }
+
+    // allow a paint so the spinner becomes visible
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
     // Force fresh fetch and small cache-busting param
     const u = new URL(url, window.location.href);
@@ -73,6 +152,18 @@ async function loadPage(url, push = true) {
   } catch (err) {
     console.error('Page load failed', err);
     window.location.href = url;
+  } finally {
+    const elapsed = Date.now() - start;
+    const wait = elapsed < 300 ? 300 - elapsed : 0;
+    if (wait) {
+      setTimeout(function () {
+        if (sourceEl) setTabsLoadingFor(sourceEl, false);
+        clearAllTabLoading();
+      }, wait);
+    } else {
+      if (sourceEl) setTabsLoadingFor(sourceEl, false);
+      clearAllTabLoading();
+    }
   }
 }
 
@@ -227,7 +318,8 @@ function setActiveTabByUrl(url) {
     const href = a.getAttribute('href');
     if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
     e.preventDefault();
-    loadPage(href, true);
+    setTabsLoadingFor(a, true);
+    loadPage(href, true, a);
   });
 
   // popstate handling
