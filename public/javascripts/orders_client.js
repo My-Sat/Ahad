@@ -6,7 +6,7 @@
 //  - F/B checkbox only shown when serviceRequiresPrinter is true
 //  - QTY placeholder shows "Pages" when printer required, otherwise "Qty"
 
-function initOrdersClient() {
+document.addEventListener('DOMContentLoaded', function () {
   'use strict';
 
   // ---------- elements ----------
@@ -67,11 +67,8 @@ let materialsLoaded = false;
 let materialsFetchedAt = 0;  // ms timestamp when materials were last fetched
 
 
-  // ---------- Service categories (populate category select + filter services) ----------
+    // ---------- Service categories (populate category select + filter services) ----------
   const serviceCategorySelect = document.getElementById('serviceCategorySelect');
-  if (!serviceCategorySelect) return;
-  if (serviceCategorySelect.dataset.ordersClientInit === '1') return;
-  serviceCategorySelect.dataset.ordersClientInit = '1';
 
 async function loadServiceCategories() {
   if (!serviceCategorySelect) return;
@@ -1741,14 +1738,5 @@ if (serviceSelect) {
     printers,
     renderCart
   };
-}
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initOrdersClient, { once: true });
-} else {
-  initOrdersClient();
-}
-
-document.addEventListener('ajax:page:loaded', function () {
-  initOrdersClient();
 });
