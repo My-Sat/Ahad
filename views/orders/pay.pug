@@ -22,7 +22,6 @@ block content
                       div.small.text-muted-light Previous balance:
                       strong#myPrevBalance GH₵ 0.00
 
-
             .d-flex.justify-content-between.align-items-center.mb-3
               h4.mb-0.text-white Pay Order
               .d-flex.gap-2
@@ -30,31 +29,26 @@ block content
                 button.btn.btn-outline-light-custom.btn-sm#openOrdersExplorerBtn(type='button', title='View orders')
                   i.bi.bi-list-check.me-1
                   | Orders
-                // Debtors button (new)
+
+                // Debtors button
                 button.btn.btn-outline-light-custom.btn-sm#openDebtorsBtn(type='button', title='Debtors')
                   i.bi.bi-list-check.me-1
                   | Debtors
-                  
-                // Cashiers / Collections (new) & Accountant — show only to admins
+
+                // Admin-only tools
                 if currentUser && currentUser.role && currentUser.role.toLowerCase() === 'admin'
                   button.btn.btn-outline-light-custom.btn-sm#openCashiersBtn(type='button', title='Cashiers')
                     i.bi.bi-people.me-1
                     | Receive Payments
-                if currentUser && currentUser.role && currentUser.role.toLowerCase() === 'admin'
                   button.btn.btn-outline-light-custom.btn-sm#openCustomersBtn(type='button', title='Customers')
                     i.bi.bi-people.me-1
                     | Customers
-                if currentUser && currentUser.role && currentUser.role.toLowerCase() === 'admin'
                   a.btn.btn-outline-light-custom.btn-sm(href='/admin/discounts', title='Discounts')
                     i.bi.bi-percent.me-1
                     | Discount
-    
-
                   button.btn.btn-outline-light-custom.btn-sm#openAccountantBtn(type='button', title='Accountant ledger')
                     i.bi.bi-journal-check.me-1
                     | Accountant
-
-
 
             p.text-muted-light Enter the Order ID to fetch the amount due and mark it as paid.
 
@@ -75,7 +69,7 @@ block content
 
                 // Payment controls (appear after order is fetched)
                 .mt-3#paymentControls(style='display:none;')
-                  // inside .mt-3#paymentControls (before Payment method selector is fine)
+                  // Legacy placeholder (kept, but not used by orders_pay.js anymore)
                   #customerAccountControls.mb-3(style='display:none;')
                     .d-flex.justify-content-between.align-items-center
                       div
@@ -86,6 +80,8 @@ block content
                         | Pay from account
                     div.small.text-muted-light.mt-1
                       | Uses available balance to reduce outstanding before payment.
+
+                  // Manual discount (admin only) — actual visibility handled by orders_pay.js
                   if currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin'
                     .card.mb-3.dark-surface#payManualDiscountCard(style='display:none;border:1px solid rgba(255,255,255,.08);')
                       .card-body.dark-card-body.py-2
@@ -133,6 +129,7 @@ block content
 
                 .d-flex.justify-content-end.mt-3
                   button.btn.btn-success#payNowBtn(type='button', disabled) Pay Now
+
   // Cashiers modal (accountant view)
   .modal.fade(id='cashiersModal', tabindex='-1', aria-labelledby='cashiersModalLabel', aria-hidden='true')
     .modal-dialog.modal-lg.modal-dialog-centered
@@ -156,6 +153,7 @@ block content
                   td.text-muted(colspan='6') Loading...
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
+
   // Accountant ledger modal
   .modal.fade(id='accountantModal', tabindex='-1', aria-labelledby='accountantModalLabel', aria-hidden='true')
     .modal-dialog.modal-lg.modal-dialog-centered
@@ -178,18 +176,17 @@ block content
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
-          // Customers Explorer Modal
+  // Customers Explorer Modal
   .modal.fade(id='customersModal', tabindex='-1', aria-labelledby='customersModalLabel', aria-hidden='true')
     .modal-dialog.modal-xl.modal-dialog-centered
       .modal-content.dark-surface
         .modal-header
           h5.modal-title#customersModalLabel Customers
           button.btn-close(type='button', data-bs-dismiss='modal')
-
         .modal-body.dark-card-body
           p.text-muted.small#customersCount Loading...
 
-                    // Search (filters by phone/name)
+          // Search (filters by phone/name)
           .mb-2
             .input-group.input-group-sm
               span.input-group-text.bg-transparent.text-muted-light
@@ -201,7 +198,6 @@ block content
               )
               button.btn.btn-outline-light-custom#customersSearchClearBtn(type='button') Clear
             .small.text-muted-light.mt-1 Type to filter customers by phone or name.
-
 
           .table-responsive
             table.table.table-hover.table-sm#customersTable
@@ -215,11 +211,10 @@ block content
               tbody
                 tr
                   td.text-muted(colspan='5') Loading customers...
-
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
-            // Registration modal (customer / artist)
+  // Registration modal (customer / artist)
   .modal.fade(id='registerCustomerModal', tabindex='-1', aria-labelledby='registerCustomerModalLabel', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
       .modal-content.dark-surface
@@ -251,10 +246,7 @@ block content
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary#saveCustomerBtn(type='button') Register
 
-          
-
-
-  // Debtors modal (lists part-payment transactions; client fetches /debtors)
+  // Debtors modal
   .modal.fade(id='debtorsModal', tabindex='-1', aria-labelledby='debtorsModalLabel', aria-hidden='true')
     .modal-dialog.modal-lg.modal-dialog-centered
       .modal-content.dark-surface
@@ -263,7 +255,8 @@ block content
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
         .modal-body.dark-card-body
           p.text-muted.small#debtorsCount Loading...
-                    // Search (filters by debtor/order id/phone)
+
+          // Search (filters by debtor/order id/phone)
           .mb-2
             .input-group.input-group-sm
               span.input-group-text.bg-transparent.text-muted-light
@@ -292,14 +285,13 @@ block content
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
-          // Full Payment Confirmation Modal
+  // Full Payment Confirmation Modal
   .modal.fade#fullPaymentConfirmModal(tabindex='-1', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
       .modal-content.dark-surface
         .modal-header
           h5.modal-title Confirm Full Payment
           button.btn-close(type='button', data-bs-dismiss='modal')
-
         .modal-body.dark-card-body
           p#fullPaymentConfirmText.mb-3
 
@@ -325,7 +317,6 @@ block content
         .modal-footer
           button.btn.btn-outline-light-custom(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-success#confirmFullPaymentBtn Confirm Payment
-
 
   // Orders Explorer Modal (same UX as new.pug)
   .modal.fade(id='ordersExplorerModal', tabindex='-1', aria-labelledby='ordersExplorerModalLabel', aria-hidden='true')
@@ -364,13 +355,12 @@ block content
               tbody
                 tr
                   td.text-muted(colspan='5') Use the date filters above and click Refresh to load orders.
-
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
-block append scripts
+  // ✅ IMPORTANT: Keep Pay page scripts INSIDE #main-content so dashboard_nav AJAX loads them
   script.
     window._isAdmin = !{JSON.stringify((typeof currentUser !== 'undefined' && currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin') ? true : false)};
-  script(src='/javascripts/customer_editor.js')
-  script(src='/javascripts/customers_front.js')
-  script(src='/javascripts/orders_pay.js')
+  script(defer src='/javascripts/customer_editor.js')
+  script(defer src='/javascripts/customers_front.js')
+  script(defer src='/javascripts/orders_pay.js')

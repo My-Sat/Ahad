@@ -9,22 +9,37 @@
     }
   }
 
-  function reExecuteScripts(newRoot, targetRoot) {
-    if (!newRoot || !targetRoot) return;
-    const scripts = newRoot.querySelectorAll('script');
-    if (!scripts.length) return;
-    scripts.forEach(oldScript => {
-      const s = document.createElement('script');
-      // copy attributes (src, type, etc.)
-      for (const attr of oldScript.attributes) {
-        s.setAttribute(attr.name, attr.value);
-      }
-      if (!oldScript.src) {
-        s.textContent = oldScript.textContent || '';
-      }
-      targetRoot.appendChild(s);
-    });
-  }
+function reExecuteScripts(newRoot, targetRoot) {
+  if (!newRoot || !targetRoot) return;
+
+  const scripts = newRoot.querySelectorAll('script');
+  if (!scripts.length) return;
+
+  scripts.forEach(oldScript => {
+    const src = oldScript.getAttribute('src');
+
+    // ✅ If it's an external script and it's already loaded, don't load again
+    if (src) {
+      const absSrc = new URL(src, window.location.href).href;
+      const alreadyLoaded = Array.from(document.scripts).some(s => (s.src || '') === absSrc);
+      if (alreadyLoaded) return;
+    }
+
+    const s = document.createElement('script');
+
+    // copy attributes (src, type, defer, etc.)
+    for (const attr of oldScript.attributes) {
+      s.setAttribute(attr.name, attr.value);
+    }
+
+    // inline script content
+    if (!src) {
+      s.textContent = oldScript.textContent || '';
+    }
+
+    targetRoot.appendChild(s);
+  });
+}
 
   function ensureSpinner(el) {
     if (!el) return null;
