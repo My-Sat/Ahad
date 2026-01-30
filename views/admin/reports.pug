@@ -1,0 +1,143 @@
+extends ../layout
+
+block content
+  .container
+    .d-none(data-main-width='wide')
+    .row
+      .col-12
+        .card.shadow-sm.dark-surface
+          .card-body.dark-card-body
+            .d-flex.justify-content-between.align-items-center.mb-3
+              h4.mb-0.text-white Reports — Financial / Cash Control
+              .d-flex.gap-2.align-items-center
+                label.small.text-muted-light.mb-0(for='reportFrom') From
+                input.form-control.form-control-sm.form-control-dark#reportFrom(type='date', value=defaultFrom)
+                label.small.text-muted-light.mb-0(for='reportTo') To
+                input.form-control.form-control-sm.form-control-dark#reportTo(type='date', value=defaultTo)
+                button.btn.btn-primary.btn-sm#reportApplyBtn(type='button') Apply
+
+            small.text-muted-light#reportStatus Select a date range and click Apply.
+
+            hr
+
+            h6.text-white.mb-2 Sales Summary (Order Date)
+            .row.g-2.mb-3
+              .col-6.col-lg-3
+                .card.dark-surface.border-0
+                  .card-body.p-2.dark-card-body
+                    div.small.text-muted-light Total orders amount
+                    strong#summaryTotalOrders GH₵ 0.00
+              .col-6.col-lg-3
+                .card.dark-surface.border-0
+                  .card-body.p-2.dark-card-body
+                    div.small.text-muted-light Total paid orders amount
+                    strong#summaryTotalPaid GH₵ 0.00
+              .col-6.col-lg-3
+                .card.dark-surface.border-0
+                  .card-body.p-2.dark-card-body
+                    div.small.text-muted-light Total outstanding
+                    strong#summaryOutstanding GH₵ 0.00
+              .col-6.col-lg-3
+                .card.dark-surface.border-0
+                  .card-body.p-2.dark-card-body
+                    div.small.text-muted-light Payments received (by payment date)
+                    strong#summaryPaymentsReceived GH₵ 0.00
+            .row.g-2.mb-3
+              .col-6.col-lg-3
+                .card.dark-surface.border-0
+                  .card-body.p-2.dark-card-body
+                    div.small.text-muted-light Orders count
+                    strong#summaryOrdersCount 0
+              .col-6.col-lg-3
+                .card.dark-surface.border-0
+                  .card-body.p-2.dark-card-body
+                    div.small.text-muted-light Paid orders count
+                    strong#summaryPaidOrdersCount 0
+
+            h6.text-white.mt-3.mb-2 Payments by Method (Payment Date)
+            .table-responsive.mb-3
+              table.table.table-sm.table-hover#paymentsByMethodTable
+                thead
+                  tr
+                    th Method
+                    th.text-end Count
+                    th.text-end Amount (GH₵)
+                tbody
+                  tr
+                    td.text-muted(colspan='3') Loading...
+
+            h6.text-white.mt-3.mb-2 Cashier Collections (Range)
+            .table-responsive.mb-3
+              table.table.table-sm.table-hover#cashierCollectionsTable
+                thead
+                  tr
+                    th Cashier
+                    th.text-end Recorded
+                    th.text-end Collected
+                    th.text-end Uncollected
+                    th.text-end Previous Balance
+                tbody
+                  tr
+                    td.text-muted(colspan='5') Loading...
+
+            h6.text-white.mt-3.mb-2 Accountant Ledger (Range)
+            .table-responsive.mb-3
+              table.table.table-sm.table-hover#accountantLedgerTable
+                thead
+                  tr
+                    th Accountant
+                    th.text-end Total Collected (GH₵)
+                tbody
+                  tr
+                    td.text-muted(colspan='2') Loading...
+
+            h6.text-white.mt-3.mb-2 Debtors Aging (As of Today)
+            .row.g-2
+              .col-lg-6
+                .table-responsive
+                  table.table.table-sm.table-hover#debtorsAgingTable
+                    thead
+                      tr
+                        th Bucket (days)
+                        th.text-end Orders
+                        th.text-end Outstanding (GH₵)
+                    tbody
+                      tr
+                        td.text-muted(colspan='3') Loading...
+              .col-lg-6
+                .table-responsive
+                  table.table.table-sm.table-hover#topDebtorsTable
+                    thead
+                      tr
+                        th Debtor
+                        th.text-end Orders
+                        th.text-end Outstanding (GH₵)
+                    tbody
+                      tr
+                        td.text-muted(colspan='3') Loading...
+
+            h6.text-white.mt-4.mb-2 Discounts (Order Date)
+            .row.g-2.mb-2
+              .col-6.col-lg-3
+                .card.dark-surface.border-0
+                  .card-body.p-2.dark-card-body
+                    div.small.text-muted-light Total discount given
+                    strong#discountTotalAmount GH₵ 0.00
+              .col-6.col-lg-3
+                .card.dark-surface.border-0
+                  .card-body.p-2.dark-card-body
+                    div.small.text-muted-light Discounted orders count
+                    strong#discountOrdersCount 0
+            .table-responsive
+              table.table.table-sm.table-hover#discountScopeTable
+                thead
+                  tr
+                    th Scope
+                    th.text-end Orders
+                    th.text-end Amount (GH₵)
+                tbody
+                  tr
+                    td.text-muted(colspan='3') Loading...
+
+block append scripts
+  script(src='/javascripts/reports_financial.js')

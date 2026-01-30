@@ -14,6 +14,7 @@ const { ensureAdmin } = require('../middlewares/auth');
 const serviceCategoryController = require('../controllers/serviceCategory');
 const { ensureHasPermission } = require('../middlewares/auth');
 const discountsController = require('../controllers/discounts');
+const reportsController = require('../controllers/reports');
 
 
 
@@ -137,6 +138,14 @@ router.get('/discounts', ensureAdmin, discountsController.page);
 router.get('/discounts/api', ensureAdmin, discountsController.apiGet);
 router.post('/discounts', ensureAdmin, discountsController.apiSave);
 router.get('/discounts/customer-search', ensureAdmin, discountsController.apiSearchCustomers);
+
+// Reports (ADMIN)
+router.get('/reports', ensureAdmin, reportsController.page);
+router.get('/reports/api/financial-summary', ensureAdmin, reportsController.apiFinancialSummary);
+router.get('/reports/api/cashier-collections', ensureAdmin, reportsController.apiCashierCollections);
+router.get('/reports/api/accountant-ledger', ensureAdmin, reportsController.apiAccountantLedger);
+router.get('/reports/api/debtors-aging', ensureAdmin, reportsController.apiDebtorsAging);
+router.get('/reports/api/discounts', ensureAdmin, reportsController.apiDiscountsSummary);
 
 
 module.exports = router;
