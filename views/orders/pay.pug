@@ -50,6 +50,25 @@ block content
                     i.bi.bi-journal-check.me-1
                     | Accountant
 
+            // Daily totals (toggleable amounts)
+            .mb-3#dailyTotalsContainer
+              .card.border-1.dark-surface
+                .card-body.p-2.dark-card-body
+                  .d-flex.justify-content-between.align-items-center.mb-2
+                    .me-3
+                      div.small.text-muted-light Daily totals (today)
+                      div.small.text-muted-light Orders vs Paid
+                    button.btn.btn-outline-light-custom.btn-sm#dailyTotalsToggleBtn(type='button', aria-pressed='true')
+                      i.bi.bi-eye.me-1
+                      | Show amount
+                  .row.g-2
+                    .col-6
+                      div.small.text-muted-light Total orders amount
+                      strong#dailyOrdersTotalAmount GH₵ 0.00
+                    .col-6.text-end
+                      div.small.text-muted-light Total paid orders amount
+                      strong#dailyPaidOrdersTotalAmount GH₵ 0.00
+
             p.text-muted-light Enter the Order ID to fetch the amount due and mark it as paid.
 
             form#fetchOrderForm(class='row g-2 mb-3', novalidate)

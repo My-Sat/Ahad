@@ -9,6 +9,10 @@ function initOrdersPay() {
   const fetchOrderIdInput = document.getElementById('fetchOrderId');
   const fetchOrderBtn = document.getElementById('fetchOrderBtn');
   const dailyOrdersSelect = document.getElementById('dailyOrdersSelect');
+  const dailyTotalsContainer = document.getElementById('dailyTotalsContainer');
+  const dailyOrdersTotalAmountEl = document.getElementById('dailyOrdersTotalAmount');
+  const dailyPaidOrdersTotalAmountEl = document.getElementById('dailyPaidOrdersTotalAmount');
+  const dailyTotalsToggleBtn = document.getElementById('dailyTotalsToggleBtn');
   const orderInfo = document.getElementById('orderInfo');
   const payNowBtn = document.getElementById('payNowBtn');
   const payManualDiscountCard = document.getElementById('payManualDiscountCard');
@@ -93,6 +97,52 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
     return Number(n).toFixed(2);
   }
 
+  function formatCedi(n) {
+    return `GH\u20B5 ${fmt(n)}`;
+  }
+
+  function setDailyTotalsAmounts(totalOrders, totalPaid) {
+    if (!dailyOrdersTotalAmountEl || !dailyPaidOrdersTotalAmountEl) return;
+
+    dailyOrdersTotalAmountEl.dataset.amount = String(Number(totalOrders || 0));
+    dailyPaidOrdersTotalAmountEl.dataset.amount = String(Number(totalPaid || 0));
+
+    const hidden = dailyTotalsContainer && dailyTotalsContainer.dataset.hidden === '1';
+    if (!hidden) {
+      dailyOrdersTotalAmountEl.textContent = formatCedi(totalOrders || 0);
+      dailyPaidOrdersTotalAmountEl.textContent = formatCedi(totalPaid || 0);
+    }
+  }
+
+  function setDailyTotalsError() {
+    if (!dailyOrdersTotalAmountEl || !dailyPaidOrdersTotalAmountEl) return;
+    dailyOrdersTotalAmountEl.dataset.amount = '';
+    dailyPaidOrdersTotalAmountEl.dataset.amount = '';
+    dailyOrdersTotalAmountEl.textContent = '-';
+    dailyPaidOrdersTotalAmountEl.textContent = '-';
+  }
+
+  function applyDailyTotalsVisibility(hidden) {
+    if (!dailyOrdersTotalAmountEl || !dailyPaidOrdersTotalAmountEl || !dailyTotalsToggleBtn) return;
+
+    if (dailyTotalsContainer) {
+      dailyTotalsContainer.dataset.hidden = hidden ? '1' : '0';
+    }
+
+    if (hidden) {
+      dailyOrdersTotalAmountEl.textContent = '****';
+      dailyPaidOrdersTotalAmountEl.textContent = '****';
+      dailyTotalsToggleBtn.innerHTML = '<i class="bi bi-eye me-1"></i> Show amount';
+      dailyTotalsToggleBtn.setAttribute('aria-pressed', 'true');
+    } else {
+      const ordersAmt = Number(dailyOrdersTotalAmountEl.dataset.amount || 0);
+      const paidAmt = Number(dailyPaidOrdersTotalAmountEl.dataset.amount || 0);
+      dailyOrdersTotalAmountEl.textContent = formatCedi(ordersAmt);
+      dailyPaidOrdersTotalAmountEl.textContent = formatCedi(paidAmt);
+      dailyTotalsToggleBtn.innerHTML = '<i class="bi bi-eye-slash me-1"></i> Hide amount';
+      dailyTotalsToggleBtn.setAttribute('aria-pressed', 'false');
+    }
+  }
   function setPayManualDiscountVisibility(show) {
     if (!payManualDiscountCard) return;
     payManualDiscountCard.style.display = show ? '' : 'none';
@@ -127,8 +177,23 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
 
       if (!j.orders.length) {
         dailyOrdersSelect.innerHTML = '<option value="">No orders today</option>';
+        setDailyTotalsAmounts(0, 0);
         return;
       }
+
+      let totalOrders = 0;
+      let totalPaidOrders = 0;
+      j.orders.forEach(o => {
+        const amt = Number(o.total || 0);
+        totalOrders += amt;
+        if (String(o.status || '').toLowerCase() === 'paid') {
+          totalPaidOrders += amt;
+        }
+      });
+      setDailyTotalsAmounts(
+        Number(totalOrders.toFixed(2)),
+        Number(totalPaidOrders.toFixed(2))
+      );
 
       const options = ['<option value="">Select today\'s orders...</option>'];
       j.orders.forEach(o => {
@@ -144,6 +209,7 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
     } catch (err) {
       console.error('loadDailyOrdersDropdown error', err);
       dailyOrdersSelect.innerHTML = '<option value="">Failed to load today\'s orders</option>';
+      setDailyTotalsError();
     }
   }
 
@@ -1667,6 +1733,27 @@ if (confirmFullPaymentBtn) {
   renderOrderDetails(null);
   loadDailyOrdersDropdown();
   startDailyOrdersAutoRefresh();
+  let dailyTotalsAutoHideTimer = null;
+  if (dailyTotalsToggleBtn) {
+    dailyTotalsToggleBtn.addEventListener('click', function () {
+      const isHidden = dailyTotalsContainer && dailyTotalsContainer.dataset.hidden === '1';
+      applyDailyTotalsVisibility(!isHidden);
+
+      if (dailyTotalsAutoHideTimer) {
+        clearTimeout(dailyTotalsAutoHideTimer);
+        dailyTotalsAutoHideTimer = null;
+      }
+
+      if (isHidden) {
+        dailyTotalsAutoHideTimer = setTimeout(() => {
+          applyDailyTotalsVisibility(true);
+        }, 15000);
+      }
+    });
+  }
+  if (dailyTotalsContainer) {
+    applyDailyTotalsVisibility(true);
+  }
 
 if (dailyOrdersSelect) {
   dailyOrdersSelect.addEventListener('change', async function () {
@@ -2162,3 +2249,5 @@ if (document.readyState === 'loading') {
 document.addEventListener('ajax:page:loaded', function () {
   initOrdersPay();
 });
+
+
