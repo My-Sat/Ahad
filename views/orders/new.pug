@@ -1,7 +1,7 @@
 extends ../layout
 
 block content
-  .container
+  .container#ordersNewPage(data-is-admin=(currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin') ? 'true' : 'false')
     .d-none(data-main-width='wide')
     .row.justify-content-center
       .col-12.col-md-12
@@ -184,9 +184,3 @@ block content
 
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
-
-block append scripts
-  // emit isAdmin to client JS (placed inside block so Pug doesn't complain)
-  script.
-    window._isAdmin = !{JSON.stringify((typeof currentUser !== 'undefined' && currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin') ? true : false)};
-  script(src='/public/javascripts/orders_client.js')

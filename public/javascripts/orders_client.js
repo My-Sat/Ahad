@@ -6,8 +6,22 @@
 //  - F/B checkbox only shown when serviceRequiresPrinter is true
 //  - QTY placeholder shows "Pages" when printer required, otherwise "Qty"
 
-function initOrdersClient() {
+
+
+(function () {
   'use strict';
+
+  function initOrdersClient() {
+    // only run on Orders -> New page
+    const root = document.getElementById('ordersNewPage');
+    if (!root) return;
+
+    // prevent double-init on same injected page instance
+    if (root.dataset.initDone === '1') return;
+    root.dataset.initDone = '1';
+
+    // derive isAdmin from DOM (works for full refresh AND ajax nav)
+    window._isAdmin = (root.dataset.isAdmin === 'true');
 
   // ---------- elements ----------
   const serviceSelect = document.getElementById('serviceSelect');
@@ -67,11 +81,8 @@ let materialsLoaded = false;
 let materialsFetchedAt = 0;  // ms timestamp when materials were last fetched
 
 
-  // ---------- Service categories (populate category select + filter services) ----------
+    // ---------- Service categories (populate category select + filter services) ----------
   const serviceCategorySelect = document.getElementById('serviceCategorySelect');
-  if (!serviceCategorySelect) return;
-  if (serviceCategorySelect.dataset.ordersClientInit === '1') return;
-  serviceCategorySelect.dataset.ordersClientInit = '1';
 
 async function loadServiceCategories() {
   if (!serviceCategorySelect) return;
@@ -1742,21 +1753,17 @@ if (serviceSelect) {
     renderCart
   };
 
-}
+  }
 
-// Boot once; initialize on full load, AJAX nav, and BFCache restores.
-if (!window._ordersClientBootstrapped) {
-  window._ordersClientBootstrapped = true;
-
+  // init on full page load
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initOrdersClient);
   } else {
     initOrdersClient();
   }
 
-  document.addEventListener('ajax:page:loaded', initOrdersClient);
-
-  window.addEventListener('pageshow', function (e) {
-    if (e && e.persisted) initOrdersClient();
+  // init on ajax navigation swaps (dashboard_nav.js dispatches this)
+  document.addEventListener('ajax:page:loaded', function () {
+    initOrdersClient();
   });
-}
+})();

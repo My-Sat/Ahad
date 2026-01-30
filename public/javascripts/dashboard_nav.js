@@ -1,3 +1,4 @@
+//javascripts/dashboard_nav.js
 (function() {
   function isSameOrigin(url) {
     try {
