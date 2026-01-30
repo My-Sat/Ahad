@@ -1668,14 +1668,40 @@ if (confirmFullPaymentBtn) {
   loadDailyOrdersDropdown();
   startDailyOrdersAutoRefresh();
 
-  if (dailyOrdersSelect) {
-    dailyOrdersSelect.addEventListener('change', function () {
-      const v = this.value || '';
-      if (v && fetchOrderIdInput) {
-        fetchOrderIdInput.value = v;
+if (dailyOrdersSelect) {
+  dailyOrdersSelect.addEventListener('change', async function () {
+    const v = (this.value || '').trim();
+    if (!v) return;
+
+    if (fetchOrderIdInput) fetchOrderIdInput.value = v;
+
+    // optional: avoid refetching the same order that is already loaded
+    if (currentOrderId && String(currentOrderId).trim() === v) return;
+
+    // mimic the Fetch button UX
+    if (fetchOrderBtn) {
+      fetchOrderBtn.disabled = true;
+      fetchOrderBtn.textContent = 'Fetching...';
+    }
+
+    try {
+      await fetchOrderById(v);
+    } finally {
+      if (fetchOrderBtn) {
+        fetchOrderBtn.disabled = false;
+        fetchOrderBtn.textContent = 'Fetch';
       }
-    });
-  }
+
+      // keep your spinner cleanup consistent with submit handler
+      if (window.__FormSpinner && typeof window.__FormSpinner.hide === 'function' && fetchOrderBtn) {
+        window.__FormSpinner.hide(fetchOrderBtn);
+      } else if (fetchOrderBtn) {
+        fetchOrderBtn.classList.remove('loading');
+        fetchOrderBtn.removeAttribute('data-spinner-active');
+      }
+    }
+  });
+}
 
   if (applyManualDiscountBtn) {
     applyManualDiscountBtn.addEventListener('click', async function () {
