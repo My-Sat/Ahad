@@ -152,7 +152,7 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
     if (dailyOrdersSelect.dataset.autoRefresh === '1') return;
     dailyOrdersSelect.dataset.autoRefresh = '1';
 
-    const refreshMs = 30000;
+    const refreshMs = 15000;
     setInterval(() => {
       try {
         // avoid unnecessary work if the tab is hidden
