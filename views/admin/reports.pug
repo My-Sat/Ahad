@@ -195,5 +195,55 @@ block content
                   tr
                     td.text-muted(colspan='4') Loading...
 
+            hr
+
+            h5.text-white.mt-2.mb-2 Customer
+
+            h6.text-white.mt-3.mb-2 Customer Purchase Summary (Order Date)
+            .table-responsive.mb-3
+              table.table.table-sm.table-hover#customerSummaryTable
+                thead
+                  tr
+                    th Customer
+                    th.text-end Orders
+                    th.text-end Total (GH₵)
+                    th.text-end Paid (GH₵)
+                    th.text-end Outstanding (GH₵)
+                    th Last Order
+                tbody
+                  tr
+                    td.text-muted(colspan='6') Loading...
+
+            h6.text-white.mt-3.mb-2 Customer Account Activity (Txn Date)
+            .row.g-2.mb-2
+              .col-6.col-lg-3
+                .card.dark-surface.border-0
+                  .card-body.p-2.dark-card-body
+                    div.small.text-muted-light Total credits
+                    strong#customerCreditsTotal GH₵ 0.00
+              .col-6.col-lg-3
+                .card.dark-surface.border-0
+                  .card-body.p-2.dark-card-body
+                    div.small.text-muted-light Total debits
+                    strong#customerDebitsTotal GH₵ 0.00
+              .col-6.col-lg-3
+                .card.dark-surface.border-0
+                  .card-body.p-2.dark-card-body
+                    div.small.text-muted-light Transactions count
+                    strong#customerTxnsTotal 0
+            .table-responsive
+              table.table.table-sm.table-hover#customerAccountActivityTable
+                thead
+                  tr
+                    th Customer
+                    th.text-end Credits (GH₵)
+                    th.text-end Debits (GH₵)
+                    th.text-end Net (GH₵)
+                    th.text-end Balance (GH₵)
+                    th Last Txn
+                tbody
+                  tr
+                    td.text-muted(colspan='6') Loading...
+
 block append scripts
   script(src='/javascripts/reports_financial.js')

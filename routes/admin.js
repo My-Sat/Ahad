@@ -150,6 +150,8 @@ router.get('/reports/api/orders-by-status', ensureAdmin, reportsController.apiOr
 router.get('/reports/api/orders-by-staff', ensureAdmin, reportsController.apiOrdersByStaff);
 router.get('/reports/api/sales-by-service', ensureAdmin, reportsController.apiSalesByService);
 router.get('/reports/api/sales-by-category', ensureAdmin, reportsController.apiSalesByCategory);
+router.get('/reports/api/customer-summary', ensureAdmin, reportsController.apiCustomerSummary);
+router.get('/reports/api/customer-account-activity', ensureAdmin, reportsController.apiCustomerAccountActivity);
 
 
 module.exports = router;

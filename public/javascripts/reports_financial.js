@@ -261,6 +261,65 @@
     });
   }
 
+  function formatDateTime(dt) {
+    if (!dt) return '';
+    const d = new Date(dt);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString();
+  }
+
+  function renderCustomerSummary(rows) {
+    const table = document.getElementById('customerSummaryTable');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    if (!rows || !rows.length) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No customer orders in this range.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.name || '')}</td>
+        <td class="text-end">${Number(r.ordersCount || 0)}</td>
+        <td class="text-end">${formatCedi(r.totalAmount || 0)}</td>
+        <td class="text-end">${formatCedi(r.paidAmount || 0)}</td>
+        <td class="text-end">${formatCedi(r.outstandingAmount || 0)}</td>
+        <td>${escapeHtml(formatDateTime(r.lastOrderAt))}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderCustomerAccountActivity(totals, rows) {
+    setText('customerCreditsTotal', formatCedi(totals?.totalCredits || 0));
+    setText('customerDebitsTotal', formatCedi(totals?.totalDebits || 0));
+    setText('customerTxnsTotal', Number(totals?.totalTxns || 0));
+
+    const table = document.getElementById('customerAccountActivityTable');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    if (!rows || !rows.length) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No account activity in this range.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.name || '')}</td>
+        <td class="text-end">${formatCedi(r.credits || 0)}</td>
+        <td class="text-end">${formatCedi(r.debits || 0)}</td>
+        <td class="text-end">${formatCedi(r.net || 0)}</td>
+        <td class="text-end">${formatCedi(r.accountBalance || 0)}</td>
+        <td>${escapeHtml(formatDateTime(r.lastTxnAt))}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
   async function loadReports() {
     const fromEl = document.getElementById('reportFrom');
     const toEl = document.getElementById('reportTo');
@@ -290,7 +349,9 @@
         ordersByStatus,
         ordersByStaff,
         salesByService,
-        salesByCategory
+        salesByCategory,
+        customerSummary,
+        customerAccount
       ] = await Promise.all([
         fetchJson(`/admin/reports/api/financial-summary${rangeQuery}`),
         fetchJson(`/admin/reports/api/cashier-collections${rangeQuery}`),
@@ -300,7 +361,9 @@
         fetchJson(`/admin/reports/api/orders-by-status${rangeQuery}`),
         fetchJson(`/admin/reports/api/orders-by-staff${rangeQuery}`),
         fetchJson(`/admin/reports/api/sales-by-service${rangeQuery}`),
-        fetchJson(`/admin/reports/api/sales-by-category${rangeQuery}`)
+        fetchJson(`/admin/reports/api/sales-by-category${rangeQuery}`),
+        fetchJson(`/admin/reports/api/customer-summary${rangeQuery}`),
+        fetchJson(`/admin/reports/api/customer-account-activity${rangeQuery}`)
       ]);
 
       if (financial && financial.summary) {
@@ -327,6 +390,12 @@
       renderOrdersByStaff((ordersByStaff && ordersByStaff.rows) ? ordersByStaff.rows : []);
       renderSalesByService((salesByService && salesByService.rows) ? salesByService.rows : []);
       renderSalesByCategory((salesByCategory && salesByCategory.rows) ? salesByCategory.rows : []);
+
+      renderCustomerSummary((customerSummary && customerSummary.rows) ? customerSummary.rows : []);
+      renderCustomerAccountActivity(
+        (customerAccount && customerAccount.totals) ? customerAccount.totals : { totalCredits: 0, totalDebits: 0, totalTxns: 0 },
+        (customerAccount && customerAccount.rows) ? customerAccount.rows : []
+      );
 
       if (statusEl) {
         const label = (financial && financial.range)

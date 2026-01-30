@@ -4,6 +4,8 @@ const User = require('../models/user');
 const CashierBalance = require('../models/cashier_balance');
 const CashierCollection = require('../models/cashier_collection');
 const AccountantAccount = require('../models/accountant_account');
+const Customer = require('../models/customer');
+const CustomerAccountTxn = require('../models/customer_account_txn');
 const mongoose = require('mongoose');
 
 function isoDate(d) {
@@ -554,5 +556,135 @@ exports.apiSalesByCategory = async (req, res) => {
   } catch (err) {
     console.error('apiSalesByCategory error', err);
     return res.status(500).json({ ok: false, error: 'Failed to load sales by category' });
+  }
+};
+
+exports.apiCustomerSummary = async (req, res) => {
+  try {
+    const { start, end, from, to } = getRangeFromQuery(req);
+
+    const rows = await Order.aggregate([
+      { $match: { createdAt: { $gte: start, $lte: end }, customer: { $ne: null } } },
+      { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
+      { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
+      {
+        $group: {
+          _id: '$customer',
+          ordersCount: { $sum: 1 },
+          totalAmount: { $sum: { $ifNull: ['$total', 0] } },
+          paidAmount: { $sum: { $ifNull: ['$paidSoFar', 0] } },
+          outstandingAmount: { $sum: { $ifNull: ['$outstanding', 0] } },
+          lastOrderAt: { $max: '$createdAt' }
+        }
+      },
+      { $sort: { totalAmount: -1 } },
+      { $limit: 200 }
+    ]);
+
+    const customerIds = rows.map(r => r._id).filter(Boolean);
+    const customers = await Customer.find({ _id: { $in: customerIds } })
+      .select('_id firstName businessName phone category')
+      .lean();
+
+    const cmap = {};
+    customers.forEach(c => { cmap[String(c._id)] = c; });
+
+    const out = rows.map(r => {
+      const c = cmap[String(r._id)] || {};
+      let name = 'Customer';
+      if (c.category === 'artist' || c.category === 'organisation') {
+        name = c.businessName || c.phone || 'Customer';
+      } else {
+        name = c.firstName || c.businessName || c.phone || 'Customer';
+      }
+
+      return {
+        customerId: String(r._id),
+        name,
+        phone: c.phone || '',
+        category: c.category || '',
+        ordersCount: Number(r.ordersCount || 0),
+        totalAmount: Number((r.totalAmount || 0).toFixed(2)),
+        paidAmount: Number((r.paidAmount || 0).toFixed(2)),
+        outstandingAmount: Number((r.outstandingAmount || 0).toFixed(2)),
+        lastOrderAt: r.lastOrderAt || null
+      };
+    });
+
+    return res.json({ ok: true, range: { from, to }, rows: out });
+  } catch (err) {
+    console.error('apiCustomerSummary error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load customer summary' });
+  }
+};
+
+exports.apiCustomerAccountActivity = async (req, res) => {
+  try {
+    const { start, end, from, to } = getRangeFromQuery(req);
+    const rows = await CustomerAccountTxn.aggregate([
+      { $match: { createdAt: { $gte: start, $lte: end } } },
+      {
+        $group: {
+          _id: '$customer',
+          credits: { $sum: { $cond: [{ $eq: ['$type', 'credit'] }, '$amount', 0] } },
+          debits: { $sum: { $cond: [{ $eq: ['$type', 'debit'] }, '$amount', 0] } },
+          txnsCount: { $sum: 1 },
+          lastTxnAt: { $max: '$createdAt' }
+        }
+      },
+      { $sort: { credits: -1 } },
+      { $limit: 200 }
+    ]);
+
+    const customerIds = rows.map(r => r._id).filter(Boolean);
+    const customers = await Customer.find({ _id: { $in: customerIds } })
+      .select('_id firstName businessName phone category accountBalance')
+      .lean();
+    const cmap = {};
+    customers.forEach(c => { cmap[String(c._id)] = c; });
+
+    const totals = rows.reduce((acc, r) => {
+      acc.totalCredits += Number(r.credits || 0);
+      acc.totalDebits += Number(r.debits || 0);
+      acc.totalTxns += Number(r.txnsCount || 0);
+      return acc;
+    }, { totalCredits: 0, totalDebits: 0, totalTxns: 0 });
+
+    const out = rows.map(r => {
+      const c = cmap[String(r._id)] || {};
+      let name = 'Customer';
+      if (c.category === 'artist' || c.category === 'organisation') {
+        name = c.businessName || c.phone || 'Customer';
+      } else {
+        name = c.firstName || c.businessName || c.phone || 'Customer';
+      }
+
+      return {
+        customerId: String(r._id),
+        name,
+        phone: c.phone || '',
+        category: c.category || '',
+        credits: Number((r.credits || 0).toFixed(2)),
+        debits: Number((r.debits || 0).toFixed(2)),
+        net: Number((Number(r.credits || 0) - Number(r.debits || 0)).toFixed(2)),
+        txnsCount: Number(r.txnsCount || 0),
+        lastTxnAt: r.lastTxnAt || null,
+        accountBalance: Number((c.accountBalance || 0).toFixed(2))
+      };
+    });
+
+    return res.json({
+      ok: true,
+      range: { from, to },
+      totals: {
+        totalCredits: Number(totals.totalCredits.toFixed(2)),
+        totalDebits: Number(totals.totalDebits.toFixed(2)),
+        totalTxns: Number(totals.totalTxns || 0)
+      },
+      rows: out
+    });
+  } catch (err) {
+    console.error('apiCustomerAccountActivity error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load customer account activity' });
   }
 };
