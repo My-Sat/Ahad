@@ -166,6 +166,101 @@
     });
   }
 
+  function renderOrdersByStatus(rows) {
+    const table = document.getElementById('ordersByStatusTable');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    if (!rows || !rows.length) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="4">No orders in this range.</td></tr>';
+      return;
+    }
+    const order = ['pending', 'paid', 'cancelled'];
+    const map = {};
+    rows.forEach(r => { map[r.status] = r; });
+    const sorted = [];
+    order.forEach(k => { if (map[k]) sorted.push(map[k]); });
+    rows.forEach(r => { if (!order.includes(r.status)) sorted.push(r); });
+
+    tbody.innerHTML = '';
+    sorted.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.status || 'unknown')}</td>
+        <td class="text-end">${Number(r.ordersCount || 0)}</td>
+        <td class="text-end">${formatCedi(r.totalAmount || 0)}</td>
+        <td class="text-end">${formatCedi(r.outstandingAmount || 0)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderOrdersByStaff(rows) {
+    const table = document.getElementById('ordersByStaffTable');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    if (!rows || !rows.length) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="5">No orders in this range.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.name || '')}</td>
+        <td class="text-end">${Number(r.ordersCount || 0)}</td>
+        <td class="text-end">${formatCedi(r.totalAmount || 0)}</td>
+        <td class="text-end">${Number(r.paidOrdersCount || 0)}</td>
+        <td class="text-end">${formatCedi(r.totalPaidAmount || 0)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderSalesByService(rows) {
+    const table = document.getElementById('salesByServiceTable');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    if (!rows || !rows.length) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="3">No items in this range.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.serviceName || 'Unknown')}</td>
+        <td class="text-end">${Number(r.itemsCount || 0)}</td>
+        <td class="text-end">${formatCedi(r.totalAmount || 0)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderSalesByCategory(rows) {
+    const table = document.getElementById('salesByCategoryTable');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    if (!rows || !rows.length) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="4">No items in this range.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.categoryName || 'Uncategorized')}</td>
+        <td class="text-end">${Number(r.itemsCount || 0)}</td>
+        <td class="text-end">${Number(r.servicesCount || 0)}</td>
+        <td class="text-end">${formatCedi(r.totalAmount || 0)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
   async function loadReports() {
     const fromEl = document.getElementById('reportFrom');
     const toEl = document.getElementById('reportTo');
@@ -191,13 +286,21 @@
         cashiers,
         accountants,
         debtors,
-        discounts
+        discounts,
+        ordersByStatus,
+        ordersByStaff,
+        salesByService,
+        salesByCategory
       ] = await Promise.all([
         fetchJson(`/admin/reports/api/financial-summary${rangeQuery}`),
         fetchJson(`/admin/reports/api/cashier-collections${rangeQuery}`),
         fetchJson(`/admin/reports/api/accountant-ledger${rangeQuery}`),
         fetchJson(`/admin/reports/api/debtors-aging${agingQuery}`),
-        fetchJson(`/admin/reports/api/discounts${rangeQuery}`)
+        fetchJson(`/admin/reports/api/discounts${rangeQuery}`),
+        fetchJson(`/admin/reports/api/orders-by-status${rangeQuery}`),
+        fetchJson(`/admin/reports/api/orders-by-staff${rangeQuery}`),
+        fetchJson(`/admin/reports/api/sales-by-service${rangeQuery}`),
+        fetchJson(`/admin/reports/api/sales-by-category${rangeQuery}`)
       ]);
 
       if (financial && financial.summary) {
@@ -219,6 +322,11 @@
         (discounts && discounts.discountedOrdersCount) ? discounts.discountedOrdersCount : 0,
         (discounts && discounts.byScope) ? discounts.byScope : []
       );
+
+      renderOrdersByStatus((ordersByStatus && ordersByStatus.rows) ? ordersByStatus.rows : []);
+      renderOrdersByStaff((ordersByStaff && ordersByStaff.rows) ? ordersByStaff.rows : []);
+      renderSalesByService((salesByService && salesByService.rows) ? salesByService.rows : []);
+      renderSalesByCategory((salesByCategory && salesByCategory.rows) ? salesByCategory.rows : []);
 
       if (statusEl) {
         const label = (financial && financial.range)

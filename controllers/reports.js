@@ -369,3 +369,190 @@ exports.apiDiscountsSummary = async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Failed to load discounts summary' });
   }
 };
+
+exports.apiOrdersByStatus = async (req, res) => {
+  try {
+    const { start, end, from, to } = getRangeFromQuery(req);
+
+    const rows = await Order.aggregate([
+      { $match: { createdAt: { $gte: start, $lte: end } } },
+      { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
+      { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
+      {
+        $group: {
+          _id: '$status',
+          ordersCount: { $sum: 1 },
+          totalAmount: { $sum: { $ifNull: ['$total', 0] } },
+          outstandingAmount: { $sum: { $ifNull: ['$outstanding', 0] } }
+        }
+      }
+    ]);
+
+    const out = (rows || []).map(r => ({
+      status: r._id || 'unknown',
+      ordersCount: Number(r.ordersCount || 0),
+      totalAmount: Number((r.totalAmount || 0).toFixed(2)),
+      outstandingAmount: Number((r.outstandingAmount || 0).toFixed(2))
+    }));
+
+    return res.json({ ok: true, range: { from, to }, rows: out });
+  } catch (err) {
+    console.error('apiOrdersByStatus error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load orders by status' });
+  }
+};
+
+exports.apiOrdersByStaff = async (req, res) => {
+  try {
+    const { start, end, from, to } = getRangeFromQuery(req);
+
+    const rows = await Order.aggregate([
+      { $match: { createdAt: { $gte: start, $lte: end } } },
+      {
+        $group: {
+          _id: '$handledBy',
+          ordersCount: { $sum: 1 },
+          totalAmount: { $sum: { $ifNull: ['$total', 0] } },
+          paidOrdersCount: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, 1, 0] } },
+          totalPaidAmount: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, { $ifNull: ['$total', 0] }, 0] } }
+        }
+      }
+    ]);
+
+    const userIds = rows.map(r => r._id).filter(id => id);
+    const users = await User.find({ _id: { $in: userIds } })
+      .select('_id name username')
+      .lean();
+    const umap = {};
+    users.forEach(u => { umap[String(u._id)] = u; });
+
+    const out = (rows || []).map(r => {
+      const key = r._id ? String(r._id) : '';
+      const u = key ? (umap[key] || {}) : {};
+      return {
+        staffId: key || null,
+        name: key ? (u.name || u.username || key) : 'Unassigned',
+        ordersCount: Number(r.ordersCount || 0),
+        totalAmount: Number((r.totalAmount || 0).toFixed(2)),
+        paidOrdersCount: Number(r.paidOrdersCount || 0),
+        totalPaidAmount: Number((r.totalPaidAmount || 0).toFixed(2))
+      };
+    }).sort((a, b) => b.totalAmount - a.totalAmount);
+
+    return res.json({ ok: true, range: { from, to }, rows: out });
+  } catch (err) {
+    console.error('apiOrdersByStaff error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load orders by staff' });
+  }
+};
+
+exports.apiSalesByService = async (req, res) => {
+  try {
+    const { start, end, from, to } = getRangeFromQuery(req);
+
+    const rows = await Order.aggregate([
+      { $match: { createdAt: { $gte: start, $lte: end } } },
+      { $unwind: '$items' },
+      {
+        $group: {
+          _id: '$items.service',
+          itemsCount: { $sum: 1 },
+          totalAmount: { $sum: { $ifNull: ['$items.subtotal', 0] } }
+        }
+      },
+      { $sort: { totalAmount: -1 } },
+      { $limit: 100 },
+      {
+        $lookup: {
+          from: 'services',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'service'
+        }
+      },
+      { $addFields: { service: { $arrayElemAt: ['$service', 0] } } },
+      {
+        $project: {
+          serviceId: '$_id',
+          serviceName: { $ifNull: ['$service.name', 'Unknown'] },
+          categoryId: '$service.category',
+          itemsCount: 1,
+          totalAmount: 1
+        }
+      }
+    ]);
+
+    const out = (rows || []).map(r => ({
+      serviceId: r.serviceId ? String(r.serviceId) : null,
+      serviceName: r.serviceName || 'Unknown',
+      categoryId: r.categoryId ? String(r.categoryId) : null,
+      itemsCount: Number(r.itemsCount || 0),
+      totalAmount: Number((r.totalAmount || 0).toFixed(2))
+    }));
+
+    return res.json({ ok: true, range: { from, to }, rows: out });
+  } catch (err) {
+    console.error('apiSalesByService error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load sales by service' });
+  }
+};
+
+exports.apiSalesByCategory = async (req, res) => {
+  try {
+    const { start, end, from, to } = getRangeFromQuery(req);
+
+    const rows = await Order.aggregate([
+      { $match: { createdAt: { $gte: start, $lte: end } } },
+      { $unwind: '$items' },
+      {
+        $lookup: {
+          from: 'services',
+          localField: 'items.service',
+          foreignField: '_id',
+          as: 'service'
+        }
+      },
+      { $addFields: { service: { $arrayElemAt: ['$service', 0] } } },
+      {
+        $group: {
+          _id: '$service.category',
+          itemsCount: { $sum: 1 },
+          totalAmount: { $sum: { $ifNull: ['$items.subtotal', 0] } },
+          services: { $addToSet: '$items.service' }
+        }
+      },
+      { $sort: { totalAmount: -1 } },
+      {
+        $lookup: {
+          from: 'servicecategories',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'category'
+        }
+      },
+      { $addFields: { category: { $arrayElemAt: ['$category', 0] } } },
+      {
+        $project: {
+          categoryId: '$_id',
+          categoryName: { $ifNull: ['$category.name', 'Uncategorized'] },
+          itemsCount: 1,
+          servicesCount: { $size: '$services' },
+          totalAmount: 1
+        }
+      }
+    ]);
+
+    const out = (rows || []).map(r => ({
+      categoryId: r.categoryId ? String(r.categoryId) : null,
+      categoryName: r.categoryName || 'Uncategorized',
+      itemsCount: Number(r.itemsCount || 0),
+      servicesCount: Number(r.servicesCount || 0),
+      totalAmount: Number((r.totalAmount || 0).toFixed(2))
+    }));
+
+    return res.json({ ok: true, range: { from, to }, rows: out });
+  } catch (err) {
+    console.error('apiSalesByCategory error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load sales by category' });
+  }
+};

@@ -146,6 +146,10 @@ router.get('/reports/api/cashier-collections', ensureAdmin, reportsController.ap
 router.get('/reports/api/accountant-ledger', ensureAdmin, reportsController.apiAccountantLedger);
 router.get('/reports/api/debtors-aging', ensureAdmin, reportsController.apiDebtorsAging);
 router.get('/reports/api/discounts', ensureAdmin, reportsController.apiDiscountsSummary);
+router.get('/reports/api/orders-by-status', ensureAdmin, reportsController.apiOrdersByStatus);
+router.get('/reports/api/orders-by-staff', ensureAdmin, reportsController.apiOrdersByStaff);
+router.get('/reports/api/sales-by-service', ensureAdmin, reportsController.apiSalesByService);
+router.get('/reports/api/sales-by-category', ensureAdmin, reportsController.apiSalesByCategory);
 
 
 module.exports = router;

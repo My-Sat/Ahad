@@ -139,5 +139,61 @@ block content
                   tr
                     td.text-muted(colspan='3') Loading...
 
+            hr
+
+            h5.text-white.mt-2.mb-2 Orders / Operations
+
+            h6.text-white.mt-3.mb-2 Orders by Status (Order Date)
+            .table-responsive.mb-3
+              table.table.table-sm.table-hover#ordersByStatusTable
+                thead
+                  tr
+                    th Status
+                    th.text-end Orders
+                    th.text-end Total (GH₵)
+                    th.text-end Outstanding (GH₵)
+                tbody
+                  tr
+                    td.text-muted(colspan='4') Loading...
+
+            h6.text-white.mt-3.mb-2 Orders by Staff (Handled By)
+            .table-responsive.mb-3
+              table.table.table-sm.table-hover#ordersByStaffTable
+                thead
+                  tr
+                    th Staff
+                    th.text-end Orders
+                    th.text-end Total (GH₵)
+                    th.text-end Paid Orders
+                    th.text-end Paid Total (GH₵)
+                tbody
+                  tr
+                    td.text-muted(colspan='5') Loading...
+
+            h6.text-white.mt-3.mb-2 Sales Mix by Service (Order Items)
+            .table-responsive.mb-3
+              table.table.table-sm.table-hover#salesByServiceTable
+                thead
+                  tr
+                    th Service
+                    th.text-end Items
+                    th.text-end Total (GH₵)
+                tbody
+                  tr
+                    td.text-muted(colspan='3') Loading...
+
+            h6.text-white.mt-3.mb-2 Sales Mix by Category (Order Items)
+            .table-responsive
+              table.table.table-sm.table-hover#salesByCategoryTable
+                thead
+                  tr
+                    th Category
+                    th.text-end Items
+                    th.text-end Services
+                    th.text-end Total (GH₵)
+                tbody
+                  tr
+                    td.text-muted(colspan='4') Loading...
+
 block append scripts
   script(src='/javascripts/reports_financial.js')
