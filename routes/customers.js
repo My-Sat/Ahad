@@ -47,6 +47,13 @@ router.get(
   customerController.accountPage
 );
 
+// ✅ API: list customer orders
+router.get(
+  '/:id/orders',
+  ensureHasPermission('/customers'),
+  customerController.apiCustomerOrders
+);
+
 // ✅ API: fetch account info
 router.get(
   '/:id/account/api',

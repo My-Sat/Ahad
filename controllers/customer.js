@@ -294,6 +294,33 @@ exports.apiListCustomers = async (req, res) => {
   }
 };
 
+// GET /customers/:id/orders
+// returns minimal list of orders for this customer
+exports.apiCustomerOrders = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ ok: false, error: 'Invalid customer id' });
+    }
+
+    const orders = await Order.find({ customer: new mongoose.Types.ObjectId(id) })
+      .select('orderId createdAt')
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(500)
+      .lean();
+
+    const out = (orders || []).map(o => ({
+      orderId: o.orderId || String(o._id || ''),
+      createdAt: o.createdAt || (o._id ? o._id.getTimestamp() : null)
+    }));
+
+    return res.json({ ok: true, orders: out });
+  } catch (err) {
+    console.error('apiCustomerOrders error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load customer orders' });
+  }
+};
+
 // GET /customers/:id/account
 exports.accountPage = async (req, res) => {
   try {

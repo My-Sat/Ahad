@@ -8,8 +8,11 @@ block content
           .card-body.dark-card-body
             .d-flex.justify-content-between.align-items-center.mb-3
               h4.mb-0.text-white Customer Account
-              a.btn.btn-outline-light-custom.btn-sm(href='/orders/pay')
-                | Back to Pay
+              .d-flex.gap-2
+                a.btn.btn-outline-light-custom.btn-sm(href='/orders/pay')
+                  | Back to Pay
+                button.btn.btn-outline-light-custom.btn-sm#openCustomerOrdersBtn(type='button')
+                  | Customer's Orders
 
             p.text-muted-light.mb-2
               strong.text-white Customer:
@@ -63,6 +66,27 @@ block content
                   else
                     tr
                       td.text-muted(colspan='5') No transactions yet.
+
+  // Customer orders modal
+  .modal.fade(id='customerOrdersModal', tabindex='-1', aria-labelledby='customerOrdersModalLabel', aria-hidden='true')
+    .modal-dialog.modal-lg.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title#customerOrdersModalLabel Customer's Orders
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          p.text-muted.small#customerOrdersStatus Loading...
+          .table-responsive
+            table.table.table-sm.table-hover#customerOrdersTable
+              thead
+                tr
+                  th Order ID
+                  th Date
+              tbody
+                tr
+                  td.text-muted(colspan='2') Loading...
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
 block append scripts
   script.
