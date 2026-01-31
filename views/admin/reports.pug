@@ -1,4 +1,4 @@
-extends ../layout
+﻿extends ../layout
 
 block content
   .container
@@ -8,7 +8,7 @@ block content
         .card.shadow-sm.dark-surface
           .card-body.dark-card-body
             .d-flex.justify-content-between.align-items-center.mb-3
-              h4.mb-0.text-white Reports — Financial / Cash Control
+              h4.mb-0.text-white Reports
               .d-flex.gap-2.align-items-center
                 label.small.text-muted-light.mb-0(for='reportFrom') From
                 input.form-control.form-control-sm.form-control-dark#reportFrom(type='date', value=defaultFrom)
@@ -18,274 +18,333 @@ block content
 
             small.text-muted-light#reportStatus Select a date range and click Apply.
 
-            hr
+            .accordion#reportsAccordion
+              .accordion-item
+                h2.accordion-header#reportHeadingFinancial
+                  button.accordion-button(type='button', data-bs-toggle='collapse', data-bs-target='#reportCollapseFinancial', aria-expanded='true', aria-controls='reportCollapseFinancial')
+                    | Financial
+                #reportCollapseFinancial.accordion-collapse.collapse.show(aria-labelledby='reportHeadingFinancial', data-bs-parent='#reportsAccordion')
+                  .accordion-body
+                    h6.text-white.mb-2 Sales Summary (Order Date)
+                    .row.g-2.mb-3
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Total orders amount
+                            strong#summaryTotalOrders GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Total paid orders amount
+                            strong#summaryTotalPaid GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Total outstanding
+                            strong#summaryOutstanding GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Payments received (by payment date)
+                            strong#summaryPaymentsReceived GH₵ 0.00
+                    .row.g-2.mb-3
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Orders count
+                            strong#summaryOrdersCount 0
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Paid orders count
+                            strong#summaryPaidOrdersCount 0
 
-            h6.text-white.mb-2 Sales Summary (Order Date)
-            .row.g-2.mb-3
-              .col-6.col-lg-3
-                .card.dark-surface.border-0
-                  .card-body.p-2.dark-card-body
-                    div.small.text-muted-light Total orders amount
-                    strong#summaryTotalOrders GH₵ 0.00
-              .col-6.col-lg-3
-                .card.dark-surface.border-0
-                  .card-body.p-2.dark-card-body
-                    div.small.text-muted-light Total paid orders amount
-                    strong#summaryTotalPaid GH₵ 0.00
-              .col-6.col-lg-3
-                .card.dark-surface.border-0
-                  .card-body.p-2.dark-card-body
-                    div.small.text-muted-light Total outstanding
-                    strong#summaryOutstanding GH₵ 0.00
-              .col-6.col-lg-3
-                .card.dark-surface.border-0
-                  .card-body.p-2.dark-card-body
-                    div.small.text-muted-light Payments received (by payment date)
-                    strong#summaryPaymentsReceived GH₵ 0.00
-            .row.g-2.mb-3
-              .col-6.col-lg-3
-                .card.dark-surface.border-0
-                  .card-body.p-2.dark-card-body
-                    div.small.text-muted-light Orders count
-                    strong#summaryOrdersCount 0
-              .col-6.col-lg-3
-                .card.dark-surface.border-0
-                  .card-body.p-2.dark-card-body
-                    div.small.text-muted-light Paid orders count
-                    strong#summaryPaidOrdersCount 0
+                    h6.text-white.mt-3.mb-2 Payments by Method (Payment Date)
+                    .table-responsive.mb-3
+                      table.table.table-sm.table-hover#paymentsByMethodTable
+                        thead
+                          tr
+                            th Method
+                            th.text-end Count
+                            th.text-end Amount (GH₵)
+                        tbody
+                          tr
+                            td.text-muted(colspan='3') Loading...
 
-            h6.text-white.mt-3.mb-2 Payments by Method (Payment Date)
-            .table-responsive.mb-3
-              table.table.table-sm.table-hover#paymentsByMethodTable
-                thead
-                  tr
-                    th Method
-                    th.text-end Count
-                    th.text-end Amount (GH₵)
-                tbody
-                  tr
-                    td.text-muted(colspan='3') Loading...
+                    h6.text-white.mt-3.mb-2 Cashier Collections (Range)
+                    .table-responsive.mb-3
+                      table.table.table-sm.table-hover#cashierCollectionsTable
+                        thead
+                          tr
+                            th Cashier
+                            th.text-end Recorded
+                            th.text-end Collected
+                            th.text-end Uncollected
+                            th.text-end Previous Balance
+                        tbody
+                          tr
+                            td.text-muted(colspan='5') Loading...
 
-            h6.text-white.mt-3.mb-2 Cashier Collections (Range)
-            .table-responsive.mb-3
-              table.table.table-sm.table-hover#cashierCollectionsTable
-                thead
-                  tr
-                    th Cashier
-                    th.text-end Recorded
-                    th.text-end Collected
-                    th.text-end Uncollected
-                    th.text-end Previous Balance
-                tbody
-                  tr
-                    td.text-muted(colspan='5') Loading...
+                    h6.text-white.mt-3.mb-2 Accountant Ledger (Range)
+                    .table-responsive.mb-3
+                      table.table.table-sm.table-hover#accountantLedgerTable
+                        thead
+                          tr
+                            th Accountant
+                            th.text-end Total Collected (GH₵)
+                        tbody
+                          tr
+                            td.text-muted(colspan='2') Loading...
 
-            h6.text-white.mt-3.mb-2 Accountant Ledger (Range)
-            .table-responsive.mb-3
-              table.table.table-sm.table-hover#accountantLedgerTable
-                thead
-                  tr
-                    th Accountant
-                    th.text-end Total Collected (GH₵)
-                tbody
-                  tr
-                    td.text-muted(colspan='2') Loading...
+                    h6.text-white.mt-3.mb-2 Debtors Aging (As of Today)
+                    .row.g-2
+                      .col-lg-6
+                        .table-responsive
+                          table.table.table-sm.table-hover#debtorsAgingTable
+                            thead
+                              tr
+                                th Bucket (days)
+                                th.text-end Orders
+                                th.text-end Outstanding (GH₵)
+                            tbody
+                              tr
+                                td.text-muted(colspan='3') Loading...
+                      .col-lg-6
+                        .table-responsive
+                          table.table.table-sm.table-hover#topDebtorsTable
+                            thead
+                              tr
+                                th Debtor
+                                th.text-end Orders
+                                th.text-end Outstanding (GH₵)
+                            tbody
+                              tr
+                                td.text-muted(colspan='3') Loading...
 
-            h6.text-white.mt-3.mb-2 Debtors Aging (As of Today)
-            .row.g-2
-              .col-lg-6
-                .table-responsive
-                  table.table.table-sm.table-hover#debtorsAgingTable
-                    thead
-                      tr
-                        th Bucket (days)
-                        th.text-end Orders
-                        th.text-end Outstanding (GH₵)
-                    tbody
-                      tr
-                        td.text-muted(colspan='3') Loading...
-              .col-lg-6
-                .table-responsive
-                  table.table.table-sm.table-hover#topDebtorsTable
-                    thead
-                      tr
-                        th Debtor
-                        th.text-end Orders
-                        th.text-end Outstanding (GH₵)
-                    tbody
-                      tr
-                        td.text-muted(colspan='3') Loading...
+                    h6.text-white.mt-4.mb-2 Discounts (Order Date)
+                    .row.g-2.mb-2
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Total discount given
+                            strong#discountTotalAmount GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Discounted orders count
+                            strong#discountOrdersCount 0
+                    .table-responsive
+                      table.table.table-sm.table-hover#discountScopeTable
+                        thead
+                          tr
+                            th Scope
+                            th.text-end Orders
+                            th.text-end Amount (GH₵)
+                        tbody
+                          tr
+                            td.text-muted(colspan='3') Loading...
 
-            h6.text-white.mt-4.mb-2 Discounts (Order Date)
-            .row.g-2.mb-2
-              .col-6.col-lg-3
-                .card.dark-surface.border-0
-                  .card-body.p-2.dark-card-body
-                    div.small.text-muted-light Total discount given
-                    strong#discountTotalAmount GH₵ 0.00
-              .col-6.col-lg-3
-                .card.dark-surface.border-0
-                  .card-body.p-2.dark-card-body
-                    div.small.text-muted-light Discounted orders count
-                    strong#discountOrdersCount 0
-            .table-responsive
-              table.table.table-sm.table-hover#discountScopeTable
-                thead
-                  tr
-                    th Scope
-                    th.text-end Orders
-                    th.text-end Amount (GH₵)
-                tbody
-                  tr
-                    td.text-muted(colspan='3') Loading...
+              .accordion-item
+                h2.accordion-header#reportHeadingOrders
+                  button.accordion-button.collapsed(type='button', data-bs-toggle='collapse', data-bs-target='#reportCollapseOrders', aria-expanded='false', aria-controls='reportCollapseOrders')
+                    | Orders / Operations
+                #reportCollapseOrders.accordion-collapse.collapse(aria-labelledby='reportHeadingOrders', data-bs-parent='#reportsAccordion')
+                  .accordion-body
+                    h6.text-white.mt-3.mb-2 Orders by Status (Order Date)
+                    .table-responsive.mb-3
+                      table.table.table-sm.table-hover#ordersByStatusTable
+                        thead
+                          tr
+                            th Status
+                            th.text-end Orders
+                            th.text-end Total (GH₵)
+                            th.text-end Outstanding (GH₵)
+                        tbody
+                          tr
+                            td.text-muted(colspan='4') Loading...
 
-            hr
+                    h6.text-white.mt-3.mb-2 Orders by Staff (Handled By)
+                    .table-responsive.mb-3
+                      table.table.table-sm.table-hover#ordersByStaffTable
+                        thead
+                          tr
+                            th Staff
+                            th.text-end Orders
+                            th.text-end Total (GH₵)
+                            th.text-end Paid Orders
+                            th.text-end Paid Total (GH₵)
+                        tbody
+                          tr
+                            td.text-muted(colspan='5') Loading...
 
-            h5.text-white.mt-2.mb-2 Orders / Operations
+                    h6.text-white.mt-3.mb-2 Sales Mix by Service (Order Items)
+                    .table-responsive.mb-3
+                      table.table.table-sm.table-hover#salesByServiceTable
+                        thead
+                          tr
+                            th Service
+                            th.text-end Items
+                            th.text-end Total (GH₵)
+                        tbody
+                          tr
+                            td.text-muted(colspan='3') Loading...
 
-            h6.text-white.mt-3.mb-2 Orders by Status (Order Date)
-            .table-responsive.mb-3
-              table.table.table-sm.table-hover#ordersByStatusTable
-                thead
-                  tr
-                    th Status
-                    th.text-end Orders
-                    th.text-end Total (GH₵)
-                    th.text-end Outstanding (GH₵)
-                tbody
-                  tr
-                    td.text-muted(colspan='4') Loading...
+                    h6.text-white.mt-3.mb-2 Sales Mix by Category (Order Items)
+                    .table-responsive
+                      table.table.table-sm.table-hover#salesByCategoryTable
+                        thead
+                          tr
+                            th Category
+                            th.text-end Items
+                            th.text-end Services
+                            th.text-end Total (GH₵)
+                        tbody
+                          tr
+                            td.text-muted(colspan='4') Loading...
 
-            h6.text-white.mt-3.mb-2 Orders by Staff (Handled By)
-            .table-responsive.mb-3
-              table.table.table-sm.table-hover#ordersByStaffTable
-                thead
-                  tr
-                    th Staff
-                    th.text-end Orders
-                    th.text-end Total (GH₵)
-                    th.text-end Paid Orders
-                    th.text-end Paid Total (GH₵)
-                tbody
-                  tr
-                    td.text-muted(colspan='5') Loading...
+              .accordion-item
+                h2.accordion-header#reportHeadingCustomer
+                  button.accordion-button.collapsed(type='button', data-bs-toggle='collapse', data-bs-target='#reportCollapseCustomer', aria-expanded='false', aria-controls='reportCollapseCustomer')
+                    | Customer
+                #reportCollapseCustomer.accordion-collapse.collapse(aria-labelledby='reportHeadingCustomer', data-bs-parent='#reportsAccordion')
+                  .accordion-body
+                    h6.text-white.mt-3.mb-2 Customer Purchase Summary (Order Date)
+                    .table-responsive.mb-3
+                      table.table.table-sm.table-hover#customerSummaryTable
+                        thead
+                          tr
+                            th Customer
+                            th.text-end Orders
+                            th.text-end Total (GH₵)
+                            th.text-end Paid (GH₵)
+                            th.text-end Outstanding (GH₵)
+                            th Last Order
+                        tbody
+                          tr
+                            td.text-muted(colspan='6') Loading...
 
-            h6.text-white.mt-3.mb-2 Sales Mix by Service (Order Items)
-            .table-responsive.mb-3
-              table.table.table-sm.table-hover#salesByServiceTable
-                thead
-                  tr
-                    th Service
-                    th.text-end Items
-                    th.text-end Total (GH₵)
-                tbody
-                  tr
-                    td.text-muted(colspan='3') Loading...
+                    h6.text-white.mt-3.mb-2 Customer Account Activity (Txn Date)
+                    .row.g-2.mb-2
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Total credits
+                            strong#customerCreditsTotal GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Total debits
+                            strong#customerDebitsTotal GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Transactions count
+                            strong#customerTxnsTotal 0
+                    .table-responsive
+                      table.table.table-sm.table-hover#customerAccountActivityTable
+                        thead
+                          tr
+                            th Customer
+                            th.text-end Credits (GH₵)
+                            th.text-end Debits (GH₵)
+                            th.text-end Net (GH₵)
+                            th.text-end Balance (GH₵)
+                            th Last Txn
+                        tbody
+                          tr
+                            td.text-muted(colspan='6') Loading...
 
-            h6.text-white.mt-3.mb-2 Sales Mix by Category (Order Items)
-            .table-responsive
-              table.table.table-sm.table-hover#salesByCategoryTable
-                thead
-                  tr
-                    th Category
-                    th.text-end Items
-                    th.text-end Services
-                    th.text-end Total (GH₵)
-                tbody
-                  tr
-                    td.text-muted(colspan='4') Loading...
+              .accordion-item
+                h2.accordion-header#reportHeadingAssets
+                  button.accordion-button.collapsed(type='button', data-bs-toggle='collapse', data-bs-target='#reportCollapseAssets', aria-expanded='false', aria-controls='reportCollapseAssets')
+                    | Production / Assets
+                #reportCollapseAssets.accordion-collapse.collapse(aria-labelledby='reportHeadingAssets', data-bs-parent='#reportsAccordion')
+                  .accordion-body
+                    h6.text-white.mt-3.mb-2 Printer Usage (Usage Date)
+                    .row.g-2.mb-2
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Total usage count
+                            strong#printerUsageTotal 0
+                    .table-responsive.mb-3
+                      table.table.table-sm.table-hover#printerUsageTable
+                        thead
+                          tr
+                            th Printer
+                            th.text-end Total
+                            th.text-end Mono
+                            th.text-end Colour
+                            th Location
+                        tbody
+                          tr
+                            td.text-muted(colspan='5') Loading...
 
-            hr
+                    h6.text-white.mt-3.mb-2 Material Consumption (Usage Date)
+                    .row.g-2.mb-2
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Total material usage
+                            strong#materialUsageTotal 0
+                    .table-responsive.mb-3
+                      table.table.table-sm.table-hover#materialUsageTable
+                        thead
+                          tr
+                            th Store
+                            th Material
+                            th.text-end Total Used
+                        tbody
+                          tr
+                            td.text-muted(colspan='3') Loading...
 
-            h5.text-white.mt-2.mb-2 Customer
+                    h6.text-white.mt-3.mb-2 Inventory Snapshot (Current)
+                    .table-responsive.mb-3
+                      table.table.table-sm.table-hover#inventorySnapshotTable
+                        thead
+                          tr
+                            th Store
+                            th Material
+                            th.text-end Stocked
+                            th.text-end Used
+                            th.text-end Remaining
+                        tbody
+                          tr
+                            td.text-muted(colspan='5') Loading...
 
-            h6.text-white.mt-3.mb-2 Customer Purchase Summary (Order Date)
-            .table-responsive.mb-3
-              table.table.table-sm.table-hover#customerSummaryTable
-                thead
-                  tr
-                    th Customer
-                    th.text-end Orders
-                    th.text-end Total (GH₵)
-                    th.text-end Paid (GH₵)
-                    th.text-end Outstanding (GH₵)
-                    th Last Order
-                tbody
-                  tr
-                    td.text-muted(colspan='6') Loading...
+                    h6.text-white.mt-3.mb-2 Low Stock (Current)
+                    .d-flex.gap-2.align-items-center.mb-2
+                      label.small.text-muted-light.mb-0(for='lowStockThreshold') Threshold
+                      input.form-control.form-control-sm.form-control-dark#lowStockThreshold(type='number', min='0', step='1', value='10', style='width:110px')
+                      button.btn.btn-outline-light-custom.btn-sm#lowStockRefreshBtn(type='button') Refresh
+                    .table-responsive.mb-3
+                      table.table.table-sm.table-hover#lowStockTable
+                        thead
+                          tr
+                            th Store
+                            th Material
+                            th.text-end Remaining
+                            th.text-end Stocked
+                            th.text-end Used
+                        tbody
+                          tr
+                            td.text-muted(colspan='5') Loading...
 
-            h6.text-white.mt-3.mb-2 Customer Account Activity (Txn Date)
-            .row.g-2.mb-2
-              .col-6.col-lg-3
-                .card.dark-surface.border-0
-                  .card-body.p-2.dark-card-body
-                    div.small.text-muted-light Total credits
-                    strong#customerCreditsTotal GH₵ 0.00
-              .col-6.col-lg-3
-                .card.dark-surface.border-0
-                  .card-body.p-2.dark-card-body
-                    div.small.text-muted-light Total debits
-                    strong#customerDebitsTotal GH₵ 0.00
-              .col-6.col-lg-3
-                .card.dark-surface.border-0
-                  .card-body.p-2.dark-card-body
-                    div.small.text-muted-light Transactions count
-                    strong#customerTxnsTotal 0
-            .table-responsive
-              table.table.table-sm.table-hover#customerAccountActivityTable
-                thead
-                  tr
-                    th Customer
-                    th.text-end Credits (GH₵)
-                    th.text-end Debits (GH₵)
-                    th.text-end Net (GH₵)
-                    th.text-end Balance (GH₵)
-                    th Last Txn
-                tbody
-                  tr
-                    td.text-muted(colspan='6') Loading...
-
-            hr
-
-            h5.text-white.mt-2.mb-2 Production / Assets
-
-            h6.text-white.mt-3.mb-2 Printer Usage (Usage Date)
-            .row.g-2.mb-2
-              .col-6.col-lg-3
-                .card.dark-surface.border-0
-                  .card-body.p-2.dark-card-body
-                    div.small.text-muted-light Total usage count
-                    strong#printerUsageTotal 0
-            .table-responsive.mb-3
-              table.table.table-sm.table-hover#printerUsageTable
-                thead
-                  tr
-                    th Printer
-                    th.text-end Total
-                    th.text-end Mono
-                    th.text-end Colour
-                    th Location
-                tbody
-                  tr
-                    td.text-muted(colspan='5') Loading...
-
-            h6.text-white.mt-3.mb-2 Material Consumption (Usage Date)
-            .row.g-2.mb-2
-              .col-6.col-lg-3
-                .card.dark-surface.border-0
-                  .card-body.p-2.dark-card-body
-                    div.small.text-muted-light Total material usage
-                    strong#materialUsageTotal 0
-            .table-responsive
-              table.table.table-sm.table-hover#materialUsageTable
-                thead
-                  tr
-                    th Store
-                    th Material
-                    th.text-end Total Used
-                tbody
-                  tr
-                    td.text-muted(colspan='3') Loading...
+                    h6.text-white.mt-3.mb-2 Stock Movements (Range)
+                    .table-responsive
+                      table.table.table-sm.table-hover#stockMovementsTable
+                        thead
+                          tr
+                            th Store
+                            th Material
+                            th.text-end In
+                            th.text-end Out
+                            th.text-end Adjusted
+                            th.text-end Consumed
+                            th.text-end Net
+                        tbody
+                          tr
+                            td.text-muted(colspan='7') Loading...
 
 block append scripts
   script(src='/javascripts/reports_financial.js')
