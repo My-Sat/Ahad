@@ -43,6 +43,42 @@ function applyTemplate(template, ctx) {
   return t.trim();
 }
 
+const TEMPLATE_TOKEN_RE = /\{(name|category|phone|orderId|amount|totalBeforeDiscount|discountAmount|outstanding|ordersCount|accBalance)\}/;
+
+function shouldApplyTemplate(message) {
+  return TEMPLATE_TOKEN_RE.test(String(message || ''));
+}
+
+function buildTemplateContext(customerDoc, orderCtx = null) {
+  const cat = normalizeCategory(customerDoc?.category);
+  return {
+    phone: customerDoc?.phone ? String(customerDoc.phone) : '',
+    categoryLabel: categoryLabel(customerDoc?.category),
+    name: (cat === 'artist' || cat === 'organisation')
+      ? (customerDoc?.businessName || customerDoc?.phone || '')
+      : (customerDoc?.firstName || customerDoc?.businessName || customerDoc?.phone || ''),
+
+    orderId: orderCtx && orderCtx.orderId ? String(orderCtx.orderId) : '',
+    amount: (orderCtx && orderCtx.amount !== undefined && orderCtx.amount !== null) ? String(orderCtx.amount) : '',
+    totalBeforeDiscount: (orderCtx && orderCtx.totalBeforeDiscount !== undefined && orderCtx.totalBeforeDiscount !== null)
+      ? String(orderCtx.totalBeforeDiscount)
+      : '',
+    discountAmount: (orderCtx && orderCtx.discountAmount !== undefined && orderCtx.discountAmount !== null)
+      ? String(orderCtx.discountAmount)
+      : '',
+
+    outstanding: (orderCtx && orderCtx.outstanding !== undefined && orderCtx.outstanding !== null)
+      ? String(orderCtx.outstanding)
+      : '',
+    ordersCount: (orderCtx && orderCtx.ordersCount !== undefined && orderCtx.ordersCount !== null)
+      ? String(orderCtx.ordersCount)
+      : '',
+    accBalance: (customerDoc && customerDoc.accountBalance !== undefined && customerDoc.accountBalance !== null)
+      ? String(customerDoc.accountBalance)
+      : ''
+  };
+}
+
 // ---- internal helpers for auto config (supports new schema + backward compat) ----
 function normalizeEvent(ev) {
   const e = String(ev || 'order').toLowerCase();
@@ -254,12 +290,16 @@ exports.apiSendManual = async (req, res) => {
       return res.status(400).json({ error: 'Invalid debtor selection' });
     }
 
+    const applyTpl = shouldApplyTemplate(message);
+
     // Find recipients
     const q = { phone: { $exists: true, $ne: '' } };
     if (target === 'customer_type') q.category = String(customerType);
 
     // Default: customers list
     let customers = [];
+
+    let debtorExtraMap = null;
 
     if (target === 'debtors') {
       // Debtors = customers who have at least one order with outstanding > 0
@@ -275,13 +315,27 @@ exports.apiSendManual = async (req, res) => {
         // outstanding = total - paidSoFar
         { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
         { $match: match },
-        { $group: { _id: '$customer' } }
+        {
+          $group: {
+            _id: '$customer',
+            totalOutstanding: { $sum: '$outstanding' },
+            ordersCount: { $sum: 1 }
+          }
+        }
       ];
 
-      const debtorCustomerIds = await Order.aggregate(debtorPipeline);
-      const ids = (debtorCustomerIds || [])
-        .map(d => d && d._id ? d._id : null)
-        .filter(Boolean);
+      const debtorGroups = await Order.aggregate(debtorPipeline);
+      const ids = (debtorGroups || []).map(d => d && d._id ? d._id : null).filter(Boolean);
+
+      debtorExtraMap = {};
+      (debtorGroups || []).forEach(g => {
+        if (g && g._id) {
+          debtorExtraMap[String(g._id)] = {
+            outstanding: Number(g.totalOutstanding || 0).toFixed(2),
+            ordersCount: Number(g.ordersCount || 0)
+          };
+        }
+      });
 
       // If none, return empty campaign result quickly
       if (!ids.length) {
@@ -318,7 +372,18 @@ exports.apiSendManual = async (req, res) => {
     // Send sequentially (simple + safe)
     for (const c of customers) {
       try {
-        await sendSms({ to: c.phone, content: message });
+        let content = message;
+        if (applyTpl) {
+          const extra = (target === 'debtors' && debtorExtraMap)
+            ? (debtorExtraMap[String(c._id)] || { outstanding: '0.00', ordersCount: 0 })
+            : null;
+          const ctx = buildTemplateContext(
+            c,
+            extra ? { outstanding: extra.outstanding, ordersCount: extra.ordersCount } : null
+          );
+          content = applyTemplate(message, ctx);
+        }
+        await sendSms({ to: c.phone, content });
         successCount++;
       } catch (err) {
         failCount++;
@@ -360,32 +425,7 @@ exports.buildAutoMessageForCustomer = async function buildAutoMessageForCustomer
   if (autoCfg.enabled === false) return { enabled: false, content: null };
 
   const cat = normalizeCategory(customerDoc?.category);
-const ctx = {
-  phone: customerDoc?.phone ? String(customerDoc.phone) : '',
-  categoryLabel: categoryLabel(customerDoc?.category),
-  name: (cat === 'artist' || cat === 'organisation')
-    ? (customerDoc?.businessName || customerDoc?.phone || '')
-    : (customerDoc?.firstName || customerDoc?.businessName || customerDoc?.phone || ''),
-
-  orderId: orderCtx && orderCtx.orderId ? String(orderCtx.orderId) : '',
-  amount: (orderCtx && orderCtx.amount !== undefined && orderCtx.amount !== null) ? String(orderCtx.amount) : '',
-  totalBeforeDiscount: (orderCtx && orderCtx.totalBeforeDiscount !== undefined && orderCtx.totalBeforeDiscount !== null)
-    ? String(orderCtx.totalBeforeDiscount)
-    : '',
-  discountAmount: (orderCtx && orderCtx.discountAmount !== undefined && orderCtx.discountAmount !== null)
-    ? String(orderCtx.discountAmount)
-    : '',
-
-  outstanding: (orderCtx && orderCtx.outstanding !== undefined && orderCtx.outstanding !== null)
-    ? String(orderCtx.outstanding)
-    : '',
-  ordersCount: (orderCtx && orderCtx.ordersCount !== undefined && orderCtx.ordersCount !== null)
-    ? String(orderCtx.ordersCount)
-    : '',
-  accBalance: (customerDoc && customerDoc.accountBalance !== undefined && customerDoc.accountBalance !== null)
-    ? String(customerDoc.accountBalance)
-    : ''
-};
+  const ctx = buildTemplateContext(customerDoc, orderCtx);
 
   let template = '';
   if (autoCfg.usePerCustomerTypeTemplates) {
