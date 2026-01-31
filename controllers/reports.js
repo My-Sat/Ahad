@@ -6,6 +6,11 @@ const CashierCollection = require('../models/cashier_collection');
 const AccountantAccount = require('../models/accountant_account');
 const Customer = require('../models/customer');
 const CustomerAccountTxn = require('../models/customer_account_txn');
+const Printer = require('../models/printer');
+const PrinterUsage = require('../models/printer_usage');
+const { MaterialUsage } = require('../models/material_usage');
+const Store = require('../models/store');
+const Material = require('../models/material');
 const mongoose = require('mongoose');
 
 function isoDate(d) {
@@ -686,5 +691,115 @@ exports.apiCustomerAccountActivity = async (req, res) => {
   } catch (err) {
     console.error('apiCustomerAccountActivity error', err);
     return res.status(500).json({ ok: false, error: 'Failed to load customer account activity' });
+  }
+};
+
+exports.apiPrinterUsage = async (req, res) => {
+  try {
+    const { start, end, from, to } = getRangeFromQuery(req);
+
+    const rows = await PrinterUsage.aggregate([
+      { $match: { createdAt: { $gte: start, $lte: end } } },
+      {
+        $group: {
+          _id: '$printer',
+          totalCount: { $sum: { $ifNull: ['$count', 0] } },
+          monoCount: { $sum: { $cond: [{ $eq: ['$type', 'monochrome'] }, '$count', 0] } },
+          colourCount: { $sum: { $cond: [{ $eq: ['$type', 'colour'] }, '$count', 0] } }
+        }
+      },
+      { $sort: { totalCount: -1 } },
+      { $limit: 200 }
+    ]);
+
+    const printerIds = rows.map(r => r._id).filter(Boolean);
+    const printers = await Printer.find({ _id: { $in: printerIds } })
+      .select('_id name location')
+      .lean();
+    const pmap = {};
+    printers.forEach(p => { pmap[String(p._id)] = p; });
+
+    const totalUsed = rows.reduce((s, r) => s + Number(r.totalCount || 0), 0);
+
+    const out = rows.map(r => {
+      const p = pmap[String(r._id)] || {};
+      return {
+        printerId: String(r._id),
+        name: p.name || 'Unknown',
+        location: p.location || '',
+        totalCount: Number((r.totalCount || 0).toFixed(2)),
+        monoCount: Number((r.monoCount || 0).toFixed(2)),
+        colourCount: Number((r.colourCount || 0).toFixed(2))
+      };
+    });
+
+    return res.json({
+      ok: true,
+      range: { from, to },
+      totals: { totalUsed: Number(totalUsed.toFixed(2)) },
+      rows: out
+    });
+  } catch (err) {
+    console.error('apiPrinterUsage error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load printer usage' });
+  }
+};
+
+exports.apiMaterialUsage = async (req, res) => {
+  try {
+    const { start, end, from, to } = getRangeFromQuery(req);
+
+    const rows = await MaterialUsage.aggregate([
+      { $match: { createdAt: { $gte: start, $lte: end } } },
+      {
+        $group: {
+          _id: { store: '$store', material: '$material' },
+          totalCount: { $sum: { $ifNull: ['$count', 0] } }
+        }
+      },
+      { $sort: { totalCount: -1 } },
+      { $limit: 300 }
+    ]);
+
+    const storeIds = rows.map(r => r._id?.store).filter(Boolean);
+    const materialIds = rows.map(r => r._id?.material).filter(Boolean);
+
+    const stores = await Store.find({ _id: { $in: storeIds } })
+      .select('_id name')
+      .lean();
+    const materials = await Material.find({ _id: { $in: materialIds } })
+      .select('_id name')
+      .lean();
+
+    const smap = {};
+    stores.forEach(s => { smap[String(s._id)] = s; });
+    const mmap = {};
+    materials.forEach(m => { mmap[String(m._id)] = m; });
+
+    const totalUsed = rows.reduce((s, r) => s + Number(r.totalCount || 0), 0);
+
+    const out = rows.map(r => {
+      const storeId = r._id?.store ? String(r._id.store) : '';
+      const materialId = r._id?.material ? String(r._id.material) : '';
+      const store = smap[storeId] || {};
+      const material = mmap[materialId] || {};
+      return {
+        storeId,
+        storeName: store.name || 'Unknown',
+        materialId,
+        materialName: material.name || 'Unknown',
+        totalCount: Number((r.totalCount || 0).toFixed(2))
+      };
+    });
+
+    return res.json({
+      ok: true,
+      range: { from, to },
+      totals: { totalUsed: Number(totalUsed.toFixed(2)) },
+      rows: out
+    });
+  } catch (err) {
+    console.error('apiMaterialUsage error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load material usage' });
   }
 };

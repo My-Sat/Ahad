@@ -320,6 +320,54 @@
     });
   }
 
+  function renderPrinterUsage(totals, rows) {
+    setText('printerUsageTotal', Number(totals?.totalUsed || 0));
+
+    const table = document.getElementById('printerUsageTable');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    if (!rows || !rows.length) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="5">No printer usage in this range.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.name || '')}</td>
+        <td class="text-end">${Number(r.totalCount || 0)}</td>
+        <td class="text-end">${Number(r.monoCount || 0)}</td>
+        <td class="text-end">${Number(r.colourCount || 0)}</td>
+        <td>${escapeHtml(r.location || '')}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderMaterialUsage(totals, rows) {
+    setText('materialUsageTotal', Number(totals?.totalUsed || 0));
+
+    const table = document.getElementById('materialUsageTable');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    if (!rows || !rows.length) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="3">No material usage in this range.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.storeName || '')}</td>
+        <td>${escapeHtml(r.materialName || '')}</td>
+        <td class="text-end">${Number(r.totalCount || 0)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
   async function loadReports() {
     const fromEl = document.getElementById('reportFrom');
     const toEl = document.getElementById('reportTo');
@@ -351,7 +399,9 @@
         salesByService,
         salesByCategory,
         customerSummary,
-        customerAccount
+        customerAccount,
+        printerUsage,
+        materialUsage
       ] = await Promise.all([
         fetchJson(`/admin/reports/api/financial-summary${rangeQuery}`),
         fetchJson(`/admin/reports/api/cashier-collections${rangeQuery}`),
@@ -363,7 +413,9 @@
         fetchJson(`/admin/reports/api/sales-by-service${rangeQuery}`),
         fetchJson(`/admin/reports/api/sales-by-category${rangeQuery}`),
         fetchJson(`/admin/reports/api/customer-summary${rangeQuery}`),
-        fetchJson(`/admin/reports/api/customer-account-activity${rangeQuery}`)
+        fetchJson(`/admin/reports/api/customer-account-activity${rangeQuery}`),
+        fetchJson(`/admin/reports/api/printer-usage${rangeQuery}`),
+        fetchJson(`/admin/reports/api/material-usage${rangeQuery}`)
       ]);
 
       if (financial && financial.summary) {
@@ -395,6 +447,15 @@
       renderCustomerAccountActivity(
         (customerAccount && customerAccount.totals) ? customerAccount.totals : { totalCredits: 0, totalDebits: 0, totalTxns: 0 },
         (customerAccount && customerAccount.rows) ? customerAccount.rows : []
+      );
+
+      renderPrinterUsage(
+        (printerUsage && printerUsage.totals) ? printerUsage.totals : { totalUsed: 0 },
+        (printerUsage && printerUsage.rows) ? printerUsage.rows : []
+      );
+      renderMaterialUsage(
+        (materialUsage && materialUsage.totals) ? materialUsage.totals : { totalUsed: 0 },
+        (materialUsage && materialUsage.rows) ? materialUsage.rows : []
       );
 
       if (statusEl) {

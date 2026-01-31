@@ -152,6 +152,8 @@ router.get('/reports/api/sales-by-service', ensureAdmin, reportsController.apiSa
 router.get('/reports/api/sales-by-category', ensureAdmin, reportsController.apiSalesByCategory);
 router.get('/reports/api/customer-summary', ensureAdmin, reportsController.apiCustomerSummary);
 router.get('/reports/api/customer-account-activity', ensureAdmin, reportsController.apiCustomerAccountActivity);
+router.get('/reports/api/printer-usage', ensureAdmin, reportsController.apiPrinterUsage);
+router.get('/reports/api/material-usage', ensureAdmin, reportsController.apiMaterialUsage);
 
 
 module.exports = router;

@@ -245,5 +245,47 @@ block content
                   tr
                     td.text-muted(colspan='6') Loading...
 
+            hr
+
+            h5.text-white.mt-2.mb-2 Production / Assets
+
+            h6.text-white.mt-3.mb-2 Printer Usage (Usage Date)
+            .row.g-2.mb-2
+              .col-6.col-lg-3
+                .card.dark-surface.border-0
+                  .card-body.p-2.dark-card-body
+                    div.small.text-muted-light Total usage count
+                    strong#printerUsageTotal 0
+            .table-responsive.mb-3
+              table.table.table-sm.table-hover#printerUsageTable
+                thead
+                  tr
+                    th Printer
+                    th.text-end Total
+                    th.text-end Mono
+                    th.text-end Colour
+                    th Location
+                tbody
+                  tr
+                    td.text-muted(colspan='5') Loading...
+
+            h6.text-white.mt-3.mb-2 Material Consumption (Usage Date)
+            .row.g-2.mb-2
+              .col-6.col-lg-3
+                .card.dark-surface.border-0
+                  .card-body.p-2.dark-card-body
+                    div.small.text-muted-light Total material usage
+                    strong#materialUsageTotal 0
+            .table-responsive
+              table.table.table-sm.table-hover#materialUsageTable
+                thead
+                  tr
+                    th Store
+                    th Material
+                    th.text-end Total Used
+                tbody
+                  tr
+                    td.text-muted(colspan='3') Loading...
+
 block append scripts
   script(src='/javascripts/reports_financial.js')
