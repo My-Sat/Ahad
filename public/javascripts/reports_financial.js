@@ -470,17 +470,27 @@
     }
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
+  function initReportsPage() {
     const applyBtn = document.getElementById('reportApplyBtn');
-    if (applyBtn) {
-      applyBtn.addEventListener('click', loadReports);
+
+    // Defensive: remove any previous click handlers by cloning the button
+    if (applyBtn && applyBtn.parentNode) {
+      const freshBtn = applyBtn.cloneNode(true);
+      applyBtn.parentNode.replaceChild(freshBtn, applyBtn);
+      freshBtn.addEventListener('click', loadReports);
     }
+
+    // Load immediately (works for both full load and ajax loads)
     loadReports();
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    initReportsPage();
   });
 
   document.addEventListener('ajax:page:loaded', (e) => {
     if (e && e.detail && typeof e.detail.url === 'string' && e.detail.url.includes('/admin/reports')) {
-      loadReports();
+      initReportsPage();
     }
   });
 })();
