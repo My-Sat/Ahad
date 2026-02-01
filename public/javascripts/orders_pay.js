@@ -101,6 +101,10 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
     return `GH\u20B5 ${fmt(n)}`;
   }
 
+  let dailyTotalsLoading = false;
+  let dailyTotalsLoaded = false;
+  let dailyTotalsLastDate = '';
+
   function setDailyTotalsAmounts(totalOrders, totalPaid) {
     if (!dailyOrdersTotalAmountEl || !dailyPaidOrdersTotalAmountEl) return;
 
@@ -160,15 +164,26 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
     return `${yr}-${mm}-${dd}`;
   }
 
-  async function loadDailyOrdersDropdown() {
+  async function loadDailyOrdersDropdown(opts = {}) {
     if (!dailyOrdersSelect) return;
+    if (dailyTotalsLoading) return;
+
+    const today = isoDate(new Date());
+    if (!opts.force && dailyTotalsLoaded && dailyTotalsLastDate === today) return;
+
+    dailyTotalsLoading = true;
+    dailyTotalsLastDate = today;
+    if (dailyTotalsContainer) dailyTotalsContainer.dataset.totalsLoading = '1';
 
     dailyOrdersSelect.innerHTML = '<option value="">Loading today\'s orders...</option>';
 
     try {
-      const today = isoDate(new Date());
       const url = `/orders/list?from=${encodeURIComponent(today)}&to=${encodeURIComponent(today)}&scope=pay`;
-      const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const res = await fetch(url, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        cache: 'no-store',
+        credentials: 'same-origin'
+      });
       const j = await res.json().catch(() => null);
 
       if (!res.ok || !j || !Array.isArray(j.orders)) {
@@ -178,6 +193,8 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
       if (!j.orders.length) {
         dailyOrdersSelect.innerHTML = '<option value="">No orders today</option>';
         setDailyTotalsAmounts(0, 0);
+        dailyTotalsLoaded = true;
+        if (dailyTotalsContainer) dailyTotalsContainer.dataset.totalsLoaded = '1';
         return;
       }
 
@@ -206,10 +223,17 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
       });
 
       dailyOrdersSelect.innerHTML = options.join('');
+      dailyTotalsLoaded = true;
+      if (dailyTotalsContainer) dailyTotalsContainer.dataset.totalsLoaded = '1';
     } catch (err) {
       console.error('loadDailyOrdersDropdown error', err);
       dailyOrdersSelect.innerHTML = '<option value="">Failed to load today\'s orders</option>';
       setDailyTotalsError();
+      dailyTotalsLoaded = false;
+    }
+    finally {
+      dailyTotalsLoading = false;
+      if (dailyTotalsContainer) dailyTotalsContainer.dataset.totalsLoading = '0';
     }
   }
 
@@ -223,7 +247,7 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
       try {
         // avoid unnecessary work if the tab is hidden
         if (document.hidden) return;
-        loadDailyOrdersDropdown();
+        loadDailyOrdersDropdown({ force: true });
       } catch (e) {}
     }, refreshMs);
   }
@@ -1037,6 +1061,7 @@ function discountAppliedLabel(order) {
 
         // re-fetch order to display updated status and data
         await fetchOrderById(currentOrderId);
+        try { await loadDailyOrdersDropdown({ force: true }); } catch (e) {}
 
         // clear input & hide pay button if now paid
         fetchOrderIdInput.value = '';
@@ -1717,6 +1742,7 @@ if (confirmFullPaymentBtn) {
 
       showAlertModal('Full payment applied successfully', 'Success');
       fetchDebtorsList();
+      try { await loadDailyOrdersDropdown({ force: true }); } catch (e) {}
 
     } catch (err) {
       console.error('bulk pay error', err);
@@ -1731,12 +1757,15 @@ if (confirmFullPaymentBtn) {
 
   // Initial state
   renderOrderDetails(null);
-  loadDailyOrdersDropdown();
+  loadDailyOrdersDropdown({ force: true });
   startDailyOrdersAutoRefresh();
   let dailyTotalsAutoHideTimer = null;
   if (dailyTotalsToggleBtn) {
-    dailyTotalsToggleBtn.addEventListener('click', function () {
+    dailyTotalsToggleBtn.addEventListener('click', async function () {
       const isHidden = dailyTotalsContainer && dailyTotalsContainer.dataset.hidden === '1';
+      if (isHidden && !dailyTotalsLoaded) {
+        try { await loadDailyOrdersDropdown({ force: true }); } catch (e) {}
+      }
       applyDailyTotalsVisibility(!isHidden);
 
       if (dailyTotalsAutoHideTimer) {
