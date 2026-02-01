@@ -1899,14 +1899,19 @@ exports.apiListOrders = async (req, res) => {
 
     // IMPORTANT: restrict list to current user unless admin
     try {
-      const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
+      const role = req.user && req.user.role ? String(req.user.role).toLowerCase() : '';
+      const isAdmin = role === 'admin';
+      const isCashier = role === 'cashier';
       if (!isAdmin && req.user && req.user._id) {
         if (isPayScope) {
-          const User = require('../models/user');
-          const admins = await User.find({ role: 'admin' }).select('_id').lean();
-          const adminIds = admins.map(a => a._id).filter(Boolean);
-          if (adminIds.length) {
-            q.handledBy = { $nin: adminIds };
+          // Cashiers should see all orders for payment, regardless of who handled them.
+          if (!isCashier) {
+            const User = require('../models/user');
+            const admins = await User.find({ role: 'admin' }).select('_id').lean();
+            const adminIds = admins.map(a => a._id).filter(Boolean);
+            if (adminIds.length) {
+              q.handledBy = { $nin: adminIds };
+            }
           }
         } else {
           q.handledBy = new mongoose.Types.ObjectId(req.user._id);
