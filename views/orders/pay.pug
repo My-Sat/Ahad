@@ -1,4 +1,4 @@
-extends ../layout
+﻿extends ../layout
 
 block content
   .container
@@ -100,7 +100,7 @@ block content
                     div.small.text-muted-light.mt-1
                       | Uses available balance to reduce outstanding before payment.
 
-                  // Manual discount (admin only) — actual visibility handled by orders_pay.js
+                  // Manual discount (admin only) â€” actual visibility handled by orders_pay.js
                   if currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin'
                     .card.mb-3.dark-surface#payManualDiscountCard(style='display:none;border:1px solid rgba(255,255,255,.08);')
                       .card-body.dark-card-body.py-2
@@ -108,7 +108,7 @@ block content
                           .col-12.col-md-3
                             label.form-label.mb-1(for='payManualDiscountMode') Discount mode
                             select.form-select.form-select-sm.form-select-dark#payManualDiscountMode
-                              option(value='amount') Amount (GH¢)
+                              option(value='amount') Amount (GHÂ¢)
                               option(value='percent') Percent (%)
                           .col-12.col-md-3
                             label.form-label.mb-1(for='payManualDiscountValue') Value
@@ -154,10 +154,13 @@ block content
     .modal-dialog.modal-lg.modal-dialog-centered
       .modal-content.dark-surface
         .modal-header
-          h5.modal-title(id='cashiersModalLabel') Cashiers — Daily collections
+          h5.modal-title(id='cashiersModalLabel') Cashiers â€” Daily collections
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
         .modal-body.dark-card-body
           p.text-muted.small#cashiersStatusLoading Loading...
+          .d-flex.justify-content-between.align-items-center.mb-2
+            small.text-muted#cashiersStatusNote
+            button.btn.btn-outline-light-custom.btn-sm#cashiersShowAllBtn(type='button') Show all cashiers
           .table-responsive
             table.table.table-sm.table-hover#cashiersTable
               thead
@@ -177,7 +180,7 @@ block content
     .modal-dialog.modal-lg.modal-dialog-centered
       .modal-content.dark-surface
         .modal-header
-          h5.modal-title(id='accountantModalLabel') Accountant — Daily ledger
+          h5.modal-title(id='accountantModalLabel') Accountant â€” Daily ledger
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
         .modal-body.dark-card-body
           p.text-muted.small#accountantLedgerDate Loading...
@@ -376,9 +379,10 @@ block content
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
-  // ✅ IMPORTANT: Keep Pay page scripts INSIDE #main-content so dashboard_nav AJAX loads them
+  // âœ… IMPORTANT: Keep Pay page scripts INSIDE #main-content so dashboard_nav AJAX loads them
   script.
     window._isAdmin = !{JSON.stringify((typeof currentUser !== 'undefined' && currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin') ? true : false)};
   script(defer src='/javascripts/customer_editor.js')
   script(defer src='/javascripts/customers_front.js')
   script(defer src='/javascripts/orders_pay.js')
+

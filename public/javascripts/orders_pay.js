@@ -25,6 +25,8 @@ const cashiersModalEl = document.getElementById('cashiersModal');
 const cashiersModal = (window.bootstrap && cashiersModalEl) ? new bootstrap.Modal(cashiersModalEl) : null;
 const cashiersTable = document.getElementById('cashiersTable');
 const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
+const cashiersStatusNote = document.getElementById('cashiersStatusNote');
+const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
 
 
   // new UI elements
@@ -1104,7 +1106,70 @@ async function fetchCashiersStatus(dateIso) {
     const rows = j.cashiers;
     cashiersStatusLoading.textContent = `Date: ${new Date(j.date).toLocaleDateString()}`;
 
-    tbody.innerHTML = rows.map(r => {
+    renderCashiersStatus(rows);
+  } catch (err) {
+    console.error('fetchCashiersStatus err', err);
+    const tbody = cashiersTable.querySelector('tbody');
+    tbody.innerHTML = '<tr><td class="text-muted" colspan="4">Network error while fetching cashiers.</td></tr>';
+    cashiersStatusLoading.textContent = '--';
+    if (cashiersStatusNote) cashiersStatusNote.textContent = '';
+  }
+}
+
+let cashiersShowAll = false;
+let cashiersStatusCache = null;
+
+function renderCashiersStatus(rows) {
+  if (!cashiersTable) return;
+  const tbody = cashiersTable.querySelector('tbody');
+  const data = Array.isArray(rows) ? rows : [];
+  cashiersStatusCache = data;
+
+  const due = data.filter(r => {
+    const total = Number(r.totalCashRecordedToday || 0);
+    const prev = Number(r.previousBalance || 0);
+    return total > 0 || prev > 0;
+  });
+  const rest = data.filter(r => {
+    const total = Number(r.totalCashRecordedToday || 0);
+    const prev = Number(r.previousBalance || 0);
+    return total <= 0 && prev <= 0;
+  });
+
+  if (cashiersShowAllBtn) {
+    if (rest.length) {
+      cashiersShowAllBtn.style.display = '';
+      cashiersShowAllBtn.textContent = cashiersShowAll ? 'Hide idle cashiers' : 'Show all cashiers';
+    } else {
+      cashiersShowAllBtn.style.display = 'none';
+    }
+  }
+
+  if (cashiersStatusNote) {
+    if (!due.length && rest.length) {
+      cashiersStatusNote.textContent = 'No cash to collect right now.';
+    } else if (due.length) {
+      cashiersStatusNote.textContent = `Showing ${due.length} cashier${due.length > 1 ? 's' : ''} with collections.`;
+    } else {
+      cashiersStatusNote.textContent = 'No cashier data available.';
+    }
+  }
+
+  if (!due.length && !rest.length) {
+    tbody.innerHTML = '<tr><td class="text-muted" colspan="4">No cashiers found.</td></tr>';
+    return;
+  }
+
+  const rowsToRender = due.slice();
+  if (cashiersShowAll && rest.length) {
+    rowsToRender.push({ __divider: true });
+    rowsToRender.push(...rest);
+  }
+
+  tbody.innerHTML = rowsToRender.map(r => {
+    if (r.__divider) {
+      return `<tr><td class="text-muted" colspan="4">Other cashiers</td></tr>`;
+    }
       const total = Number(r.totalCashRecordedToday || 0);
       const prevBal = Number(r.previousBalance || 0);
 
@@ -1116,12 +1181,6 @@ async function fetchCashiersStatus(dateIso) {
         <td class="text-center"><button class="btn btn-sm btn-primary cashier-receive-btn" type="button" data-cashier-id="${escapeHtml(r.cashierId)}" data-cashier-name="${escapeHtml(r.name)}">Receive</button></td>
       </tr>`;
     }).join('');
-  } catch (err) {
-    console.error('fetchCashiersStatus err', err);
-    const tbody = cashiersTable.querySelector('tbody');
-    tbody.innerHTML = '<tr><td class="text-muted" colspan="4">Network error while fetching cashiers.</td></tr>';
-    cashiersStatusLoading.textContent = '--';
-  }
 }
 
   // -------------------------
@@ -1347,7 +1406,15 @@ function showReceiveModal(cashierId, cashierName) {
 if (openCashiersBtn) {
   openCashiersBtn.addEventListener('click', function () {
     if (cashiersModal) cashiersModal.show();
+    cashiersShowAll = false;
     fetchCashiersStatus();
+  });
+}
+
+if (cashiersShowAllBtn) {
+  cashiersShowAllBtn.addEventListener('click', function () {
+    cashiersShowAll = !cashiersShowAll;
+    renderCashiersStatus(cashiersStatusCache || []);
   });
 }
 
