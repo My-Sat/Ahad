@@ -169,15 +169,13 @@ exports.apiCashierCollections = async (req, res) => {
     const out = cashiers.map(c => {
       const id = String(c._id);
       const totalCashRecorded = Number((payMap[id] || 0).toFixed(2));
-      const alreadyCollected = Number((colMap[id] || 0).toFixed(2));
+      const totalCollected = Number((colMap[id] || 0).toFixed(2));
       const previousBalance = Number((balMap[id] || 0).toFixed(2));
-      const uncollected = Number(Math.max(0, totalCashRecorded - alreadyCollected).toFixed(2));
       return {
         cashierId: id,
         name: c.name || c.username || id,
         totalCashRecorded,
-        alreadyCollected,
-        uncollected,
+        totalCollected,
         previousBalance
       };
     });

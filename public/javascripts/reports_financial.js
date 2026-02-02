@@ -64,7 +64,7 @@
     const tbody = table.querySelector('tbody');
     if (!tbody) return;
     if (!rows || !rows.length) {
-      tbody.innerHTML = '<tr><td class="text-muted" colspan="5">No cashier data for this range.</td></tr>';
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="4">No cashier data for this range.</td></tr>';
       return;
     }
     tbody.innerHTML = '';
@@ -73,8 +73,7 @@
       tr.innerHTML = `
         <td>${escapeHtml(r.name || '')}</td>
         <td class="text-end">${formatCedi(r.totalCashRecorded || 0)}</td>
-        <td class="text-end">${formatCedi(r.alreadyCollected || 0)}</td>
-        <td class="text-end">${formatCedi(r.uncollected || 0)}</td>
+        <td class="text-end">${formatCedi(r.totalCollected || 0)}</td>
         <td class="text-end">${formatCedi(r.previousBalance || 0)}</td>
       `;
       tbody.appendChild(tr);
