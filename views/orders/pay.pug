@@ -383,10 +383,10 @@ block content
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
-  // âœ… IMPORTANT: Keep Pay page scripts INSIDE #main-content so dashboard_nav AJAX loads them
-  script.
-    window._isAdmin = !{JSON.stringify((typeof currentUser !== 'undefined' && currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin') ? true : false)};
-  script(defer src='/javascripts/customer_editor.js')
-  script(defer src='/javascripts/customers_front.js')
-  script(defer src='/javascripts/orders_pay.js')
+    // âœ… IMPORTANT: Keep Pay page scripts INSIDE #main-content so dashboard_nav AJAX loads them
+    script.
+      window._isAdmin = !{JSON.stringify((typeof currentUser !== 'undefined' && currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin') ? true : false)};
+    script(defer src='/javascripts/customer_editor.js')
+    script(defer src='/javascripts/customers_front.js')
+    script(defer src='/javascripts/orders_pay.js')
 
