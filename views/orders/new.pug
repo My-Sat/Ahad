@@ -51,6 +51,8 @@ block content
                   strong#selectedCustomerCategory.text-muted-light.ms-3 #{categoryLabel}
                 else
                   strong#selectedCustomerCategory.text-muted-light.ms-3
+                .mt-2
+                  button.btn.btn-sm.btn-outline-light-custom#clearCustomerBtn(type='button') Clear attached customer
 
             // Customer lookup + registration (moved from customers/front)
             .card.mb-3.dark-surface#customer-lookup(style='border:1px solid rgba(255,255,255,.08);')

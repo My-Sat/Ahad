@@ -116,6 +116,36 @@ document.addEventListener('DOMContentLoaded', function () {
     return true;
   }
 
+  function clearAttachedCustomer() {
+    if (!isOrdersNewPage()) return false;
+
+    const customerIdEl = document.getElementById('orderCustomerId');
+    if (customerIdEl) customerIdEl.value = '';
+
+    const card = document.getElementById('selectedCustomerCard');
+    const nameEl = document.getElementById('selectedCustomerName');
+    const phoneEl = document.getElementById('selectedCustomerPhone');
+    const categoryEl = document.getElementById('selectedCustomerCategory');
+
+    setText(nameEl, '');
+    setText(phoneEl, '');
+    setText(categoryEl, '');
+
+    if (card) card.style.display = 'none';
+    return true;
+  }
+
+  const clearCustomerBtn = document.getElementById('clearCustomerBtn');
+  if (clearCustomerBtn) {
+    clearCustomerBtn.addEventListener('click', function () {
+      if (clearAttachedCustomer()) {
+        if (window.showGlobalToast) {
+          try { window.showGlobalToast('Customer cleared', 1600); } catch (e) {}
+        }
+      }
+    });
+  }
+
   // ---------- Typeahead logic ----------
   let taTimer = null;
   const TA_DEBOUNCE = 220; // ms
