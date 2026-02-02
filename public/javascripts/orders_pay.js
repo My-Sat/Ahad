@@ -220,7 +220,7 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
         if (!id) return;
         const name = String(o.name || '').trim();
         const showName = name && name.toLowerCase() !== 'walk-in';
-        const label = showName ? `${name} â€” ${id}` : id;
+        const label = showName ? `${name} ${id}` : id;
         options.push(`<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`);
       });
 
