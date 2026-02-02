@@ -547,8 +547,8 @@ function discountAppliedLabel(order) {
             <div>${qtyLabel}: ${escapeHtml(String(displayQty))}</div>
             ${ requiresPrinter ? `<div>Pages: ${escapeHtml(String(pages))}</div>` : '' }
             ${ (requiresPrinter && factor > 1) ? `<div>QTY Ã—${factor}</div>` : '' }
-              <div>Unit: GHâ‚µ ${escapeHtml(fmt(unit))}</div>
-              <div>Subtotal: GHâ‚µ ${escapeHtml(fmt(subtotal))}</div>
+              <div>Unit: GH₵ ${escapeHtml(fmt(unit))}</div>
+              <div>Subtotal: GH₵ ${escapeHtml(fmt(subtotal))}</div>
             </div>
           </div>
         `;
@@ -648,11 +648,11 @@ function discountAppliedLabel(order) {
       </p>
       <p class="text-end mb-1">
         <span class="text-muted">Total before discount:</span>
-        <strong>GHâ‚µ ${fmt(before)}</strong>
+        <strong>GH₵ ${fmt(before)}</strong>
       </p>
       <p class="text-end mb-1">
         <span class="text-muted">Discount:</span>
-        <strong class="text-white">- GHâ‚µ ${fmt(order.discountAmount)}</strong>
+        <strong class="text-white">- GH₵ ${fmt(order.discountAmount)}</strong>
       </p>
     </div>
   `;
@@ -664,7 +664,7 @@ function discountAppliedLabel(order) {
           <div>
             <div class="small text-muted-light">Customer Account Balance</div>
             <div class="text-white">
-              <strong id="custAccountBalance">GHâ‚µ ${fmt(currentCustomerBalance)}</strong>
+              <strong id="custAccountBalance">GH₵ ${fmt(currentCustomerBalance)}</strong>
             </div>
           </div>
 
@@ -693,8 +693,8 @@ function discountAppliedLabel(order) {
       <p><strong>Status:</strong> ${statusLabel}</p>
       ${itemsHtml}
       ${discountHtml}
-      <p class="text-end"><strong>Total to pay: GHâ‚µ ${fmt(order.total)}</strong></p>
-      ${ (outstanding > 0) ? `<p class="text-end"><strong>Remaining: GHâ‚µ ${fmt(outstanding)}</strong></p>` : '' }
+      <p class="text-end"><strong>Total to pay: GH₵ ${fmt(order.total)}</strong></p>
+      ${ (outstanding > 0) ? `<p class="text-end"><strong>Remaining: GH₵ ${fmt(outstanding)}</strong></p>` : '' }
       ${accountHtml}
     `;
 
@@ -825,7 +825,7 @@ function discountAppliedLabel(order) {
 
       if (used !== null) {
         showAlertModal(
-          `Account applied: GHâ‚µ ${fmt(used)}\nNew balance: GHâ‚µ ${fmt(currentCustomerBalance)}\nRemaining: GHâ‚µ ${fmt(currentOutstanding)}`,
+          `Account applied: GH₵ ${fmt(used)}\nNew balance: GH₵ ${fmt(currentCustomerBalance)}\nRemaining: GH₵ ${fmt(currentOutstanding)}`,
           'Account applied'
         );
       } else {
@@ -1021,12 +1021,12 @@ function discountAppliedLabel(order) {
 
       // Confirm using modal
       let confirmMsg = isPart
-        ? `Record a payment of GHâ‚µ ${fmt(partAmount)} for order ${escapeHtml(currentOrderId)}?`
+        ? `Record a payment of GH₵ ${fmt(partAmount)} for order ${escapeHtml(currentOrderId)}?`
         : `Mark order ${escapeHtml(currentOrderId)} as paid?`;
 
       if (isPart && currentHasCustomer && Number(partAmount) > Number(currentOutstanding || 0)) {
         const excess = Number((Number(partAmount) - Number(currentOutstanding || 0)).toFixed(2));
-        confirmMsg += `\n\nExcess (GHâ‚µ ${fmt(excess)}) will be credited to the customer's account.`;
+        confirmMsg += `\n\nExcess (GH₵ ${fmt(excess)}) will be credited to the customer's account.`;
       }
       const ok = await showConfirmModal(confirmMsg, 'Confirm payment');
       if (!ok) return;
@@ -1111,8 +1111,8 @@ async function fetchCashiersStatus(dateIso) {
       return `<tr data-cashier-id="${escapeHtml(r.cashierId)}">
         <td>${escapeHtml(r.name)}</td>
         <!-- Today's Cash (green) shows payments recorded since last collection (cash+momo+cheque) -->
-        <td class="text-end text-success">GHâ‚µ ${Number(total).toFixed(2)}</td>
-        <td class="text-end text-danger">GHâ‚µ ${Number(prevBal).toFixed(2)}</td>
+        <td class="text-end text-success">GH₵ ${Number(total).toFixed(2)}</td>
+        <td class="text-end text-danger">GH₵ ${Number(prevBal).toFixed(2)}</td>
         <td class="text-center"><button class="btn btn-sm btn-primary cashier-receive-btn" type="button" data-cashier-id="${escapeHtml(r.cashierId)}" data-cashier-name="${escapeHtml(r.name)}">Receive</button></td>
       </tr>`;
     }).join('');
@@ -1235,7 +1235,7 @@ async function fetchAccountantLedger(dateIso) {
     accountantLedgerDate.textContent = `Date: ${new Date(j.date).toLocaleDateString()}`;
     tbody.innerHTML = j.ledger.map(r => `<tr>
       <td>${escapeHtml(r.name || '')}</td>
-      <td class="text-end">GHâ‚µ ${Number(r.totalCollected || 0).toFixed(2)}</td>
+      <td class="text-end">GH₵ ${Number(r.totalCollected || 0).toFixed(2)}</td>
       <td class="text-center"></td>
     </tr>`).join('');
   } catch (err) {
@@ -1269,7 +1269,7 @@ function showReceiveModal(cashierId, cashierName) {
       </div>
       <div class="modal-body dark-card-body">
         <div class="mb-2"><strong id="cashierReceiveName"></strong></div>
-        <div class="mb-2 small text-muted">Enter the physical cash amount received from this cashier for today (GHâ‚µ)</div>
+        <div class="mb-2 small text-muted">Enter the physical cash amount received from this cashier for today (GH₵)</div>
         <div class="mb-3">
           <label class="form-label small mb-1">Amount</label>
           <input type="number" min="0" step="0.01" class="form-control form-control-sm" id="cashierReceiveAmount" />
@@ -1443,9 +1443,9 @@ Object.entries(grouped).forEach(([debtorName, items]) => {
       <tr data-order-id="${escapeHtml(d.orderId || '')}">
         <td>${escapeHtml(d.orderId || '')}</td>
         <td>${escapeHtml(debtorName)}</td>
-        <td class="text-end">GHâ‚µ ${Number(d.amountDue || 0).toFixed(2)}</td>
-        <td class="text-end">GHâ‚µ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
-        <td class="text-end">GHâ‚µ ${out}</td>
+        <td class="text-end">GH₵ ${Number(d.amountDue || 0).toFixed(2)}</td>
+        <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
+        <td class="text-end">GH₵ ${out}</td>
         <td class="text-center">
           <button class="btn btn-sm btn-primary view-debtor-order"
             type="button"
@@ -1479,9 +1479,9 @@ html += `
       <strong>${escapeHtml(debtorName)}</strong>
       <span class="text-muted ms-2">(${items.length} orders)</span>
     </td>
-    <td class="text-end">GHâ‚µ ${totalDue.toFixed(2)}</td>
-    <td class="text-end">GHâ‚µ ${totalPaid.toFixed(2)}</td>
-    <td class="text-end fw-semibold">GHâ‚µ ${totalOutstanding.toFixed(2)}</td>
+    <td class="text-end">GH₵ ${totalDue.toFixed(2)}</td>
+    <td class="text-end">GH₵ ${totalPaid.toFixed(2)}</td>
+    <td class="text-end fw-semibold">GH₵ ${totalOutstanding.toFixed(2)}</td>
     <td class="text-center">
       <button
         class="btn btn-sm btn-success pay-debtor-full"
@@ -1500,9 +1500,9 @@ html += `
       <tr class="debtor-group-row ${groupId}" style="display:none;">
         <td>${escapeHtml(d.orderId || '')}</td>
         <td>${escapeHtml(debtorName)}</td>
-        <td class="text-end">GHâ‚µ ${Number(d.amountDue || 0).toFixed(2)}</td>
-        <td class="text-end">GHâ‚µ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
-        <td class="text-end">GHâ‚µ ${out}</td>
+        <td class="text-end">GH₵ ${Number(d.amountDue || 0).toFixed(2)}</td>
+        <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
+        <td class="text-end">GH₵ ${out}</td>
         <td class="text-center">
           <button class="btn btn-sm btn-primary view-debtor-order"
             type="button"
@@ -1607,7 +1607,7 @@ if (debtorsTable) {
       // prepare modal UI
       if (fullPaymentConfirmText) {
         fullPaymentConfirmText.textContent =
-          `Apply FULL payment of GHâ‚µ ${fmt(total)} to ALL selected outstanding orders?`;
+          `Apply FULL payment of GH₵ ${fmt(total)} to ALL selected outstanding orders?`;
       }
 
       if (fullPaymentMethod) {
@@ -2172,7 +2172,7 @@ function renderOrdersList(orders) {
           ${name}
         </a>
       </td>
-      <td class="text-end">GHâ‚µ ${Number(o.total || 0).toFixed(2)}</td>
+      <td class="text-end">GH₵ ${Number(o.total || 0).toFixed(2)}</td>
       <td>${escapeHtml(o.status || '')}</td>
       <td>${escapeHtml(created)}</td>
       <td class="text-center">
@@ -2264,5 +2264,6 @@ if (document.readyState === 'loading') {
 document.addEventListener('ajax:page:loaded', function () {
   initOrdersPay();
 });
+
 
 
