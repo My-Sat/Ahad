@@ -1270,6 +1270,8 @@ const accountantModalEl = document.getElementById('accountantModal');
 const accountantModal = (window.bootstrap && accountantModalEl) ? new bootstrap.Modal(accountantModalEl) : null;
 const accountantLedgerTable = document.getElementById('accountantLedgerTable');
 const accountantLedgerDate = document.getElementById('accountantLedgerDate');
+const accountantLedgerDateInput = document.getElementById('accountantLedgerDateInput');
+const accountantLedgerRefreshBtn = document.getElementById('accountantLedgerRefreshBtn');
 
 async function fetchAccountantLedger(dateIso) {
   if (!accountantLedgerTable || !accountantLedgerDate) return;
@@ -1291,7 +1293,12 @@ async function fetchAccountantLedger(dateIso) {
       accountantLedgerDate.textContent = '--';
       return;
     }
-    accountantLedgerDate.textContent = `Date: ${new Date(j.date).toLocaleDateString()}`;
+    const showTotal = Number(j.totalCollected || 0);
+    accountantLedgerDate.innerHTML = `Date: ${new Date(j.date).toLocaleDateString()} - Total: <strong>GH₵ ${showTotal.toFixed(2)}</strong>`;
+    if (!j.ledger.length) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="3">No collections for this date.</td></tr>';
+      return;
+    }
     tbody.innerHTML = j.ledger.map(r => `<tr>
       <td>${escapeHtml(r.name || '')}</td>
       <td class="text-end">GH₵ ${Number(r.totalCollected || 0).toFixed(2)}</td>
@@ -1307,7 +1314,20 @@ async function fetchAccountantLedger(dateIso) {
 if (openAccountantBtn) {
   openAccountantBtn.addEventListener('click', function () {
     if (accountantModal) accountantModal.show();
-    fetchAccountantLedger();
+    if (accountantLedgerDateInput) {
+      const t = new Date();
+      const mm = String(t.getMonth() + 1).padStart(2, '0');
+      const dd = String(t.getDate()).padStart(2, '0');
+      accountantLedgerDateInput.value = `${t.getFullYear()}-${mm}-${dd}`;
+    }
+    fetchAccountantLedger(accountantLedgerDateInput ? accountantLedgerDateInput.value : '');
+  });
+}
+
+if (accountantLedgerRefreshBtn) {
+  accountantLedgerRefreshBtn.addEventListener('click', function () {
+    const v = accountantLedgerDateInput ? accountantLedgerDateInput.value : '';
+    fetchAccountantLedger(v);
   });
 }
 

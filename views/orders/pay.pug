@@ -154,7 +154,7 @@ block content
     .modal-dialog.modal-lg.modal-dialog-centered
       .modal-content.dark-surface
         .modal-header
-          h5.modal-title(id='cashiersModalLabel') Cashiers â€” Daily collections
+          h5.modal-title(id='cashiersModalLabel') Cashiers - Daily collections
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
         .modal-body.dark-card-body
           p.text-muted.small#cashiersStatusLoading Loading...
@@ -180,15 +180,19 @@ block content
     .modal-dialog.modal-lg.modal-dialog-centered
       .modal-content.dark-surface
         .modal-header
-          h5.modal-title(id='accountantModalLabel') Accountant â€” Daily ledger
+          h5.modal-title(id='accountantModalLabel') Accountant - Daily ledger
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
         .modal-body.dark-card-body
-          p.text-muted.small#accountantLedgerDate Loading...
+          .d-flex.justify-content-between.align-items-center.mb-2
+            p.text-muted.small.mb-0#accountantLedgerDate Loading...
+            .d-flex.align-items-center.gap-2
+              input.form-control.form-control-sm.form-control-dark#accountantLedgerDateInput(type='date')
+              button.btn.btn-outline-light-custom.btn-sm#accountantLedgerRefreshBtn(type='button') Refresh
           .table-responsive
             table.table.table-sm.table-hover#accountantLedgerTable
               thead
                 tr
-                  th Accountant
+                  th Cashier
                   th.text-end Total collected (GH₵)
                   th.text-center Actions
               tbody
