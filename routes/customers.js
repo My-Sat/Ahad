@@ -2,13 +2,17 @@
 const express = require('express');
 const router = express.Router();
 const customerController = require('../controllers/customer');
-const { ensureHasPermission } = require('../middlewares/auth');
+const { ensureHasPermission, ensureHasAnyPermission } = require('../middlewares/auth');
 
 // front desk customer page (clerk)
 router.get('/', ensureHasPermission('/customers'), customerController.frontPage);
 
 // API: lookup customer by phone
-router.get('/lookup', ensureHasPermission('/lookup'), customerController.apiLookupByPhone);
+router.get(
+  '/lookup',
+  ensureHasAnyPermission(['/lookup', '/orders/new', '/customers']),
+  customerController.apiLookupByPhone
+);
 
 // API: list all customers (admin)
 router.get(
@@ -38,7 +42,11 @@ router.delete(
 
 
 // API: search suggestions (for typeahead)
-router.get('/search', ensureHasPermission('/search'), customerController.apiSearch);
+router.get(
+  '/search',
+  ensureHasAnyPermission(['/search', '/orders/new', '/customers']),
+  customerController.apiSearch
+);
 
 // ✅ Customer account page (Admin use via Pay page customer modal)
 router.get(

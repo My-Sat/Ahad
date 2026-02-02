@@ -89,13 +89,8 @@ html(lang="en")
                       | Orders
                       span.badge.bg-dark.ms-2#badge-orders
                     ul.dropdown-menu
-                      li.dropdown-submenu.dropend
-                        a.dropdown-item.d-flex.align-items-center.justify-content-between(href='/orders/new', data-ajax='true', id='tab-orders-new')
-                          span Operations
-                          i.bi.bi-chevron-right.small(aria-hidden='true')
-                        ul.dropdown-menu
-                          li
-                            a.dropdown-item(href='/customers', data-ajax='true', id='tab-orders-customers') Registration
+                      li
+                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Operations
                       li
                         a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
                       li
@@ -115,16 +110,7 @@ html(lang="en")
                     ul.dropdown-menu
                       if canSeeOrdersNew
                         li
-                          if perms.includes('/customers')
-                            li.dropdown-submenu.dropend
-                              a.dropdown-item.d-flex.align-items-center.justify-content-between(href='/orders/new', data-ajax='true', id='tab-orders-new')
-                                span Operations
-                                i.bi.bi-chevron-right.small(aria-hidden='true')
-                              ul.dropdown-menu
-                                li
-                                  a.dropdown-item(href='/customers', data-ajax='true', id='tab-orders-customers') Registration
-                          else
-                            a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Operations
+                          a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Operations
                       if canSeeOrdersPay
                         li
                           a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
@@ -192,8 +178,6 @@ html(lang="en")
                       a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging-sm') Messaging
                     li
                       a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — Operations
-                    li
-                      a.dropdown-item(href='/customers', data-ajax='true', id='tab-orders-customers-sm') Registration
                     li
                       a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Orders — Pay
                     li

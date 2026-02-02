@@ -1383,10 +1383,10 @@ async function placeOrderFlow() {
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body dark-card-body">
-        <p>This order does not have a customer attached. You can proceed without a customer, or go back to the Customers page to register or select a customer first.</p>
+        <p>This order does not have a customer attached. You can proceed without a customer, or attach one using the Customer Lookup section.</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-light-custom" data-action="back">Back to Customers Page</button>
+        <button type="button" class="btn btn-outline-light-custom" data-action="back">Go to Customer Lookup</button>
         <button type="button" class="btn btn-primary" data-action="proceed">Proceed anyway</button>
       </div>
     </div>
@@ -1422,7 +1422,13 @@ async function placeOrderFlow() {
       })();
 
       if (choice === 'back') {
-        window.location.href = '/customers';
+        const lookupInput = document.getElementById('lookupPhone');
+        if (lookupInput) {
+          try { lookupInput.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { lookupInput.scrollIntoView(); }
+          try { lookupInput.focus(); } catch (e) {}
+        } else {
+          window.location.href = '/orders/new#customer-lookup';
+        }
         return;
       } else if (choice === 'proceed') {
         await placeOrderFlow();

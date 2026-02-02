@@ -28,7 +28,7 @@ const r = role.toLowerCase();
 
 if (r === 'clerk') {
   defaultPerms = [
-    '/customers',               // front desk page
+    '/customers',               // customer registration/management
     '/lookup',                  // API lookup
     '/search',                  // API search/typeahead
     '/orders/new',              // create new order
@@ -160,7 +160,7 @@ exports.updateMyPassword = async function (req, res, next) {
   const role = (req.user.role || '').toLowerCase();
   let redirectTo = '/';
   if (role === 'admin') redirectTo = '/admin/services';
-  else if (role === 'clerk') redirectTo = '/customers';
+  else if (role === 'clerk') redirectTo = '/orders/new';
   else if (role === 'cashier') redirectTo = '/orders/pay';
 
   // Render success modal then redirect

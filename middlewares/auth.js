@@ -86,3 +86,30 @@ exports.ensureHasPermission = function (requiredPattern) {
     return res.status(403).send('Forbidden');
   };
 };
+
+/*
+ * ensureHasAnyPermission(requiredPatterns[])
+ * Allows access if the user has ANY of the required permission patterns.
+ */
+exports.ensureHasAnyPermission = function (requiredPatterns) {
+  return function (req, res, next) {
+    if (!req.user) {
+      if (req.xhr) return res.status(401).json({ error: 'Not authenticated' });
+      return res.redirect('/login');
+    }
+
+    // admin bypass
+    if (req.user.role && req.user.role.toLowerCase() === 'admin') return next();
+
+    const perms = Array.isArray(req.user.permissions) ? req.user.permissions : [];
+    const patterns = Array.isArray(requiredPatterns) ? requiredPatterns : [];
+
+    const ok = patterns.some(candidate =>
+      perms.some(p => matchesPermissionPattern(p, candidate))
+    );
+    if (ok) return next();
+
+    if (req.xhr || req.get('Accept') === 'application/json') return res.status(403).json({ error: 'Forbidden' });
+    return res.status(403).send('Forbidden');
+  };
+};

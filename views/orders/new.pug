@@ -9,24 +9,21 @@ block content
           .card-body.dark-card-body
             // Title row: Job Order + Orders explorer button
             .d-flex.justify-content-between.align-items-center.mb-3
-              if customer
-                input(type='hidden', id='orderCustomerId', value=customer._id)
-
               h4.mb-0.text-white Job Order
-              // Orders explorer trigger + Customers button
+              // Orders button (existing)
               .mb-2
-                // Customers page link
-                a.btn.btn-outline-light-custom.btn-sm(href='/customers', title='Customers')
-                  i.bi.bi-people.me-1
-                  | Registration
-                // Orders button (existing)
                 button.btn.btn-outline-light-custom.btn-sm#openOrdersExplorerBtn(type='button', title='View orders')
                   i.bi.bi-list-check.me-1
                   | Orders
 
-              if customer
-                .mb-2
-                  div.small.text-muted-light Selected customer:
+            if customer
+              input(type='hidden', id='orderCustomerId', value=customer._id)
+
+            // Selected customer at top (centered)
+            if customer
+              .card.mb-3.dark-surface(style='border:1px solid rgba(255,255,255,.08);')
+                .card-body.dark-card-body.py-2.text-center
+                  div.small.text-muted-light.mb-1 Selected customer
                   if customer.category === 'artist' || customer.category === 'organisation'
                     strong(style='color:#21BCFF;') #{customer.businessName || customer.phone}
                   else
@@ -46,6 +43,29 @@ block content
                             ? 'Regular'
                             : 'One-Time';
                   strong.text-muted-light.ms-3 #{categoryLabel}
+
+            // Customer lookup + registration (moved from customers/front)
+            .card.mb-3.dark-surface#customer-lookup(style='border:1px solid rgba(255,255,255,.08);')
+              .card-body.dark-card-body.py-2
+                .d-flex.justify-content-between.align-items-center.mb-2
+                  h6.mb-0.text-white Customer Lookup
+                  if customer
+                    span.small.text-muted-light Attached
+
+                form#customerLookupForm.row.g-2(role='form')
+                  .col-12.col-md-6
+                    input#lookupPhone.form-control.form-control-dark(
+                      type='text',
+                      placeholder='Type phone or name',
+                      aria-label='Phone or name'
+                    )
+                  .col-auto
+                    button.btn.btn-primary#lookupBtn(type='submit') Lookup
+                  .col-auto
+                    button.btn.btn-outline-secondary#registerBtn(type='button') Register Customer
+
+                small.text-muted-light.d-block.mt-2
+                  | Type a phone or name to search. Select a suggestion to attach to this order.
 
             // selection row (service category + services + books)
             .row.g-2.mb-3
@@ -184,3 +204,39 @@ block content
 
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
+
+  // Registration modal (customer / artist)
+  .modal.fade(id='registerCustomerModal', tabindex='-1', aria-labelledby='registerCustomerModalLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title(id='registerCustomerModalLabel').text-white Register Customer
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          form#registerCustomerForm
+            .mb-2
+              label.form-label(for='regCategory') Register as
+              select.form-select#regCategory
+                option(value='one_time') Customer
+                option(value='artist') Artist
+                option(value='organisation') Organisation / NGO
+            .mb-2#regFirstNameGroup
+              label.form-label(for='regFirstName') Full Name
+              input.form-control.form-control-dark#regFirstName(type='text', placeholder='Full name')
+            .mb-2#regBusinessNameGroup(style='display:none;')
+              label.form-label(for='regBusinessName') Business name
+              input.form-control.form-control-dark#regBusinessName(type='text', placeholder='Business name')
+            .mb-2
+              label.form-label(for='regPhone') Phone
+              input.form-control.form-control-dark#regPhone(type='text', placeholder='Phone number')
+            .mb-2
+              label.form-label(for='regNotes') Notes (optional)
+              input.form-control.form-control-dark#regNotes(type='text', placeholder='Notes')
+              input(type='hidden', id='regCustomerId')
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary#saveCustomerBtn(type='button') Register
+
+block append scripts
+  script(defer src='/javascripts/customer_editor.js')
+  script(defer src='/javascripts/customers_front.js')

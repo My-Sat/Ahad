@@ -46,7 +46,7 @@ router.post('/login', async (req, res, next) => {
 
       const role = (user.role || '').toLowerCase();
       if (role === 'admin') return res.redirect('/admin/services');
-      if (role === 'clerk') return res.redirect('/customers');
+      if (role === 'clerk') return res.redirect('/orders/new');
       if (role === 'cashier') return res.redirect('/orders/pay');
 
       // fallback (if role unknown)

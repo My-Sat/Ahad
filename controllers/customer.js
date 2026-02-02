@@ -9,7 +9,7 @@ const CustomerAccountTxn = require('../models/customer_account_txn');
  */
 exports.frontPage = async (req, res) => {
   try {
-    return res.render('customers/front');
+    return res.redirect('/orders/new#customer-lookup');
   } catch (err) {
     console.error('customer.frontPage error', err);
     return res.status(500).send('Error loading customers page');
