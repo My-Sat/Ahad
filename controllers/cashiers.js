@@ -13,66 +13,125 @@ function dayRangeForIso(dateIso) {
   return { start, end };
 }
 
+function round2(n) {
+  return Number((Number(n || 0)).toFixed(2));
+}
+
+async function sumPaymentsForCashier(cashierId, start, end) {
+  if (!cashierId || !start || !end) return 0;
+  const cashierObjId = new mongoose.Types.ObjectId(String(cashierId));
+  const agg = await Order.aggregate([
+    { $unwind: '$payments' },
+    { $match: {
+      'payments.method': { $in: ['cash', 'momo', 'cheque'] },
+      'payments.createdAt': { $gte: start, $lte: end },
+      'payments.recordedBy': cashierObjId
+    }},
+    { $group: { _id: null, total: { $sum: '$payments.amount' } } }
+  ]);
+  return Number(((agg && agg.length) ? (agg[0].total || 0) : 0));
+}
+
+async function getLastCloseAtFromCollections(cashierId) {
+  if (!cashierId) return null;
+  const last = await CashierCollection.findOne({
+    cashier: new mongoose.Types.ObjectId(String(cashierId)),
+    dayClosed: true
+  }).sort({ date: -1 }).select('date').lean();
+  return last && last.date ? last.date : null;
+}
+
+async function ensureBalanceDoc(cashierId, fallbackCloseAt) {
+  let balanceDoc = await CashierBalance.findOne({ cashier: cashierId });
+  if (!balanceDoc) {
+    balanceDoc = new CashierBalance({
+      cashier: cashierId,
+      balance: 0,
+      lastCloseAt: fallbackCloseAt || null
+    });
+    await balanceDoc.save();
+    return balanceDoc;
+  }
+
+  if (!balanceDoc.lastCloseAt && fallbackCloseAt) {
+    balanceDoc.lastCloseAt = fallbackCloseAt;
+    balanceDoc.updatedAt = new Date();
+    await balanceDoc.save();
+  }
+
+  return balanceDoc;
+}
+
+async function applyAutoDayCloseIfNeeded(balanceDoc, cashierId, dayStart) {
+  if (!balanceDoc || !cashierId || !dayStart) return { rolledAmount: 0, changed: false };
+  const lastCloseAt = balanceDoc.lastCloseAt ? new Date(balanceDoc.lastCloseAt) : null;
+  if (!lastCloseAt || lastCloseAt < dayStart) {
+    const rolledAmount = await sumPaymentsForCashier(cashierId, lastCloseAt || dayStart, dayStart);
+    balanceDoc.balance = round2(Number(balanceDoc.balance || 0) + Number(rolledAmount || 0));
+    balanceDoc.lastCloseAt = dayStart;
+    balanceDoc.updatedAt = new Date();
+    await balanceDoc.save();
+    return { rolledAmount: round2(rolledAmount), changed: true };
+  }
+  return { rolledAmount: 0, changed: false };
+}
+
 /**
 /**
  * GET /cashiers/status?date=YYYY-MM-DD
- * returns list of cashiers with previousBalance and daily payments totals and already collected amounts
+ * returns list of cashiers with previous balance and current-period payment totals
  */
 exports.getCashiers = async (req, res) => {
   try {
     const dateIso = req.query.date || null;
     const { start, end } = dayRangeForIso(dateIso);
+    const rangeEnd = dateIso ? end : new Date();
 
     // load cashiers (role 'cashier' or 'clerk')
     const cashiers = await User.find({
       role: { $in: ['cashier', 'admin'] }
     }).select('_id name username role').lean();
 
-    // compute payments aggregated by recordedBy for the day (include cash, momo, cheque)
-    const paymentsByCashier = await Order.aggregate([
-      { $unwind: '$payments' },
-      { $match: {
-        'payments.method': { $in: ['cash', 'momo', 'cheque'] },
-        'payments.createdAt': { $gte: start, $lte: end },
-        'payments.recordedBy': { $exists: true, $ne: null }
-      }},
-      { $group: { _id: '$payments.recordedBy', total: { $sum: '$payments.amount' } } }
-    ]);
-    const payMap = {};
-    paymentsByCashier.forEach(p => { payMap[String(p._id)] = Number(p.total || 0); });
-
-    // collections by cashier for the day (sum of amounts recorded)
-    const collections = await CashierCollection.aggregate([
-      { $match: { date: { $gte: start, $lte: end } } },
-      { $group: { _id: '$cashier', totalCollected: { $sum: '$amount' }, dayClosedCount: { $sum: { $cond: ['$dayClosed', 1, 0] } } } }
-    ]);
-    const colMap = {};
-    const closedMap = {};
-    collections.forEach(c => { colMap[String(c._id)] = Number(c.totalCollected || 0); closedMap[String(c._id)] = Number(c.dayClosedCount || 0); });
-
     // load balances
     const balances = await CashierBalance.find({ cashier: { $in: cashiers.map(c => c._id) } }).lean();
     const balMap = {};
-    balances.forEach(b => { balMap[String(b.cashier)] = Number(b.balance || 0); });
+    balances.forEach(b => {
+      balMap[String(b.cashier)] = {
+        balance: Number(b.balance || 0),
+        lastCloseAt: b.lastCloseAt || null
+      };
+    });
+
+    const cashierIds = cashiers.map(c => c._id).filter(Boolean);
+    const lastCloseAgg = await CashierCollection.aggregate([
+      { $match: { cashier: { $in: cashierIds }, dayClosed: true } },
+      { $sort: { date: -1 } },
+      { $group: { _id: '$cashier', lastCloseAt: { $first: '$date' } } }
+    ]);
+    const lastCloseMap = {};
+    lastCloseAgg.forEach(r => { lastCloseMap[String(r._id)] = r.lastCloseAt; });
 
     // prepare response
-    const out = cashiers.map(c => {
+    const out = [];
+    for (const c of cashiers) {
       const id = String(c._id);
-      const totalCashRecordedToday = Number((payMap[id] || 0).toFixed(2));
-      const alreadyCollectedToday = Number((colMap[id] || 0).toFixed(2));
-      const previousBalance = Number((balMap[id] || 0).toFixed(2));
-      // if dayClosed (any collection with dayClosed true exists), treat uncollected as 0 (day reset),
-      // otherwise compute remaining
-      const dayClosed = !!closedMap[id];
-      return {
+      const balEntry = balMap[id] || {};
+      const fallbackCloseAt = balEntry.lastCloseAt || lastCloseMap[id] || start;
+      const balanceDoc = await ensureBalanceDoc(c._id, fallbackCloseAt);
+      await applyAutoDayCloseIfNeeded(balanceDoc, c._id, start);
+      const lastCloseAt = balanceDoc.lastCloseAt || start;
+
+      const currentPayments = await sumPaymentsForCashier(c._id, lastCloseAt, rangeEnd);
+      const totalCashRecordedToday = round2(currentPayments);
+      const previousBalance = round2(Number(balanceDoc.balance || 0));
+
+      out.push({
         cashierId: id,
         name: c.name || c.username || id,
         totalCashRecordedToday,
-        alreadyCollectedToday,
-        previousBalance,
-        dayClosed
-      };
-    });
+        previousBalance
+      });
+    }
 
     return res.json({ ok: true, date: start.toISOString(), cashiers: out });
   } catch (err) {
@@ -84,47 +143,43 @@ exports.getCashiers = async (req, res) => {
 /**
 /**
  * GET /cashiers/my-status
- * returns daily totals & previous balance for the logged-in cashier
+ * returns current-period totals & computed previous balance for the logged-in cashier
  */
 exports.my_status = async (req, res) => {
   try {
     if (!req.user || !req.user._id) return res.status(401).json({ error: 'Not authenticated' });
     const cashierId = String(req.user._id);
     const { start, end } = dayRangeForIso(req.query.date || null);
+    const rangeEnd = req.query.date ? end : new Date();
 
-    // total payments (cash, momo, cheque) recorded for today by this cashier
-    const paymentsAgg = await Order.aggregate([
-      { $unwind: '$payments' },
-      { $match: {
-        'payments.method': { $in: ['cash', 'momo', 'cheque'] },
-        'payments.createdAt': { $gte: start, $lte: end },
-        'payments.recordedBy': new mongoose.Types.ObjectId(cashierId)
-      }},
-      { $group: { _id: null, total: { $sum: '$payments.amount' } } }
-    ]);
-    const totalCashRecordedToday = Number(((paymentsAgg && paymentsAgg.length) ? (paymentsAgg[0].total || 0) : 0));
+    let balanceDoc = await CashierBalance.findOne({ cashier: new mongoose.Types.ObjectId(cashierId) });
+    if (!balanceDoc) {
+      const lastCloseAt = await getLastCloseAtFromCollections(cashierId);
+      balanceDoc = await ensureBalanceDoc(cashierId, lastCloseAt || start);
+    } else if (!balanceDoc.lastCloseAt) {
+      const lastCloseAt = await getLastCloseAtFromCollections(cashierId);
+      if (lastCloseAt) {
+        balanceDoc.lastCloseAt = lastCloseAt;
+        balanceDoc.updatedAt = new Date();
+        await balanceDoc.save();
+      } else if (!balanceDoc.lastCloseAt) {
+        balanceDoc.lastCloseAt = start;
+        balanceDoc.updatedAt = new Date();
+        await balanceDoc.save();
+      }
+    }
 
-    // already collected today for this cashier
-    const collectedAgg = await CashierCollection.aggregate([
-      { $match: { cashier: new mongoose.Types.ObjectId(cashierId), date: { $gte: start, $lte: end } } },
-      { $group: { _id: null, total: { $sum: '$amount' }, dayClosedCount: { $sum: { $cond: ['$dayClosed', 1, 0] } } } }
-    ]);
-    const alreadyCollectedToday = Number(((collectedAgg && collectedAgg.length) ? (collectedAgg[0].total || 0) : 0));
-    const dayClosedCount = (collectedAgg && collectedAgg.length) ? (collectedAgg[0].dayClosedCount || 0) : 0;
-
-    // previous balance
-    const bal = await CashierBalance.findOne({ cashier: new mongoose.Types.ObjectId(cashierId) }).lean();
-    const previousBalance = bal ? Number(bal.balance || 0) : 0;
-
-    // if dayClosed, uncollected is 0, else compute
-    const uncollectedToday = dayClosedCount ? 0 : Number(Math.max(0, totalCashRecordedToday - alreadyCollectedToday).toFixed(2));
+    await applyAutoDayCloseIfNeeded(balanceDoc, cashierId, start);
+    const lastCloseAt = balanceDoc.lastCloseAt || start;
+    const totalCashRecordedToday = round2(await sumPaymentsForCashier(cashierId, lastCloseAt, rangeEnd));
+    const previousBalance = round2(Number(balanceDoc.balance || 0));
+    const uncollectedToday = totalCashRecordedToday;
 
     return res.json({
       ok: true,
       cashierId,
       name: req.user.name || req.user.username || '',
-      totalCashRecordedToday: Number(totalCashRecordedToday.toFixed(2)),
-      alreadyCollectedToday: Number(alreadyCollectedToday.toFixed(2)),
+      totalCashRecordedToday,
       uncollectedToday,
       previousBalance
     });
@@ -153,58 +208,27 @@ exports.postCashiers = async (req, res) => {
     const amount = Math.round((isNaN(amountRaw) ? 0 : amountRaw) * 100) / 100;
     if (isNaN(amount)) return res.status(400).json({ error: 'Invalid amount' });
 
-    // compute today's totals (based on provided date or today)
-    const { start, end } = dayRangeForIso(req.body.date || null);
+    const { start } = dayRangeForIso(req.body.date || null);
+    const rangeEnd = new Date();
 
-// total payments for day (include cash, momo, cheque) recorded by the cashier
-const paymentsAgg = await Order.aggregate([
-  { $unwind: '$payments' },
-  { $match: {
-    'payments.method': { $in: ['cash', 'momo', 'cheque'] },
-    'payments.createdAt': { $gte: start, $lte: end },
-    'payments.recordedBy': new mongoose.Types.ObjectId(cashierId)
-  }},
-  { $group: { _id: null, total: { $sum: '$payments.amount' } } }
-]);
-const totalCashRecordedToday = Number(((paymentsAgg && paymentsAgg.length) ? (paymentsAgg[0].total || 0) : 0));
-
-    // already collected today (sum of collections for cashier & date)
-    const collectedAgg = await CashierCollection.aggregate([
-      { $match: { cashier: new mongoose.Types.ObjectId(cashierId), date: { $gte: start, $lte: end } } },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
-    ]);
-    const alreadyCollectedToday = Number(((collectedAgg && collectedAgg.length) ? (collectedAgg[0].total || 0) : 0));
-
-    // compute remaining uncollected today before this collection
-    const remainingBefore = Number(Math.max(0, totalCashRecordedToday - alreadyCollectedToday).toFixed(2));
-
-    // compute how much of this amount applies to today's outstanding and how much is excess
-    const appliedToToday = Number(Math.min(amount, remainingBefore).toFixed(2)); // amount used to satisfy today's uncollected
-    const remainingAfter = Number(Math.max(0, remainingBefore - appliedToToday).toFixed(2)); // what would remain unpaid for today after this collection
-    const excess = Number(Math.max(0, amount - remainingBefore).toFixed(2)); // money beyond today's needs
-
-    // Ensure there's a persistent balance doc (create if not exists)
     let balanceDoc = await CashierBalance.findOne({ cashier: cashierId });
     if (!balanceDoc) {
-      balanceDoc = new CashierBalance({ cashier: cashierId, balance: 0 });
-    }
-    const oldBalance = Number(balanceDoc.balance || 0);
-
-    // Compute balance delta according to whether there were prior collections today
-    let changeToBalance = 0;
-    if (alreadyCollectedToday === 0) {
-      // first collection of the day:
-      // - if amount < remainingBefore -> remainingAfter > 0 => add remainingAfter to balance
-      // - if amount > remainingBefore -> excess > 0 => reduce balance by excess
-      changeToBalance = Number((remainingAfter - excess).toFixed(2));
-    } else {
-      // subsequent collections on same day reduce the stored balance by the full amount received
-      // (prior partial collections already added day's uncollected into the balance)
-      changeToBalance = Number((-amount).toFixed(2));
+      const lastCloseAt = await getLastCloseAtFromCollections(cashierId);
+      balanceDoc = await ensureBalanceDoc(cashierId, lastCloseAt || start);
+    } else if (!balanceDoc.lastCloseAt) {
+      const lastCloseAt = await getLastCloseAtFromCollections(cashierId);
+      balanceDoc.lastCloseAt = lastCloseAt || start;
+      balanceDoc.updatedAt = new Date();
+      await balanceDoc.save();
     }
 
-    // new balance
-    const newBalance = Number((oldBalance + changeToBalance).toFixed(2));
+    await applyAutoDayCloseIfNeeded(balanceDoc, cashierId, start);
+    const lastCloseAt = balanceDoc.lastCloseAt || start;
+    const totalCashRecordedToday = round2(await sumPaymentsForCashier(cashierId, lastCloseAt, rangeEnd));
+
+    const oldBalance = round2(balanceDoc.balance || 0);
+    const changeToBalance = round2(Number(totalCashRecordedToday) - Number(amount));
+    const newBalance = round2(oldBalance + changeToBalance);
 
     // create collection record (actual cash received recorded)
     const col = new CashierCollection({
@@ -219,6 +243,7 @@ const totalCashRecordedToday = Number(((paymentsAgg && paymentsAgg.length) ? (pa
 
     // update persistent balance
     balanceDoc.balance = newBalance;
+    balanceDoc.lastCloseAt = rangeEnd;
     balanceDoc.updatedAt = new Date();
     await balanceDoc.save();
 
@@ -238,15 +263,10 @@ const totalCashRecordedToday = Number(((paymentsAgg && paymentsAgg.length) ? (pa
       ok: true,
       cashierId,
       amountCollected: amount,
-      appliedToToday,
-      excess,
-      totalCashRecordedToday: Number(totalCashRecordedToday.toFixed(2)),
-      alreadyCollectedToday: Number(alreadyCollectedToday.toFixed(2)),
-      remainingBefore,
-      remainingAfter,
+      totalCashRecordedToday,
       changeToBalance,
       oldBalance,
-      newPreviousBalance: Number(newBalance.toFixed(2)),
+      newPreviousBalance: newBalance,
       collectionId: col._id
     });
   } catch (err) {

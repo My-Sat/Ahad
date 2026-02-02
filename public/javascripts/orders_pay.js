@@ -1,4 +1,4 @@
-// public/javascripts/orders_pay.js
+﻿// public/javascripts/orders_pay.js
 function initOrdersPay() {
   'use strict';
 
@@ -218,7 +218,7 @@ const cashiersStatusLoading = document.getElementById('cashiersStatusLoading');
         if (!id) return;
         const name = String(o.name || '').trim();
         const showName = name && name.toLowerCase() !== 'walk-in';
-        const label = showName ? `${name} — ${id}` : id;
+        const label = showName ? `${name} â€” ${id}` : id;
         options.push(`<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`);
       });
 
@@ -514,7 +514,7 @@ function discountAppliedLabel(order) {
 
         // DISPLAY FIX:
         // - non-printing: QTY = baseSheets
-        // - printing: Sheets = baseSheets × factor
+        // - printing: Sheets = baseSheets Ã— factor
         const displayQty = requiresPrinter ? (baseSheets * factor) : baseSheets;
 
         const qtyLabel = requiresPrinter ? 'Sheets' : 'QTY';
@@ -546,9 +546,9 @@ function discountAppliedLabel(order) {
             <div class="text-end ms-3" style="min-width:200px;">
             <div>${qtyLabel}: ${escapeHtml(String(displayQty))}</div>
             ${ requiresPrinter ? `<div>Pages: ${escapeHtml(String(pages))}</div>` : '' }
-            ${ (requiresPrinter && factor > 1) ? `<div>QTY ×${factor}</div>` : '' }
-              <div>Unit: GH₵ ${escapeHtml(fmt(unit))}</div>
-              <div>Subtotal: GH₵ ${escapeHtml(fmt(subtotal))}</div>
+            ${ (requiresPrinter && factor > 1) ? `<div>QTY Ã—${factor}</div>` : '' }
+              <div>Unit: GHâ‚µ ${escapeHtml(fmt(unit))}</div>
+              <div>Subtotal: GHâ‚µ ${escapeHtml(fmt(subtotal))}</div>
             </div>
           </div>
         `;
@@ -648,11 +648,11 @@ function discountAppliedLabel(order) {
       </p>
       <p class="text-end mb-1">
         <span class="text-muted">Total before discount:</span>
-        <strong>GH₵ ${fmt(before)}</strong>
+        <strong>GHâ‚µ ${fmt(before)}</strong>
       </p>
       <p class="text-end mb-1">
         <span class="text-muted">Discount:</span>
-        <strong class="text-white">- GH₵ ${fmt(order.discountAmount)}</strong>
+        <strong class="text-white">- GHâ‚µ ${fmt(order.discountAmount)}</strong>
       </p>
     </div>
   `;
@@ -664,7 +664,7 @@ function discountAppliedLabel(order) {
           <div>
             <div class="small text-muted-light">Customer Account Balance</div>
             <div class="text-white">
-              <strong id="custAccountBalance">GH₵ ${fmt(currentCustomerBalance)}</strong>
+              <strong id="custAccountBalance">GHâ‚µ ${fmt(currentCustomerBalance)}</strong>
             </div>
           </div>
 
@@ -693,8 +693,8 @@ function discountAppliedLabel(order) {
       <p><strong>Status:</strong> ${statusLabel}</p>
       ${itemsHtml}
       ${discountHtml}
-      <p class="text-end"><strong>Total to pay: GH₵ ${fmt(order.total)}</strong></p>
-      ${ (outstanding > 0) ? `<p class="text-end"><strong>Remaining: GH₵ ${fmt(outstanding)}</strong></p>` : '' }
+      <p class="text-end"><strong>Total to pay: GHâ‚µ ${fmt(order.total)}</strong></p>
+      ${ (outstanding > 0) ? `<p class="text-end"><strong>Remaining: GHâ‚µ ${fmt(outstanding)}</strong></p>` : '' }
       ${accountHtml}
     `;
 
@@ -825,7 +825,7 @@ function discountAppliedLabel(order) {
 
       if (used !== null) {
         showAlertModal(
-          `Account applied: GH₵ ${fmt(used)}\nNew balance: GH₵ ${fmt(currentCustomerBalance)}\nRemaining: GH₵ ${fmt(currentOutstanding)}`,
+          `Account applied: GHâ‚µ ${fmt(used)}\nNew balance: GHâ‚µ ${fmt(currentCustomerBalance)}\nRemaining: GHâ‚µ ${fmt(currentOutstanding)}`,
           'Account applied'
         );
       } else {
@@ -1021,12 +1021,12 @@ function discountAppliedLabel(order) {
 
       // Confirm using modal
       let confirmMsg = isPart
-        ? `Record a payment of GH₵ ${fmt(partAmount)} for order ${escapeHtml(currentOrderId)}?`
+        ? `Record a payment of GHâ‚µ ${fmt(partAmount)} for order ${escapeHtml(currentOrderId)}?`
         : `Mark order ${escapeHtml(currentOrderId)} as paid?`;
 
       if (isPart && currentHasCustomer && Number(partAmount) > Number(currentOutstanding || 0)) {
         const excess = Number((Number(partAmount) - Number(currentOutstanding || 0)).toFixed(2));
-        confirmMsg += `\n\nExcess (GH₵ ${fmt(excess)}) will be credited to the customer's account.`;
+        confirmMsg += `\n\nExcess (GHâ‚µ ${fmt(excess)}) will be credited to the customer's account.`;
       }
       const ok = await showConfirmModal(confirmMsg, 'Confirm payment');
       if (!ok) return;
@@ -1081,22 +1081,22 @@ async function fetchCashiersStatus(dateIso) {
   if (!cashiersTable || !cashiersStatusLoading) return;
   cashiersStatusLoading.textContent = 'Loading...';
   const tbody = cashiersTable.querySelector('tbody');
-  // 5 visible columns in the table (Cashier, Today's Cash, Already Collected, Previous Balance, Actions)
-  tbody.innerHTML = '<tr><td class="text-muted" colspan="5">Loading...</td></tr>';
+  // 4 visible columns in the table (Cashier, Today's Payments, Previous Balance, Actions)
+  tbody.innerHTML = '<tr><td class="text-muted" colspan="4">Loading...</td></tr>';
   try {
     const url = '/cashiers/status' + (dateIso ? ('?date=' + encodeURIComponent(dateIso)) : '');
     const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
     if (!res.ok) {
       const j = await res.json().catch(()=>null);
       const msg = (j && j.error) ? j.error : `Failed to fetch cashiers (${res.status})`;
-      tbody.innerHTML = `<tr><td class="text-muted" colspan="5">${escapeHtml(msg)}</td></tr>`;
+      tbody.innerHTML = `<tr><td class="text-muted" colspan="4">${escapeHtml(msg)}</td></tr>`;
       cashiersStatusLoading.textContent = '--';
       return;
     }
 
     const j = await res.json().catch(()=>null);
     if (!j || !Array.isArray(j.cashiers)) {
-      tbody.innerHTML = '<tr><td class="text-muted" colspan="5">Invalid response</td></tr>';
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="4">Invalid response</td></tr>';
       cashiersStatusLoading.textContent = '--';
       return;
     }
@@ -1106,29 +1106,20 @@ async function fetchCashiersStatus(dateIso) {
 
     tbody.innerHTML = rows.map(r => {
       const total = Number(r.totalCashRecordedToday || 0);
-      const already = Number(r.alreadyCollectedToday || 0);
-      // prefer server-supplied uncollectedToday if present; otherwise compute
-      const uncollected = (typeof r.uncollectedToday !== 'undefined' && r.uncollectedToday !== null)
-        ? Number(r.uncollectedToday || 0)
-        : Number(Math.max(0, total - already).toFixed(2));
-
       const prevBal = Number(r.previousBalance || 0);
 
       return `<tr data-cashier-id="${escapeHtml(r.cashierId)}">
         <td>${escapeHtml(r.name)}</td>
-        <!-- Today's Cash (green) shows total payments recorded for the day (cash+momo+cheque) -->
-        <td class="text-end text-success">GH₵ ${Number(total).toFixed(2)}</td>
-        <td class="text-end">GH₵ ${Number(already).toFixed(2)}</td>
-        <!-- If you want the amount the accountant still needs to collect, show uncollected separately.
-             For now we compute it client-side and you can display it if desired. -->
-        <td class="text-end text-danger">GH₵ ${Number(prevBal).toFixed(2)}</td>
+        <!-- Today's Cash (green) shows payments recorded since last collection (cash+momo+cheque) -->
+        <td class="text-end text-success">GHâ‚µ ${Number(total).toFixed(2)}</td>
+        <td class="text-end text-danger">GHâ‚µ ${Number(prevBal).toFixed(2)}</td>
         <td class="text-center"><button class="btn btn-sm btn-primary cashier-receive-btn" type="button" data-cashier-id="${escapeHtml(r.cashierId)}" data-cashier-name="${escapeHtml(r.name)}">Receive</button></td>
       </tr>`;
     }).join('');
   } catch (err) {
     console.error('fetchCashiersStatus err', err);
     const tbody = cashiersTable.querySelector('tbody');
-    tbody.innerHTML = '<tr><td class="text-muted" colspan="5">Network error while fetching cashiers.</td></tr>';
+    tbody.innerHTML = '<tr><td class="text-muted" colspan="4">Network error while fetching cashiers.</td></tr>';
     cashiersStatusLoading.textContent = '--';
   }
 }
@@ -1165,15 +1156,10 @@ async function fetchMyCashierStatus() {
 
     if (myCashierNameEl && (j.name || j.cashierId)) myCashierNameEl.textContent = j.name || ('Cashier: ' + (j.cashierId || ''));
 
-    // compute/choose uncollected: prefer server field, else compute from totals if provided
-    const total = Number(j.totalCashRecordedToday || 0);
-    const already = Number(j.alreadyCollectedToday || 0);
-    const uncollected = (typeof j.uncollectedToday !== 'undefined' && j.uncollectedToday !== null)
-      ? Number(j.uncollectedToday || 0)
-      : Number(Math.max(0, total - already).toFixed(2));
+    const todayPayments = Number(j.totalCashRecordedToday || 0);
 
-    // Show the currently uncollected cash (will be 0.00 after collection)
-    if (myCashTodayEl) myCashTodayEl.textContent = Number(uncollected).toFixed(2);
+    // Show the currently uncollected cash (resets to 0.00 after collection)
+    if (myCashTodayEl) myCashTodayEl.textContent = Number(todayPayments).toFixed(2);
     if (myPrevBalanceEl) myPrevBalanceEl.textContent = Number(j.previousBalance || 0).toFixed(2);
     return j;
   } catch (err) {
@@ -1206,7 +1192,7 @@ async function fetchMyCashierStatus() {
   // Hook into existing payment success flow:
   // After the code that calls fetchOrderById(currentOrderId) (which you already do after a successful pay),
   // add: _refreshAfterPayment();
-  // If you prefer I can patch the exact location for you — but placing the following small observer helps:
+  // If you prefer I can patch the exact location for you â€” but placing the following small observer helps:
   (function hookPaymentRefresh() {
     // We monkey-patch fetchOrderById to call original and then refresh cashier status
     if (typeof fetchOrderById === 'function') {
@@ -1249,7 +1235,7 @@ async function fetchAccountantLedger(dateIso) {
     accountantLedgerDate.textContent = `Date: ${new Date(j.date).toLocaleDateString()}`;
     tbody.innerHTML = j.ledger.map(r => `<tr>
       <td>${escapeHtml(r.name || '')}</td>
-      <td class="text-end">GH₵ ${Number(r.totalCollected || 0).toFixed(2)}</td>
+      <td class="text-end">GHâ‚µ ${Number(r.totalCollected || 0).toFixed(2)}</td>
       <td class="text-center"></td>
     </tr>`).join('');
   } catch (err) {
@@ -1283,7 +1269,7 @@ function showReceiveModal(cashierId, cashierName) {
       </div>
       <div class="modal-body dark-card-body">
         <div class="mb-2"><strong id="cashierReceiveName"></strong></div>
-        <div class="mb-2 small text-muted">Enter the physical cash amount received from this cashier for today (GH₵)</div>
+        <div class="mb-2 small text-muted">Enter the physical cash amount received from this cashier for today (GHâ‚µ)</div>
         <div class="mb-3">
           <label class="form-label small mb-1">Amount</label>
           <input type="number" min="0" step="0.01" class="form-control form-control-sm" id="cashierReceiveAmount" />
@@ -1449,7 +1435,7 @@ let html = '';
 let groupIndex = 0;
 
 Object.entries(grouped).forEach(([debtorName, items]) => {
-  // SINGLE record → keep existing logic exactly
+  // SINGLE record â†’ keep existing logic exactly
   if (items.length === 1) {
     const d = items[0];
     const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
@@ -1457,9 +1443,9 @@ Object.entries(grouped).forEach(([debtorName, items]) => {
       <tr data-order-id="${escapeHtml(d.orderId || '')}">
         <td>${escapeHtml(d.orderId || '')}</td>
         <td>${escapeHtml(debtorName)}</td>
-        <td class="text-end">GH₵ ${Number(d.amountDue || 0).toFixed(2)}</td>
-        <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
-        <td class="text-end">GH₵ ${out}</td>
+        <td class="text-end">GHâ‚µ ${Number(d.amountDue || 0).toFixed(2)}</td>
+        <td class="text-end">GHâ‚µ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
+        <td class="text-end">GHâ‚µ ${out}</td>
         <td class="text-center">
           <button class="btn btn-sm btn-primary view-debtor-order"
             type="button"
@@ -1472,7 +1458,7 @@ Object.entries(grouped).forEach(([debtorName, items]) => {
     return;
   }
 
-  // MULTIPLE records → expandable group
+  // MULTIPLE records â†’ expandable group
   const groupId = `debtor-group-${groupIndex++}`;
 
 const totalDue = items.reduce((s, i) => s + Number(i.amountDue || 0), 0);
@@ -1489,13 +1475,13 @@ html += `
       data-debtor-name="${escapeHtml(debtorName)}"
       style="cursor:pointer;">
     <td colspan="2">
-      <span class="me-2 debtor-toggle-icon">▶</span>
+      <span class="me-2 debtor-toggle-icon">â–¶</span>
       <strong>${escapeHtml(debtorName)}</strong>
       <span class="text-muted ms-2">(${items.length} orders)</span>
     </td>
-    <td class="text-end">GH₵ ${totalDue.toFixed(2)}</td>
-    <td class="text-end">GH₵ ${totalPaid.toFixed(2)}</td>
-    <td class="text-end fw-semibold">GH₵ ${totalOutstanding.toFixed(2)}</td>
+    <td class="text-end">GHâ‚µ ${totalDue.toFixed(2)}</td>
+    <td class="text-end">GHâ‚µ ${totalPaid.toFixed(2)}</td>
+    <td class="text-end fw-semibold">GHâ‚µ ${totalOutstanding.toFixed(2)}</td>
     <td class="text-center">
       <button
         class="btn btn-sm btn-success pay-debtor-full"
@@ -1514,9 +1500,9 @@ html += `
       <tr class="debtor-group-row ${groupId}" style="display:none;">
         <td>${escapeHtml(d.orderId || '')}</td>
         <td>${escapeHtml(debtorName)}</td>
-        <td class="text-end">GH₵ ${Number(d.amountDue || 0).toFixed(2)}</td>
-        <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
-        <td class="text-end">GH₵ ${out}</td>
+        <td class="text-end">GHâ‚µ ${Number(d.amountDue || 0).toFixed(2)}</td>
+        <td class="text-end">GHâ‚µ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
+        <td class="text-end">GHâ‚µ ${out}</td>
         <td class="text-center">
           <button class="btn btn-sm btn-primary view-debtor-order"
             type="button"
@@ -1621,7 +1607,7 @@ if (debtorsTable) {
       // prepare modal UI
       if (fullPaymentConfirmText) {
         fullPaymentConfirmText.textContent =
-          `Apply FULL payment of GH₵ ${fmt(total)} to ALL selected outstanding orders?`;
+          `Apply FULL payment of GHâ‚µ ${fmt(total)} to ALL selected outstanding orders?`;
       }
 
       if (fullPaymentMethod) {
@@ -1672,7 +1658,7 @@ if (debtorsTable) {
     toggleRow.setAttribute('aria-expanded', expanded ? 'false' : 'true');
 
     const icon = toggleRow.querySelector('.debtor-toggle-icon');
-    if (icon) icon.textContent = expanded ? '▶' : '▼';
+    if (icon) icon.textContent = expanded ? 'â–¶' : 'â–¼';
   });
 }
 
@@ -2186,7 +2172,7 @@ function renderOrdersList(orders) {
           ${name}
         </a>
       </td>
-      <td class="text-end">GH₵ ${Number(o.total || 0).toFixed(2)}</td>
+      <td class="text-end">GHâ‚µ ${Number(o.total || 0).toFixed(2)}</td>
       <td>${escapeHtml(o.status || '')}</td>
       <td>${escapeHtml(created)}</td>
       <td class="text-center">
