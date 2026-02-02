@@ -90,9 +90,11 @@ html(lang="en")
                       span.badge.bg-dark.ms-2#badge-orders
                     ul.dropdown-menu
                       li
-                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Orders
+                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Operations
                       li
                         a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
+                      li
+                        a.dropdown-item(href='/admin/discounts', data-ajax='true', id='tab-orders-discounts') Discounts
 
                   li.nav-item
                     a.nav-link.d-flex.align-items-center(href='/admin/reports', data-ajax='true', role='tab', id='tab-reports')
@@ -104,7 +106,7 @@ html(lang="en")
                   li.nav-item.dropdown
                     a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-orders', role='button', data-bs-toggle='dropdown', aria-expanded='false')
                       i.bi.bi-basket2.me-2(aria-hidden='true')
-                      | Orders
+                      | Operations
                     ul.dropdown-menu
                       if canSeeOrdersNew
                         li
@@ -118,7 +120,7 @@ html(lang="en")
                   li.nav-item.dropdown
                     a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-orders', role='button', data-bs-toggle='dropdown', aria-expanded='false')
                       i.bi.bi-basket2.me-2(aria-hidden='true')
-                      | Orders
+                      | Operations
                     ul.dropdown-menu
                       if canSeeOrdersNew
                         li
@@ -175,9 +177,11 @@ html(lang="en")
                     li
                       a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging-sm') Messaging
                     li
-                      a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — New
+                      a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — Operations
                     li
                       a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Orders — Pay
+                    li
+                      a.dropdown-item(href='/admin/discounts', data-ajax='true', id='tab-orders-discounts-sm') Discounts
                     li
                       a.dropdown-item(href='/admin/reports', data-ajax='true', id='tab-reports-sm') Reports
                     li

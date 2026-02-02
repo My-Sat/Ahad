@@ -43,9 +43,6 @@ block content
                   button.btn.btn-outline-light-custom.btn-sm#openCustomersBtn(type='button', title='Customers')
                     i.bi.bi-people.me-1
                     | Customers
-                  a.btn.btn-outline-light-custom.btn-sm(href='/admin/discounts', title='Discounts')
-                    i.bi.bi-percent.me-1
-                    | Discount
                   button.btn.btn-outline-light-custom.btn-sm#openAccountantBtn(type='button', title='Accountant ledger')
                     i.bi.bi-journal-check.me-1
                     | Accountant
@@ -383,10 +380,10 @@ block content
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
-    // âœ… IMPORTANT: Keep Pay page scripts INSIDE #main-content so dashboard_nav AJAX loads them
-    script.
-      window._isAdmin = !{JSON.stringify((typeof currentUser !== 'undefined' && currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin') ? true : false)};
-    script(defer src='/javascripts/customer_editor.js')
-    script(defer src='/javascripts/customers_front.js')
-    script(defer src='/javascripts/orders_pay.js')
+  // âœ… IMPORTANT: Keep Pay page scripts INSIDE #main-content so dashboard_nav AJAX loads them
+  script.
+    window._isAdmin = !{JSON.stringify((typeof currentUser !== 'undefined' && currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin') ? true : false)};
+  script(defer src='/javascripts/customer_editor.js')
+  script(defer src='/javascripts/customers_front.js')
+  script(defer src='/javascripts/orders_pay.js')
 
