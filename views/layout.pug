@@ -44,7 +44,7 @@ html(lang="en")
             // - clerks see Orders (new) by default
             // - cashiers see Payment by default
             // Extra visibility comes from cross-assigned permissions.
-            - const canSeeOrdersNew = (role === 'admin') || (role === 'clerk') || (role === 'cashier' && hasAny(clerkRoutes));
+            - const canSeeOrdersNew = (role === 'admin') || perms.includes('/orders/new');
             - const canSeeOrdersPay = (role === 'admin') || (role === 'cashier') || (role === 'clerk' && hasAny(cashierRoutes));
 
 
@@ -89,8 +89,13 @@ html(lang="en")
                       | Orders
                       span.badge.bg-dark.ms-2#badge-orders
                     ul.dropdown-menu
-                      li
-                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Operations
+                      li.dropdown-submenu.dropend
+                        a.dropdown-item.d-flex.align-items-center.justify-content-between(href='/orders/new', data-ajax='true', id='tab-orders-new')
+                          span Operations
+                          i.bi.bi-chevron-right.small(aria-hidden='true')
+                        ul.dropdown-menu
+                          li
+                            a.dropdown-item(href='/customers', data-ajax='true', id='tab-orders-customers') New Registration
                       li
                         a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
                       li
@@ -106,11 +111,20 @@ html(lang="en")
                   li.nav-item.dropdown
                     a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-orders', role='button', data-bs-toggle='dropdown', aria-expanded='false')
                       i.bi.bi-basket2.me-2(aria-hidden='true')
-                      | Operations
+                      | Orders
                     ul.dropdown-menu
                       if canSeeOrdersNew
                         li
-                          a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Orders
+                          if perms.includes('/customers')
+                            li.dropdown-submenu.dropend
+                              a.dropdown-item.d-flex.align-items-center.justify-content-between(href='/orders/new', data-ajax='true', id='tab-orders-new')
+                                span Operations
+                                i.bi.bi-chevron-right.small(aria-hidden='true')
+                              ul.dropdown-menu
+                                li
+                                  a.dropdown-item(href='/customers', data-ajax='true', id='tab-orders-customers') New Registration
+                          else
+                            a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Operations
                       if canSeeOrdersPay
                         li
                           a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
@@ -120,11 +134,11 @@ html(lang="en")
                   li.nav-item.dropdown
                     a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-orders', role='button', data-bs-toggle='dropdown', aria-expanded='false')
                       i.bi.bi-basket2.me-2(aria-hidden='true')
-                      | Operations
+                      | Orders
                     ul.dropdown-menu
                       if canSeeOrdersNew
                         li
-                          a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Orders
+                          a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Operations
                       if canSeeOrdersPay
                         li
                           a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
@@ -162,7 +176,7 @@ html(lang="en")
                   - const hasAnySm = (arr) => arr.some(p => permsSm.includes(p));
                   - const clerkRoutesSm = ['/orders/new','/orders/list','/orders/view/:orderId','/customers','/lookup','/search'];
                   - const cashierRoutesSm = ['/orders/pay','/orders/debtors','/orders/:orderId','/orders/:orderId/pay'];
-                  - const canSeeOrdersNewSm = (roleSm === 'admin') || (roleSm === 'clerk') || (roleSm === 'cashier' && hasAnySm(clerkRoutesSm));
+                  - const canSeeOrdersNewSm = (roleSm === 'admin') || permsSm.includes('/orders/new');
                   - const canSeeOrdersPaySm = (roleSm === 'admin') || (roleSm === 'cashier') || (roleSm === 'clerk' && hasAnySm(cashierRoutesSm));
 
                   if roleSm === 'admin'
@@ -178,6 +192,8 @@ html(lang="en")
                       a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging-sm') Messaging
                     li
                       a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — Operations
+                    li
+                      a.dropdown-item(href='/customers', data-ajax='true', id='tab-orders-customers-sm') New Registration
                     li
                       a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Orders — Pay
                     li

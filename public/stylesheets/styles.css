@@ -496,6 +496,33 @@ header .dropdown-menu,
   pointer-events: auto;
 }
 
+/* nested dropdown (Orders -> Operations -> New Registration) */
+.dropdown-submenu{ position: relative; }
+.dropdown-submenu > .dropdown-menu{
+  top: -0.35rem;
+  left: 100%;
+  margin-left: .25rem;
+  transform-origin: top left;
+}
+.dropdown-submenu:hover > .dropdown-menu,
+.dropdown-submenu:focus-within > .dropdown-menu{
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+  pointer-events: auto;
+}
+/* keep hover "bridge" so the submenu doesn't collapse while moving sideways */
+.dropdown-submenu::after{
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 100%;
+  width: 18px;
+  height: 100%;
+}
+.dropdown-submenu > .dropdown-menu{ padding-left: .35rem; }
+
 /* slightly different origin for left-aligned menus */
 .dropdown-menu.dropdown-menu-start,
 .dropdown-menu.dropdown-menu-start.show{
