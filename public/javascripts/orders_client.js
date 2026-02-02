@@ -1427,7 +1427,7 @@ async function placeOrderFlow() {
           try { lookupInput.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { lookupInput.scrollIntoView(); }
           try { lookupInput.focus(); } catch (e) {}
         } else {
-          window.location.href = '/orders/new#customer-lookup';
+          showAlertModal('Customer lookup is not available on this page.');
         }
         return;
       } else if (choice === 'proceed') {

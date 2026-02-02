@@ -20,29 +20,37 @@ block content
               input(type='hidden', id='orderCustomerId', value=customer._id)
 
             // Selected customer at top (centered)
-            if customer
-              .card.mb-3.dark-surface(style='border:1px solid rgba(255,255,255,.08);')
-                .card-body.dark-card-body.py-2.text-center
-                  div.small.text-muted-light.mb-1 Selected customer
-                  if customer.category === 'artist' || customer.category === 'organisation'
-                    strong(style='color:#21BCFF;') #{customer.businessName || customer.phone}
-                  else
-                    strong(style='color:#21BCFF;') #{customer.firstName || customer.businessName || customer.phone}
+            - const hasCustomer = !!customer;
+            .card.mb-3.dark-surface#selectedCustomerCard(style='border:1px solid rgba(255,255,255,.08);' + (hasCustomer ? '' : 'display:none;'))
+              .card-body.dark-card-body.py-2.text-center
+                div.small.text-muted-light.mb-1 Selected customer
+                if customer && (customer.category === 'artist' || customer.category === 'organisation')
+                  strong#selectedCustomerName(style='color:#21BCFF;') #{customer.businessName || customer.phone}
+                else if customer
+                  strong#selectedCustomerName(style='color:#21BCFF;') #{customer.firstName || customer.businessName || customer.phone}
+                else
+                  strong#selectedCustomerName(style='color:#21BCFF;')
 
-                  // phone
-                  strong.text-muted-light.ms-3 #{customer.phone}
+                // phone
+                if customer
+                  strong#selectedCustomerPhone.text-muted-light.ms-3 #{customer.phone}
+                else
+                  strong#selectedCustomerPhone.text-muted-light.ms-3
 
-                  // customer type (same visual weight)
-                  -
-                    const categoryLabel =
-                      customer.category === 'artist'
-                        ? 'Artist'
-                        : customer.category === 'organisation'
-                          ? 'Organisation'
-                          : customer.category === 'regular'
-                            ? 'Regular'
-                            : 'One-Time';
-                  strong.text-muted-light.ms-3 #{categoryLabel}
+                // customer type (same visual weight)
+                -
+                  const categoryLabel =
+                    (customer && customer.category === 'artist')
+                      ? 'Artist'
+                      : (customer && customer.category === 'organisation')
+                        ? 'Organisation'
+                        : (customer && customer.category === 'regular')
+                          ? 'Regular'
+                          : 'One-Time';
+                if customer
+                  strong#selectedCustomerCategory.text-muted-light.ms-3 #{categoryLabel}
+                else
+                  strong#selectedCustomerCategory.text-muted-light.ms-3
 
             // Customer lookup + registration (moved from customers/front)
             .card.mb-3.dark-surface#customer-lookup(style='border:1px solid rgba(255,255,255,.08);')

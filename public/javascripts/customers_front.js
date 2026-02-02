@@ -64,6 +64,58 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  function isOrdersNewPage() {
+    return !!document.getElementById('ordersNewPage');
+  }
+
+  function setText(el, value) {
+    if (!el) return;
+    el.textContent = value || '';
+  }
+
+  function formatCustomerName(c) {
+    if (!c) return '';
+    if (c.category === 'artist' || c.category === 'organisation') {
+      return c.businessName || c.phone || '';
+    }
+    return c.firstName || c.businessName || c.phone || '';
+  }
+
+  function formatCustomerCategory(c) {
+    if (!c) return '';
+    if (c.category === 'artist') return 'Artist';
+    if (c.category === 'organisation') return 'Organisation';
+    if (c.category === 'regular') return 'Regular';
+    return 'One-Time';
+  }
+
+  function attachCustomerToOrderPage(cust) {
+    if (!cust) return false;
+    if (!isOrdersNewPage()) return false;
+
+    let customerIdEl = document.getElementById('orderCustomerId');
+    if (!customerIdEl) {
+      customerIdEl = document.createElement('input');
+      customerIdEl.type = 'hidden';
+      customerIdEl.id = 'orderCustomerId';
+      const container = document.getElementById('ordersNewPage') || document.body;
+      container.appendChild(customerIdEl);
+    }
+    customerIdEl.value = cust._id || '';
+
+    const card = document.getElementById('selectedCustomerCard');
+    const nameEl = document.getElementById('selectedCustomerName');
+    const phoneEl = document.getElementById('selectedCustomerPhone');
+    const categoryEl = document.getElementById('selectedCustomerCategory');
+
+    setText(nameEl, formatCustomerName(cust));
+    setText(phoneEl, cust.phone || '');
+    setText(categoryEl, formatCustomerCategory(cust));
+
+    if (card) card.style.display = '';
+    return true;
+  }
+
   // ---------- Typeahead logic ----------
   let taTimer = null;
   const TA_DEBOUNCE = 220; // ms
@@ -129,7 +181,13 @@ document.addEventListener('DOMContentLoaded', function () {
         setTimeout(async () => {
           const r = await lookupByPhone(phone);
           if (r && r.found && r.customer) {
-            window.location.href = `/orders/new?customerId=${encodeURIComponent(r.customer._id)}`;
+            if (attachCustomerToOrderPage(r.customer)) {
+              if (window.showGlobalToast) {
+                try { window.showGlobalToast('Customer attached', 1600); } catch (e) {}
+              }
+            } else {
+              window.location.href = `/orders/new?customerId=${encodeURIComponent(r.customer._id)}`;
+            }
           } else {
             // fallback: show registration modal with phone prefilled
             if (regPhone) regPhone.value = phone;
@@ -189,8 +247,14 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!r) return;
         if (r.found) {
           const cust = r.customer;
-          // redirect to new order page with customer prefilled
-          window.location.href = `/orders/new?customerId=${encodeURIComponent(cust._id)}`;
+          // attach to current order page when possible
+          if (attachCustomerToOrderPage(cust)) {
+            if (window.showGlobalToast) {
+              try { window.showGlobalToast('Customer attached', 1600); } catch (e) {}
+            }
+          } else {
+            window.location.href = `/orders/new?customerId=${encodeURIComponent(cust._id)}`;
+          }
           return;
         } else {
           // show modal with phone prefilled for registration
@@ -308,6 +372,12 @@ if (saveCustomerBtn) {
       // ---- CREATE MODE (existing behavior preserved) ----
       if (j && j.customer) {
         if (regModal) regModal.hide();
+        if (attachCustomerToOrderPage(j.customer)) {
+          if (window.showGlobalToast) {
+            try { window.showGlobalToast('Customer attached', 1600); } catch (e) {}
+          }
+          return;
+        }
         window.location.href = `/orders/new?customerId=${encodeURIComponent(j.customer._id)}`;
         return;
       }
