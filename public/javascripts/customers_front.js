@@ -113,6 +113,9 @@ document.addEventListener('DOMContentLoaded', function () {
     setText(categoryEl, formatCustomerCategory(cust));
 
     if (card) card.style.display = '';
+    try {
+      document.dispatchEvent(new CustomEvent('customer:attached', { detail: { customer: cust } }));
+    } catch (e) {}
     return true;
   }
 
@@ -132,6 +135,9 @@ document.addEventListener('DOMContentLoaded', function () {
     setText(categoryEl, '');
 
     if (card) card.style.display = 'none';
+    try {
+      document.dispatchEvent(new CustomEvent('customer:cleared', {}));
+    } catch (e) {}
     return true;
   }
 

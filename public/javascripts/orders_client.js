@@ -29,6 +29,7 @@
   const cartTbody = document.getElementById('cartTbody');
   const cartTotalEl = document.getElementById('cartTotal');
   const orderNowBtn = document.getElementById('orderNowBtn');
+  const saveDraftBtn = document.getElementById('saveDraftBtn');
 
     // Admin-only manual discount UI (may not exist for non-admin)
   const manualDiscountMode = document.getElementById('manualDiscountMode');
@@ -43,6 +44,138 @@
 
   // client-only state (per order)
   let manualDiscount = null; // { mode:'amount'|'percent', value:number }
+
+  function getCurrentCustomerId() {
+    const customerEl = document.getElementById('orderCustomerId');
+    const id = customerEl && customerEl.value ? String(customerEl.value).trim() : '';
+    return id || '';
+  }
+
+  function draftKey(customerId) {
+    return customerId ? `orderDraft:${customerId}` : '';
+  }
+
+  function readDraft(customerId) {
+    try {
+      if (!customerId) return null;
+      const raw = localStorage.getItem(draftKey(customerId));
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeDraft(customerId, payload) {
+    if (!customerId) return false;
+    try {
+      localStorage.setItem(draftKey(customerId), JSON.stringify(payload));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function clearDraft(customerId) {
+    if (!customerId) return false;
+    try {
+      localStorage.removeItem(draftKey(customerId));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function updateSaveDraftBtn() {
+    if (!saveDraftBtn) return;
+    const hasCustomer = !!getCurrentCustomerId();
+    saveDraftBtn.disabled = !(hasCustomer && cart && cart.length);
+  }
+
+  function loadDraftIntoCart(draft) {
+    if (!draft) return;
+    if (Array.isArray(draft.cart)) {
+      cart = draft.cart;
+    }
+    if (draft.manualDiscount) {
+      manualDiscount = draft.manualDiscount;
+      if (manualDiscountMode) manualDiscountMode.value = manualDiscount.mode || 'amount';
+      if (manualDiscountValue) manualDiscountValue.value = manualDiscount.value != null ? manualDiscount.value : '';
+    } else {
+      manualDiscount = null;
+      if (manualDiscountValue) manualDiscountValue.value = '';
+    }
+    renderCart();
+  }
+
+  async function promptLoadDraft(customerId) {
+    const draft = readDraft(customerId);
+    if (!draft || !Array.isArray(draft.cart) || !draft.cart.length) return;
+
+    const choice = await (function showDraftModal() {
+      return new Promise((resolve) => {
+        let modalEl = document.getElementById('draftOrderModal');
+        if (!modalEl) {
+          const html = `
+<div class="modal fade" id="draftOrderModal" tabindex="-1" aria-labelledby="draftOrderModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content dark-surface">
+      <div class="modal-header">
+        <h5 class="modal-title" id="draftOrderModalLabel">Saved order found</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body dark-card-body">
+        <p>This customer has a saved unfinished order.</p>
+        <p class="small text-muted mb-0">Do you want to continue it or discard it?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-light-custom" data-action="discard">Discard saved order</button>
+        <button type="button" class="btn btn-primary" data-action="continue">Continue saved order</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+          const container = document.createElement('div');
+          container.innerHTML = html;
+          document.body.appendChild(container.firstElementChild);
+          modalEl = document.getElementById('draftOrderModal');
+        }
+
+        const btnContinue = modalEl.querySelector('button[data-action="continue"]');
+        const btnDiscard = modalEl.querySelector('button[data-action="discard"]');
+        const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+
+        function cleanup() {
+          try {
+            btnContinue.removeEventListener('click', onContinue);
+            btnDiscard.removeEventListener('click', onDiscard);
+            modalEl.removeEventListener('hidden.bs.modal', onHidden);
+          } catch (e) {}
+        }
+        function onContinue() { cleanup(); inst.hide(); resolve('continue'); }
+        function onDiscard() { cleanup(); inst.hide(); resolve('discard'); }
+        function onHidden() { cleanup(); resolve(null); }
+
+        btnContinue.addEventListener('click', onContinue);
+        btnDiscard.addEventListener('click', onDiscard);
+        modalEl.addEventListener('hidden.bs.modal', onHidden);
+
+        inst.show();
+      });
+    })();
+
+    if (choice === 'continue') {
+      loadDraftIntoCart(draft);
+      if (typeof showGlobalToast === 'function') {
+        try { showGlobalToast('Loaded saved order', 1800); } catch (e) {}
+      }
+    } else if (choice === 'discard') {
+      clearDraft(customerId);
+      if (typeof showGlobalToast === 'function') {
+        try { showGlobalToast('Saved order discarded', 1800); } catch (e) {}
+      }
+    }
+  }
 
 
   // Orders explorer elements
@@ -825,6 +958,7 @@ function addToCart({
     cartTbody.appendChild(tr);
     cartTotalEl.textContent = 'GH₵ 0.00';
     orderNowBtn.disabled = true;
+    updateSaveDraftBtn();
 
     // ✅ ensure breakdown under totals is hidden when cart empties
     if (manualDiscountSummary) manualDiscountSummary.style.display = 'none';
@@ -897,6 +1031,7 @@ function addToCart({
     // update the manual discount summary box
     updateManualDiscountUI(baseTotal);
     orderNowBtn.disabled = false;
+    updateSaveDraftBtn();
   }
 
     // Admin-only apply discount
@@ -1331,6 +1466,9 @@ async function placeOrderFlow() {
 
     // Reset cart and discount (discount must be re-applied per order)
     cart = [];
+    // clear any saved draft for this customer after a successful order
+    const currentCustomerId = getCurrentCustomerId();
+    if (currentCustomerId) clearDraft(currentCustomerId);
 
     try {
       if (window._isAdmin) {
@@ -1439,6 +1577,35 @@ async function placeOrderFlow() {
     }
 
     await placeOrderFlow();
+  });
+
+  if (saveDraftBtn) {
+    saveDraftBtn.addEventListener('click', function () {
+      const customerId = getCurrentCustomerId();
+      if (!customerId) return showAlertModal('Attach a customer before saving a draft.');
+      if (!cart || !cart.length) return showAlertModal('Add items to the cart before saving.');
+      const ok = writeDraft(customerId, {
+        cart,
+        manualDiscount,
+        savedAt: new Date().toISOString()
+      });
+      if (ok) {
+        if (typeof showGlobalToast === 'function') {
+          try { showGlobalToast('Draft saved', 1600); } catch (e) {}
+        }
+      } else {
+        showAlertModal('Failed to save draft (storage error).');
+      }
+    });
+  }
+
+  document.addEventListener('customer:attached', function () {
+    const customerId = getCurrentCustomerId();
+    if (customerId) promptLoadDraft(customerId);
+    updateSaveDraftBtn();
+  });
+  document.addEventListener('customer:cleared', function () {
+    updateSaveDraftBtn();
   });
 
   // ---------- Orders explorer wiring (same behavior as before) ----------
@@ -1731,6 +1898,13 @@ if (serviceSelect) {
   // initial render and load books list
   renderCart();
   if (booksDropdown) loadBooks();
+  updateSaveDraftBtn();
+
+  // If page loads with a pre-attached customer, check for drafts
+  const initialCustomerId = getCurrentCustomerId();
+  if (initialCustomerId) {
+    promptLoadDraft(initialCustomerId);
+  }
 
   // fetchOrdersList helper used earlier
   function formatDateTimeForDisplay(dtStr) {
