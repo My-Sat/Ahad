@@ -1,6 +1,11 @@
 // public/javascripts/customers_front.js
-document.addEventListener('DOMContentLoaded', function () {
+function initCustomersFront() {
   'use strict';
+
+  const root = document.getElementById('ordersNewPage') || document.body;
+  if (!root) return;
+  if (root.dataset.customersFrontInit === '1') return;
+  root.dataset.customersFrontInit = '1';
 
   const lookupForm = document.getElementById('customerLookupForm');
   const lookupPhoneInput = document.getElementById('lookupPhone');
@@ -430,4 +435,15 @@ if (saveCustomerBtn) {
   });
 }
 
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initCustomersFront);
+} else {
+  initCustomersFront();
+}
+
+// init on ajax navigation swaps (dashboard_nav.js dispatches this)
+document.addEventListener('ajax:page:loaded', function () {
+  initCustomersFront();
 });
