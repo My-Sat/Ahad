@@ -53,7 +53,6 @@ mongoose.connect(MONGO_URI)
     // process.exit(1);
   });
 
-// one-time style migration: ensure clerks/cashiers can use customer search
 
   // static assets (single declaration)
 app.use(express.static(path.join(__dirname, 'public')));
@@ -66,15 +65,21 @@ app.set('trust proxy', 1);
 // SESSION config
 const SESSION_SECRET = process.env.SESSION_SECRET || 'replace_this_with_strong_secret';
 const mongoUrl = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/pos_db';
+const SESSION_IDLE_MINUTES = Math.max(1, parseInt(process.env.SESSION_IDLE_MINUTES, 10) || 30);
+const SESSION_IDLE_MS = SESSION_IDLE_MINUTES * 60 * 1000;
 
 app.use(session({
   name: 'sid',
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({ mongoUrl }),
+  store: MongoStore.create({
+    mongoUrl,
+    ttl: Math.max(1, Math.floor(SESSION_IDLE_MS / 1000))
+  }),
+  rolling: true,
   cookie: {
-    maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+    maxAge: SESSION_IDLE_MS, // idle timeout
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production', // true in production
     sameSite: 'lax' // works for login redirects while being reasonably strict

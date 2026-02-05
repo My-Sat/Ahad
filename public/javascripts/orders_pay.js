@@ -205,7 +205,10 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
       j.orders.forEach(o => {
         const amt = Number(o.total || 0);
         totalOrders += amt;
-        if (String(o.status || '').toLowerCase() === 'paid') {
+        const paidInRange = Number(o.paidInRange);
+        if (!isNaN(paidInRange)) {
+          totalPaidOrders += paidInRange;
+        } else if (String(o.status || '').toLowerCase() === 'paid') {
           totalPaidOrders += amt;
         }
       });

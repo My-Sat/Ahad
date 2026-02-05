@@ -1948,11 +1948,21 @@ const out = orders.map(o => {
     }
   }
 
+  const paidInRange = (o.payments || []).reduce((sum, p) => {
+    const amt = Number(p && p.amount ? p.amount : 0);
+    if (!amt) return sum;
+    const ts = p && p.createdAt ? new Date(p.createdAt) : null;
+    if (!ts || isNaN(ts.getTime())) return sum;
+    if (ts < start || ts > end) return sum;
+    return sum + amt;
+  }, 0);
+
   return {
     _id: o._id,
     name: displayName,      // ✅ NEW
     orderId: o.orderId,     // keep for actions
     total: o.total,
+    paidInRange: Number(paidInRange.toFixed(2)),
     status: o.status,
     createdAt: o.createdAt
   };
