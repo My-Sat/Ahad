@@ -85,11 +85,17 @@ block content
 
             .mb-3
               label.form-label.text-muted-light Password
-              input#newUserPassword.form-control.form-control-dark(type='password' name='password' required)
+              .password-field.position-relative
+                input#newUserPassword.form-control.form-control-dark(type='password' name='password' required)
+                button.password-toggle(type='button', data-password-toggle, data-password-target='newUserPassword', aria-pressed='false', aria-label='Show password')
+                  i.bi.bi-eye
 
             .mb-3
               label.form-label.text-muted-light Confirm password
-              input#newUserPasswordConfirm.form-control.form-control-dark(type='password' name='passwordConfirm' required)
+              .password-field.position-relative
+                input#newUserPasswordConfirm.form-control.form-control-dark(type='password' name='passwordConfirm' required)
+                button.password-toggle(type='button', data-password-toggle, data-password-target='newUserPasswordConfirm', aria-pressed='false', aria-label='Show password')
+                  i.bi.bi-eye
               small#newUserPasswordMatch.text-muted-light.d-block.mt-1 Type the same password to confirm.
 
             .mb-3

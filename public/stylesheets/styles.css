@@ -414,6 +414,27 @@ textarea::placeholder{
   color: var(--muted-2);
 }
 
+/* password eye toggle inside input */
+.password-field .form-control{
+  padding-right: 2.4rem;
+}
+.password-toggle{
+  position: absolute;
+  right: .6rem;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  padding: .2rem;
+  line-height: 1;
+  color: var(--muted);
+  z-index: 2;
+}
+.password-toggle:hover,
+.password-toggle:focus{
+  color: var(--text);
+}
+
 /* focus ring */
 .form-control:focus,
 .form-select:focus,

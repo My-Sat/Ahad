@@ -18,15 +18,24 @@ block content
             form#userSettingsForm(method='post', action='/user-settings/password', novalidate)
               .mb-3
                 label.form-label.text-muted-light(for='oldPassword') Old password
-                input#oldPassword.form-control.form-control-dark(type='password', name='oldPassword', required)
+                .password-field.position-relative
+                  input#oldPassword.form-control.form-control-dark(type='password', name='oldPassword', required)
+                  button.password-toggle(type='button', data-password-toggle, data-password-target='oldPassword', aria-pressed='false', aria-label='Show password')
+                    i.bi.bi-eye
 
               .mb-3
                 label.form-label.text-muted-light(for='newPassword') New password
-                input#newPassword.form-control.form-control-dark(type='password', name='newPassword', required)
+                .password-field.position-relative
+                  input#newPassword.form-control.form-control-dark(type='password', name='newPassword', required)
+                  button.password-toggle(type='button', data-password-toggle, data-password-target='newPassword', aria-pressed='false', aria-label='Show password')
+                    i.bi.bi-eye
 
               .mb-3
                 label.form-label.text-muted-light(for='confirmPassword') Confirm new password
-                input#confirmPassword.form-control.form-control-dark(type='password', name='confirmPassword', required)
+                .password-field.position-relative
+                  input#confirmPassword.form-control.form-control-dark(type='password', name='confirmPassword', required)
+                  button.password-toggle(type='button', data-password-toggle, data-password-target='confirmPassword', aria-pressed='false', aria-label='Show password')
+                    i.bi.bi-eye
                 small#userSettingsPasswordMatch.text-muted-light.d-block.mt-1 Type the same password to confirm.
 
               button.btn.btn-primary.w-100(type='submit')
