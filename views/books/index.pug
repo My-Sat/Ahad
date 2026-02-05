@@ -54,6 +54,5 @@ block content
 
   .mt-3.text-muted-light.small
     | Deleting a service will not affect existing orders. Use with care.
-
-block append scripts
-  script(src='/public/javascripts/books_list_client.js')
+  // Keep Books list scripts inside #main-content so dashboard_nav AJAX loads them
+  script(src='/javascripts/books_list_client.js')

@@ -1,9 +1,11 @@
 // public/javascripts/books_list_client.js
-document.addEventListener('DOMContentLoaded', function () {
+function initBooksListPage() {
   'use strict';
 
   const table = document.getElementById('booksTable');
   if (!table) return;
+  if (table.dataset.booksListInit === '1') return;
+  table.dataset.booksListInit = '1';
 
   const tbody = table.querySelector('tbody');
 
@@ -256,4 +258,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // initial load: prefer client refresh to ensure latest
   loadList();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initBooksListPage();
+  }, { once: true });
+} else {
+  initBooksListPage();
+}
+
+document.addEventListener('ajax:page:loaded', function () {
+  initBooksListPage();
 });

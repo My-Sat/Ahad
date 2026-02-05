@@ -233,7 +233,7 @@ block content
     // -------------------------
     // MANUAL
     // -------------------------
-    .tab-pane.fade#tabManual
+  .tab-pane.fade#tabManual
       .card.dark-surface.border
         .card-body.dark-card-body
           h5.mb-2.text-white Send Manual SMS
@@ -273,7 +273,5 @@ block content
 
           .mt-3
             div.text-muted-light.small#manualResult
-
-block append scripts
-  // IMPORTANT: script is re-run after ajax navigation (dashboard_nav)
-  script(src='/public/javascripts/messaging.js')
+  // Keep Messaging page scripts inside #main-content so dashboard_nav AJAX loads them
+  script(src='/javascripts/messaging.js')

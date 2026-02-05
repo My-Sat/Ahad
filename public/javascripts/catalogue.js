@@ -1,8 +1,12 @@
 // public/javascripts/catalogue.js
-document.addEventListener('DOMContentLoaded', function () {
+function initCataloguePage() {
   'use strict';
 
   const createBtn = document.getElementById('createCatalogueBtn');
+  if (!createBtn) return;
+  if (createBtn.dataset.catalogueInit === '1') return;
+  createBtn.dataset.catalogueInit = '1';
+
   const createSpinner = document.getElementById('createCatalogueSpinner');
   const nameEl = document.getElementById('cuName');
 
@@ -11,16 +15,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
   const unitCheckboxSelector = '.unit-sub-checkbox';
 
-  // Single-selection per unit
-  document.addEventListener('change', function (e) {
-    const cb = e.target;
-    if (!cb || !cb.classList || !cb.classList.contains('unit-sub-checkbox')) return;
-    if (cb.checked) {
-      const unitId = cb.dataset.unit;
-      const others = document.querySelectorAll(`${unitCheckboxSelector}[data-unit="${unitId}"]`);
-      others.forEach(o => { if (o !== cb) o.checked = false; });
-    }
-  }, true);
+  // Single-selection per unit (bind per checkbox to avoid duplicate global handlers)
+  document.querySelectorAll(unitCheckboxSelector).forEach(cb => {
+    if (cb.dataset.bound === '1') return;
+    cb.dataset.bound = '1';
+    cb.addEventListener('change', function () {
+      if (this.checked) {
+        const unitId = this.dataset.unit;
+        const others = document.querySelectorAll(`${unitCheckboxSelector}[data-unit="${unitId}"]`);
+        others.forEach(o => { if (o !== this) o.checked = false; });
+      }
+    });
+  });
 
   function gatherSelections() {
     const checked = document.querySelectorAll(`${unitCheckboxSelector}:checked`);
@@ -37,6 +43,25 @@ document.addEventListener('DOMContentLoaded', function () {
   function escapeHtml(s) {
     if (!s) return '';
     return String(s).replace(/[&<>"'`=\/]/g, c => '&#' + c.charCodeAt(0) + ';');
+  }
+
+  function bindDeleteButton(btn) {
+    if (!btn || btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      pendingDeleteId = btn.dataset.id;
+
+      const dlg = document.getElementById('deleteConfirmModal');
+      if (dlg) {
+        const bs = bootstrap.Modal.getOrCreateInstance(dlg);
+        const msg = document.getElementById('deleteConfirmMessage');
+        if (msg) msg.textContent = 'Delete this catalogue item? This cannot be undone.';
+        bs.show();
+      } else {
+        if (confirm('Delete this catalogue item?')) doDelete(pendingDeleteId);
+      }
+    });
   }
 
   function insertRow(mat) {
@@ -61,6 +86,9 @@ document.addEventListener('DOMContentLoaded', function () {
       </td>
     `;
     tbody.insertBefore(tr, tbody.firstChild);
+
+    const delBtn = tr.querySelector('.delete-catalogue-btn');
+    bindDeleteButton(delBtn);
   }
 
   // Create
@@ -112,22 +140,8 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // Delete button click
-  document.addEventListener('click', function (e) {
-    const del = e.target.closest && e.target.closest('.delete-catalogue-btn');
-    if (!del) return;
-    pendingDeleteId = del.dataset.id;
-
-    const dlg = document.getElementById('deleteConfirmModal');
-    if (dlg) {
-      const bs = bootstrap.Modal.getOrCreateInstance(dlg);
-      const msg = document.getElementById('deleteConfirmMessage');
-      if (msg) msg.textContent = 'Delete this catalogue item? This cannot be undone.';
-      bs.show();
-    } else {
-      if (confirm('Delete this catalogue item?')) doDelete(pendingDeleteId);
-    }
-  });
+  // Bind delete buttons for existing rows
+  document.querySelectorAll('.delete-catalogue-btn').forEach(btn => bindDeleteButton(btn));
 
   async function doDelete(id) {
     try {
@@ -148,7 +162,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  if (confirmDeleteBtn) {
+  if (confirmDeleteBtn && confirmDeleteBtn.dataset.bound !== '1') {
+    confirmDeleteBtn.dataset.bound = '1';
     confirmDeleteBtn.addEventListener('click', function () {
       if (!pendingDeleteId) return;
       doDelete(pendingDeleteId);
@@ -156,4 +171,16 @@ document.addEventListener('DOMContentLoaded', function () {
       bootstrap.Modal.getInstance(document.getElementById('deleteConfirmModal'))?.hide();
     });
   }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initCataloguePage();
+  }, { once: true });
+} else {
+  initCataloguePage();
+}
+
+document.addEventListener('ajax:page:loaded', function () {
+  initCataloguePage();
 });

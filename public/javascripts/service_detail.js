@@ -1,8 +1,13 @@
 // public/javascripts/service_detail.js
 // Handles Assign Price (AJAX), single-check-per-unit, Edit/Delete price rules with modal and action dropdowns.
 
-document.addEventListener('DOMContentLoaded', function () {
+function initServiceDetailPage() {
   'use strict';
+
+  const root = document.getElementById('assign-price');
+  if (!root) return;
+  if (root.dataset.serviceDetailInit === '1') return;
+  root.dataset.serviceDetailInit = '1';
 
   // ————— Robust capturing edit handler (creates modal if missing) —————
   (function installRobustEditHandler() {
@@ -541,4 +546,16 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initServiceDetailPage();
+  }, { once: true });
+} else {
+  initServiceDetailPage();
+}
+
+document.addEventListener('ajax:page:loaded', function () {
+  initServiceDetailPage();
 });

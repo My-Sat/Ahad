@@ -1,7 +1,11 @@
 // public/javascripts/books_client.js
-document.addEventListener('DOMContentLoaded', function () {
+function initBooksClientPage() {
   'use strict';
   const containers = document.querySelectorAll('.priceRulesContainer');
+  if (!containers || !containers.length) return;
+  const root = document.getElementById('saveBookBtn') || containers[0];
+  if (root && root.dataset.booksClientInit === '1') return;
+  if (root) root.dataset.booksClientInit = '1';
 
   // ---------- Inline dark alert modal helpers ----------
   function ensureInlineAlertModal() {
@@ -176,4 +180,16 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
   }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initBooksClientPage();
+  }, { once: true });
+} else {
+  initBooksClientPage();
+}
+
+document.addEventListener('ajax:page:loaded', function () {
+  initBooksClientPage();
 });

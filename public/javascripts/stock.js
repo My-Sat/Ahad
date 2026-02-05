@@ -1,11 +1,14 @@
 // public/javascripts/stock.js
 // Robust stock page client with duplicate-response dedupe using selection keys.
 
-document.addEventListener('DOMContentLoaded', function () {
+function initStockPage() {
   'use strict';
 
   // Elements
   const createForm = document.getElementById('create-count-unit');
+  if (!createForm) return;
+  if (createForm.dataset.stockInit === '1') return;
+  createForm.dataset.stockInit = '1';
   const createBtn = document.getElementById('createCountBtn');
   const createSpinner = document.getElementById('createCountSpinner');
   const nameEl = document.getElementById('cuName');
@@ -44,15 +47,18 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Single-selection per unit: when a checkbox checked, uncheck others in same unit.
-  document.addEventListener('change', function (e) {
-    const cb = e.target;
-    if (!cb || !cb.classList || !cb.classList.contains('unit-sub-checkbox')) return;
-    if (cb.checked) {
-      const unitId = cb.dataset.unit;
-      const others = document.querySelectorAll(`${unitCheckboxSelector}[data-unit="${unitId}"]`);
-      others.forEach(o => { if (o !== cb) o.checked = false; });
-    }
-  }, true);
+  if (!window.__stockCheckboxHandlerAttached) {
+    window.__stockCheckboxHandlerAttached = true;
+    document.addEventListener('change', function (e) {
+      const cb = e.target;
+      if (!cb || !cb.classList || !cb.classList.contains('unit-sub-checkbox')) return;
+      if (cb.checked) {
+        const unitId = cb.dataset.unit;
+        const others = document.querySelectorAll(`${unitCheckboxSelector}[data-unit="${unitId}"]`);
+        others.forEach(o => { if (o !== cb) o.checked = false; });
+      }
+    }, true);
+  }
 
   // Gather selections & compute stable key
   function gatherSelections() {
@@ -438,6 +444,18 @@ saveAdjustBtn.addEventListener('click', async function (ev) {
     // ---- always restore button ----
     setSavingState(false);
   }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initStockPage();
+  }, { once: true });
+} else {
+  initStockPage();
+}
+
+document.addEventListener('ajax:page:loaded', function () {
+  initStockPage();
 });
   }
 

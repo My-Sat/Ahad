@@ -85,6 +85,5 @@ block content
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-outline-danger(type='button', id='confirmDeleteBtn') Yes, delete
-
-block append scripts
-  script(src='/public/javascripts/catalogue.js')
+  // Keep Catalogue page scripts inside #main-content so dashboard_nav AJAX loads them
+  script(src='/javascripts/catalogue.js')

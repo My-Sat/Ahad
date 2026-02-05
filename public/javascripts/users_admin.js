@@ -25,36 +25,50 @@ async function openPermissionsModal(userId) {
   bsModal.show();
 }
 
-document.getElementById('savePermissionsBtn')?.addEventListener('click', async () => {
-  const saveBtn = document.getElementById('savePermissionsBtn');
-  const originalText = saveBtn ? saveBtn.textContent : '';
-  if (saveBtn) {
-    saveBtn.disabled = true;
-    saveBtn.textContent = 'Saving...';
-  }
-  const userId = document.getElementById('permUserId').value;
-  const checked = Array.from(document.querySelectorAll('#modalPermissions .form-check-input:checked')).map(i => i.value);
+function initUsersAdminPage() {
+  const root = document.getElementById('modalPermissions') || document.getElementById('newUserForm');
+  if (!root) return;
+  if (root.dataset.usersAdminInit === '1') return;
+  root.dataset.usersAdminInit = '1';
 
-  try {
-    const res = await fetch(`/admin/users/${userId}/permissions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ permissions: checked })
+  const savePermissionsBtn = document.getElementById('savePermissionsBtn');
+  if (savePermissionsBtn && savePermissionsBtn.dataset.bound !== '1') {
+    savePermissionsBtn.dataset.bound = '1';
+    savePermissionsBtn.addEventListener('click', async () => {
+      const saveBtn = document.getElementById('savePermissionsBtn');
+      const originalText = saveBtn ? saveBtn.textContent : '';
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+      }
+      const userId = document.getElementById('permUserId').value;
+      const checked = Array.from(document.querySelectorAll('#modalPermissions .form-check-input:checked')).map(i => i.value);
+
+      try {
+        const res = await fetch(`/admin/users/${userId}/permissions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ permissions: checked })
+        });
+
+        if (res.ok) {
+          location.reload();
+          return;
+        }
+        const err = await res.json().catch(()=>({ error: 'Failed' }));
+        alert(err.error || 'Failed to save');
+      } finally {
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = originalText || 'Save';
+        }
+      }
     });
-
-    if (res.ok) {
-      location.reload();
-      return;
-    }
-    const err = await res.json().catch(()=>({ error: 'Failed' }));
-    alert(err.error || 'Failed to save');
-  } finally {
-    if (saveBtn) {
-      saveBtn.disabled = false;
-      saveBtn.textContent = originalText || 'Save';
-    }
   }
-});
+
+  initNewUserPasswordMatch();
+  initUserDeleteConfirm();
+}
 
 function initNewUserPasswordMatch() {
   const form = document.getElementById('newUserForm');
@@ -105,7 +119,6 @@ function initNewUserPasswordMatch() {
   update();
 }
 
-document.addEventListener('DOMContentLoaded', initNewUserPasswordMatch);
 
 function initUserDeleteConfirm() {
   const modalEl = document.getElementById('modalDeleteUser');
@@ -137,4 +150,14 @@ function initUserDeleteConfirm() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', initUserDeleteConfirm);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initUsersAdminPage();
+  }, { once: true });
+} else {
+  initUsersAdminPage();
+}
+
+document.addEventListener('ajax:page:loaded', function () {
+  initUsersAdminPage();
+});

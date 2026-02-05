@@ -3,8 +3,13 @@
 // Defensive handling so buttons never stay stuck disabled after invalid submit.
 // Uses application/x-www-form-urlencoded so express.urlencoded() can parse req.body.
 
-document.addEventListener('DOMContentLoaded', () => {
+function initServicesAdmin() {
   'use strict';
+
+  const root = document.getElementById('add-service-form') || document.getElementById('add-unit-form');
+  if (!root) return;
+  if (root.dataset.servicesAdminInit === '1') return;
+  root.dataset.servicesAdminInit = '1';
 
   const mainRowSelector = '.row.g-4';
 
@@ -197,31 +202,46 @@ document.addEventListener('DOMContentLoaded', () => {
   initForms();
 
   // Delegated handler for sub-unit forms that match route pattern (works for dynamically inserted forms)
-  document.addEventListener('submit', function (e) {
-    const form = e.target;
-    if (!form || form.tagName !== 'FORM') return;
-    try {
-      const action = form.getAttribute('action') || '';
-      const method = (form.getAttribute('method') || 'POST').toUpperCase();
-      if (method === 'POST' && /\/admin\/units\/[^\/]+\/subunits$/.test(action)) {
-        if (!window.fetch) return;
-        const submitBtn = getSubmitterFromEvent(e, form);
-        e.preventDefault();
+  if (!window.__servicesAdminDelegatedSubmit) {
+    window.__servicesAdminDelegatedSubmit = true;
+    document.addEventListener('submit', function (e) {
+      const form = e.target;
+      if (!form || form.tagName !== 'FORM') return;
+      try {
+        const action = form.getAttribute('action') || '';
+        const method = (form.getAttribute('method') || 'POST').toUpperCase();
+        if (method === 'POST' && /\/admin\/units\/[^\/]+\/subunits$/.test(action)) {
+          if (!window.fetch) return;
+          const submitBtn = getSubmitterFromEvent(e, form);
+          e.preventDefault();
 
-        if (!form.checkValidity()) {
-          form.classList.add('was-validated');
-          forceEnableButton(submitBtn);
-          attachOneTimeReenableListener(form, submitBtn);
-          const firstInvalid = form.querySelector(':invalid');
-          if (firstInvalid) try { firstInvalid.focus(); } catch (err) {}
-          return;
+          if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            forceEnableButton(submitBtn);
+            attachOneTimeReenableListener(form, submitBtn);
+            const firstInvalid = form.querySelector(':invalid');
+            if (firstInvalid) try { firstInvalid.focus(); } catch (err) {}
+            return;
+          }
+
+          submitFormAjax(form, submitBtn);
         }
-
-        submitFormAjax(form, submitBtn);
+      } catch (err) {
+        // ignore
       }
-    } catch (err) {
-      // ignore
-    }
-  }, true);
+    }, true);
+  }
 
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initServicesAdmin();
+  }, { once: true });
+} else {
+  initServicesAdmin();
+}
+
+document.addEventListener('ajax:page:loaded', function () {
+  initServicesAdmin();
 });

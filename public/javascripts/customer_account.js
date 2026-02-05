@@ -1,8 +1,12 @@
 // public/javascripts/customer_account.js
-document.addEventListener('DOMContentLoaded', () => {
+function initCustomerAccountPage() {
   const customerId = window.__CUSTOMER_ID__;
   const balanceEl = document.getElementById('acctBalance');
   const openCustomerOrdersBtn = document.getElementById('openCustomerOrdersBtn');
+  if (!openCustomerOrdersBtn) return;
+  if (openCustomerOrdersBtn.dataset.customerAccountInit === '1') return;
+  openCustomerOrdersBtn.dataset.customerAccountInit = '1';
+
   const customerOrdersModalEl = document.getElementById('customerOrdersModal');
   const customerOrdersModal = (window.bootstrap && customerOrdersModalEl)
     ? new bootstrap.Modal(customerOrdersModalEl)
@@ -114,4 +118,16 @@ document.addEventListener('DOMContentLoaded', () => {
       await fetchCustomerOrders();
     });
   }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initCustomerAccountPage();
+  }, { once: true });
+} else {
+  initCustomerAccountPage();
+}
+
+document.addEventListener('ajax:page:loaded', function () {
+  initCustomerAccountPage();
 });

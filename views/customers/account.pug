@@ -87,8 +87,7 @@ block content
                   td.text-muted(colspan='2') Loading...
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
-
-block append scripts
+  // Keep Customer Account scripts inside #main-content so dashboard_nav AJAX loads them
   script.
     window.__CUSTOMER_ID__ = "#{customer._id}";
   script(src='/javascripts/customer_account.js')

@@ -126,6 +126,5 @@ block content
                           button.dropdown-item.open-delete-price(type='button', data-price-id=p._id)
                             i.bi.bi-trash.me-2
                             | Delete
-
-  block append scripts
-    script(src='/public/javascripts/service_detail.js')
+  // Keep Service Detail scripts inside #main-content so dashboard_nav AJAX loads them
+  script(src='/javascripts/service_detail.js')

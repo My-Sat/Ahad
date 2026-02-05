@@ -3,13 +3,16 @@
 // Includes: create store, set operational (confirm), add stock, adjust, transfer, view activity, remove stock item
 // NOTE: Edit/Delete store actions are wired if the related elements exist in the page (manageStoreModal etc).
 
-document.addEventListener('DOMContentLoaded', function () {
+function initStoreStockPage() {
   'use strict';
 
   // ----------------------------
   // Base elements
   // ----------------------------
   const storeSelect = document.getElementById('storeSelect');
+  if (!storeSelect) return;
+  if (storeSelect.dataset.storeStockInit === '1') return;
+  storeSelect.dataset.storeStockInit = '1';
   const setOperationalBtn = document.getElementById('setOperationalBtn');
 
   const openCreateStoreBtn = document.getElementById('openCreateStoreBtn');
@@ -322,8 +325,17 @@ document.addEventListener('DOMContentLoaded', function () {
   // ----------------------------
   // Delegated click handlers (dropdown-safe)
   // ----------------------------
+  // Reset delegated handlers so we don't stack listeners across AJAX loads
+  if (window.__storeStockHandlers) {
+    const h = window.__storeStockHandlers;
+    try { document.removeEventListener('click', h.onAdjustClick); } catch (e) {}
+    try { document.removeEventListener('click', h.onTransferClick); } catch (e) {}
+    try { document.removeEventListener('click', h.onViewActivityClick); } catch (e) {}
+    try { document.removeEventListener('click', h.onRemoveStockClick); } catch (e) {}
+  }
+
   // Open adjust modal
-  document.addEventListener('click', function (e) {
+  const onAdjustClick = function (e) {
     const btn = e.target.closest && e.target.closest('.adjust-stock-btn');
     if (!btn) return;
 
@@ -345,7 +357,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (deltaRadio) deltaRadio.checked = true;
 
     bsShow(adjustModalEl);
-  });
+  };
 
   // Save adjust
   if (saveAdjustBtn && saveAdjustBtn.dataset.bound !== '1') {
@@ -405,7 +417,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Open transfer modal
-  document.addEventListener('click', function (e) {
+  const onTransferClick = function (e) {
     const btn = e.target.closest && e.target.closest('.transfer-stock-btn');
     if (!btn) return;
 
@@ -421,7 +433,7 @@ document.addEventListener('DOMContentLoaded', function () {
     transferQty.value = '1';
 
     bsShow(transferModalEl);
-  });
+  };
 
   // Confirm transfer
   if (confirmTransferBtn && confirmTransferBtn.dataset.bound !== '1') {
@@ -478,7 +490,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // View activity
-  document.addEventListener('click', async function (e) {
+  const onViewActivityClick = async function (e) {
     const btn = e.target.closest && e.target.closest('.view-activity-btn');
     if (!btn) return;
 
@@ -542,10 +554,10 @@ document.addEventListener('DOMContentLoaded', function () {
       console.error(err);
       safeText(activityMeta, 'Failed to load activity');
     }
-  });
+  };
 
   // Remove stock item
-  document.addEventListener('click', function (e) {
+  const onRemoveStockClick = function (e) {
     const btn = e.target.closest && e.target.closest('.remove-stock-btn');
     if (!btn) return;
 
@@ -553,7 +565,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
     pendingRemoveStockId = btn.dataset.stockId;
     bsShow(deleteConfirmModalEl);
-  });
+  };
+
+  window.__storeStockHandlers = {
+    onAdjustClick,
+    onTransferClick,
+    onViewActivityClick,
+    onRemoveStockClick
+  };
+
+  document.addEventListener('click', onAdjustClick);
+  document.addEventListener('click', onTransferClick);
+  document.addEventListener('click', onViewActivityClick);
+  document.addEventListener('click', onRemoveStockClick);
 
   if (confirmDeleteBtn && confirmDeleteBtn.dataset.bound !== '1') {
     confirmDeleteBtn.dataset.bound = '1';
@@ -718,4 +742,16 @@ document.addEventListener('DOMContentLoaded', function () {
       return '&#' + c.charCodeAt(0) + ';';
     });
   }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initStoreStockPage();
+  }, { once: true });
+} else {
+  initStoreStockPage();
+}
+
+document.addEventListener('ajax:page:loaded', function () {
+  initStoreStockPage();
 });

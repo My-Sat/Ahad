@@ -314,6 +314,5 @@ block content
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary(type='button', id='confirmSetOperationalBtn') Yes, set operational
         
-
-block append scripts
-  script(src='/public/javascripts/store_stock.js')
+  // Keep Stock page scripts inside #main-content so dashboard_nav AJAX loads them
+  script(src='/javascripts/store_stock.js')
