@@ -1,5 +1,5 @@
 // public/javascripts/discounts.js
-document.addEventListener('DOMContentLoaded', function () {
+function initDiscountsPage() {
   'use strict';
 
   function val(el) { return el ? el.value : ''; }
@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function () {
     statusEl.classList.toggle('text-danger', !!isErr);
   }
 
-const els = {
+  const els = {
   generalMode: document.getElementById('generalMode'),
   generalValue: document.getElementById('generalValue'),
   generalEnabled: document.getElementById('generalEnabled'),
@@ -42,7 +42,11 @@ const els = {
 
   btnSave: document.getElementById('saveDiscounts'),
   btnLoad: document.getElementById('loadDiscounts')
-};
+  };
+
+  if (!els.btnSave || !els.btnLoad) return;
+  if (els.btnSave.dataset.discountInit === '1') return;
+  els.btnSave.dataset.discountInit = '1';
 
 function cloneTemplateRow(tplEl) {
   if (!tplEl) return null;
@@ -295,4 +299,16 @@ function applyConfig(cfg) {
 
 
   load();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initDiscountsPage();
+  }, { once: true });
+} else {
+  initDiscountsPage();
+}
+
+document.addEventListener('ajax:page:loaded', function () {
+  initDiscountsPage();
 });

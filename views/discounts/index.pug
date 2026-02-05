@@ -178,5 +178,5 @@ block content
 
             p.small.text-muted-light.mt-2#discountSaveStatus
 
-block append scripts
-  script(src='/public/javascripts/discounts.js')
+  // Keep Discounts page scripts inside #main-content so dashboard_nav AJAX loads them
+  script(src='/javascripts/discounts.js')
