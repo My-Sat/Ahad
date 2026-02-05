@@ -483,9 +483,13 @@
     loadReports();
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      initReportsPage();
+    }, { once: true });
+  } else {
     initReportsPage();
-  });
+  }
 
   document.addEventListener('ajax:page:loaded', (e) => {
     if (e && e.detail && typeof e.detail.url === 'string' && e.detail.url.includes('/admin/reports')) {
