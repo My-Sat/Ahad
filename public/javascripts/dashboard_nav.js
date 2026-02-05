@@ -15,13 +15,17 @@ function reExecuteScripts(newRoot, targetRoot) {
   const scripts = newRoot.querySelectorAll('script');
   if (!scripts.length) return;
 
+  // Ignore scripts that live inside the newly injected targetRoot.
+  // Those are inert (added via innerHTML) and should not count as "already loaded".
+  const existingScripts = Array.from(document.scripts).filter(s => !targetRoot.contains(s));
+
   scripts.forEach(oldScript => {
     const src = oldScript.getAttribute('src');
 
     // ✅ If it's an external script and it's already loaded, don't load again
     if (src) {
       const absSrc = new URL(src, window.location.href).href;
-      const alreadyLoaded = Array.from(document.scripts).some(s => (s.src || '') === absSrc);
+      const alreadyLoaded = existingScripts.some(s => (s.src || '') === absSrc);
       if (alreadyLoaded) return;
     }
 
