@@ -76,17 +76,15 @@ html(lang="en")
                       li
                         a.dropdown-item(href='/admin/stock', data-ajax='true', id='tab-stock') Stock
 
-                  // Orders dropdown for admin (both entries)
-                  li.nav-item.dropdown
-                    a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-orders', role='button', data-bs-toggle='dropdown', aria-expanded='false')
-                      i.bi.bi-basket2.me-2(aria-hidden='true')
-                      | Orders
-                      span.badge.bg-dark.ms-2#badge-orders
-                    ul.dropdown-menu
-                      li
-                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Operations
-                      li
-                        a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
+                  li.nav-item
+                    a.nav-link.d-flex.align-items-center(href='/orders/new', data-ajax='true', role='tab', id='tab-operations')
+                      i.bi.bi-clipboard2-check.me-2(aria-hidden='true')
+                      | Operations
+
+                  li.nav-item
+                    a.nav-link.d-flex.align-items-center(href='/orders/pay', data-ajax='true', role='tab', id='tab-payments')
+                      i.bi.bi-cash-coin.me-2(aria-hidden='true')
+                      | Payments
 
                   li.nav-item
                     a.nav-link.d-flex.align-items-center(href='/admin/reports', data-ajax='true', role='tab', id='tab-reports')
@@ -94,33 +92,29 @@ html(lang="en")
                       | Reports
 
                 else if role === 'cashier'
-                  // Cashier: only Orders -> Payment
-                  li.nav-item.dropdown
-                    a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-orders', role='button', data-bs-toggle='dropdown', aria-expanded='false')
-                      i.bi.bi-basket2.me-2(aria-hidden='true')
-                      | Orders
-                    ul.dropdown-menu
-                      if canSeeOrdersNew
-                        li
-                          a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Operations
-                      if canSeeOrdersPay
-                        li
-                          a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
-
+                  // Cashier: quick access tabs
+                  if canSeeOrdersNew
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/orders/new', data-ajax='true', role='tab', id='tab-operations')
+                        i.bi.bi-clipboard2-check.me-2(aria-hidden='true')
+                        | Operations
+                  if canSeeOrdersPay
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/orders/pay', data-ajax='true', role='tab', id='tab-payments')
+                        i.bi.bi-cash-coin.me-2(aria-hidden='true')
+                        | Payments
                 else if role === 'clerk'
-                  // Clerk: only Orders -> Orders (front desk)
-                  li.nav-item.dropdown
-                    a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-orders', role='button', data-bs-toggle='dropdown', aria-expanded='false')
-                      i.bi.bi-basket2.me-2(aria-hidden='true')
-                      | Orders
-                    ul.dropdown-menu
-                      if canSeeOrdersNew
-                        li
-                          a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Operations
-                      if canSeeOrdersPay
-                        li
-                          a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
-
+                  // Clerk: quick access tabs
+                  if canSeeOrdersNew
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/orders/new', data-ajax='true', role='tab', id='tab-operations')
+                        i.bi.bi-clipboard2-check.me-2(aria-hidden='true')
+                        | Operations
+                  if canSeeOrdersPay
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/orders/pay', data-ajax='true', role='tab', id='tab-payments')
+                        i.bi.bi-cash-coin.me-2(aria-hidden='true')
+                        | Payments
             // Desktop user menu (show name + logout)
             .d-none.d-md-flex.align-items-center.gap-2
               .dropdown

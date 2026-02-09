@@ -79,10 +79,6 @@ function reExecuteScripts(newRoot, targetRoot) {
       const other = document.getElementById(id.replace(/-sm$/, ''));
       if (other) list.push(other);
     }
-    if (id.startsWith('tab-orders-') && id !== 'tab-orders-discounts' && id !== 'tab-orders-discounts-sm') {
-      const orders = document.getElementById('tab-orders');
-      if (orders) list.push(orders);
-    }
     if (
       id === 'tab-printers' || id === 'tab-stock' ||
       id === 'tab-printers-sm' || id === 'tab-stock-sm'
@@ -96,6 +92,14 @@ function reExecuteScripts(newRoot, targetRoot) {
     ) {
       const configs = document.getElementById('tab-configs');
       if (configs) list.push(configs);
+    }
+    if (id === 'tab-orders-new' || id === 'tab-orders-new-sm') {
+      const operations = document.getElementById('tab-operations');
+      if (operations) list.push(operations);
+    }
+    if (id === 'tab-orders-pay' || id === 'tab-orders-pay-sm') {
+      const payments = document.getElementById('tab-payments');
+      if (payments) list.push(payments);
     }
     return list;
   }
@@ -217,8 +221,10 @@ function setActiveTabByUrl(url) {
       '/admin/messaging': 'tab-configs',
       '/admin/discounts': 'tab-configs',
       '/admin/reports': 'tab-reports',
-      '/admin/orders': 'tab-orders', // legacy admin path
-      '/orders': 'tab-orders'        // new root orders path
+      '/admin/orders': 'tab-operations', // legacy admin path
+      '/orders': 'tab-operations',       // orders root
+      '/orders/new': 'tab-operations',
+      '/orders/pay': 'tab-payments'
     };
 
     // default to services if root /admin
@@ -233,13 +239,13 @@ function setActiveTabByUrl(url) {
       else if (path.startsWith('/admin/messaging')) id = 'tab-configs';
       else if (path.startsWith('/admin/discounts')) id = 'tab-configs';
       else if (path.startsWith('/admin/reports')) id = 'tab-reports';
-      else if (path.startsWith('/admin/orders')) id = 'tab-orders';
+      else if (path.startsWith('/admin/orders')) id = 'tab-operations';
     }
 
     if (!id) {
       // also accept root-level /orders and its subpaths (new URLs)
       if (path === '/orders' || path.startsWith('/orders')) {
-        id = 'tab-orders';
+        id = path.startsWith('/orders/pay') ? 'tab-payments' : 'tab-operations';
       }
     }
 
