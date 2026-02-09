@@ -2030,7 +2030,7 @@ async function fetchCustomers(q = '') {
         <td>${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '-'}</td>
         <td class="text-center">
           <button type="button" class="btn btn-sm btn-primary me-1 edit-customer-btn">Edit</button>
-          <button type="button" class="btn btn-sm btn-danger delete-customer-btn">Delete</button>
+          <button type="button" class="btn btn-sm btn-outline-danger delete-customer-btn">Delete</button>
         </td>
       `;
 

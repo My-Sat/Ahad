@@ -31,7 +31,7 @@ function initBooksListPage() {
       <div class="modal-body" id="bookConfirmModalBody"></div>
       <div class="modal-footer">
         <button class="btn btn-secondary btn-sm" data-action="cancel" type="button">Cancel</button>
-        <button class="btn btn-danger btn-sm" data-action="confirm" type="button">Delete</button>
+        <button class="btn btn-outline-danger btn-sm" data-action="confirm" type="button">Delete</button>
       </div>
     </div>
   </div>
@@ -93,7 +93,7 @@ function initBooksListPage() {
           </a>
 
           <button
-            class="btn btn-sm btn-danger ms-1 delete-book-btn"
+            class="btn btn-sm btn-outline-danger ms-1 delete-book-btn"
             type="button"
             data-id="${escapeHtml(b._id)}"
           >

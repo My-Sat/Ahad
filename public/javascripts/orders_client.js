@@ -1013,7 +1013,7 @@ function addToCart({
         <td class="text-center">${escapeHtml(factorCell)}</td>
         <td class="text-end">GH₵ ${formatMoney(it.unitPrice)}</td>
         <td class="text-end">GH₵ ${formatMoney(it.subtotal)}</td>
-        <td class="text-center"><button class="btn btn-sm btn-danger remove-cart-btn" type="button">Remove</button></td>
+        <td class="text-center"><button class="btn btn-sm btn-outline-danger remove-cart-btn" type="button">Remove</button></td>
       `;
       cartTbody.appendChild(tr);
     });

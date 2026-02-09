@@ -7,4 +7,4 @@ block content
       li
         = p.price
         form(method='post', action=`/admin/services/${serviceId}/prices/${p._id}?_method=DELETE`)
-          button(type='submit') Delete
+          button.btn.btn-outline-danger(type='submit') Delete

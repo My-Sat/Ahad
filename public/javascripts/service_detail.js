@@ -411,7 +411,7 @@ function initServiceDetailPage() {
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary btn-outline-light-custom" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
+        <button type="button" id="confirmDeleteBtn" class="btn btn-outline-danger">Delete</button>
       </div>
     </div>
   </div>
