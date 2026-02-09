@@ -79,9 +79,23 @@ function reExecuteScripts(newRoot, targetRoot) {
       const other = document.getElementById(id.replace(/-sm$/, ''));
       if (other) list.push(other);
     }
-    if (id.startsWith('tab-orders-')) {
+    if (id.startsWith('tab-orders-') && id !== 'tab-orders-discounts' && id !== 'tab-orders-discounts-sm') {
       const orders = document.getElementById('tab-orders');
       if (orders) list.push(orders);
+    }
+    if (
+      id === 'tab-printers' || id === 'tab-stock' ||
+      id === 'tab-printers-sm' || id === 'tab-stock-sm'
+    ) {
+      const assets = document.getElementById('tab-assets');
+      if (assets) list.push(assets);
+    }
+    if (
+      id === 'tab-services' || id === 'tab-users' || id === 'tab-messaging' || id === 'tab-orders-discounts' ||
+      id === 'tab-services-sm' || id === 'tab-users-sm' || id === 'tab-messaging-sm' || id === 'tab-orders-discounts-sm'
+    ) {
+      const configs = document.getElementById('tab-configs');
+      if (configs) list.push(configs);
     }
     return list;
   }
@@ -196,26 +210,28 @@ function setActiveTabByUrl(url) {
 
     // mapping for exact paths (keeps existing admin/* map)
     const mapping = {
-      '/admin/services': 'tab-services',
-      '/admin/printers': 'tab-printers',
-      '/admin/stock': 'tab-stock',
-      '/admin/users': 'tab-users',
-      '/admin/messaging': 'tab-messaging',
+      '/admin/services': 'tab-configs',
+      '/admin/printers': 'tab-assets',
+      '/admin/stock': 'tab-assets',
+      '/admin/users': 'tab-configs',
+      '/admin/messaging': 'tab-configs',
+      '/admin/discounts': 'tab-configs',
       '/admin/reports': 'tab-reports',
       '/admin/orders': 'tab-orders', // legacy admin path
       '/orders': 'tab-orders'        // new root orders path
     };
 
     // default to services if root /admin
-    let id = mapping[path] || (path === '/admin' ? 'tab-services' : null);
+    let id = mapping[path] || (path === '/admin' ? 'tab-configs' : null);
 
     if (!id && path.startsWith('/admin')) {
       // try to match partial admin/* paths e.g. /admin/services/123
-      if (path.startsWith('/admin/services')) id = 'tab-services';
-      else if (path.startsWith('/admin/printers')) id = 'tab-printers';
-      else if (path.startsWith('/admin/stock')) id = 'tab-stock';
-      else if (path.startsWith('/admin/users')) id = 'tab-users';
-      else if (path.startsWith('/admin/messaging')) id = 'tab-messaging';
+      if (path.startsWith('/admin/services')) id = 'tab-configs';
+      else if (path.startsWith('/admin/printers')) id = 'tab-assets';
+      else if (path.startsWith('/admin/stock')) id = 'tab-assets';
+      else if (path.startsWith('/admin/users')) id = 'tab-configs';
+      else if (path.startsWith('/admin/messaging')) id = 'tab-configs';
+      else if (path.startsWith('/admin/discounts')) id = 'tab-configs';
       else if (path.startsWith('/admin/reports')) id = 'tab-reports';
       else if (path.startsWith('/admin/orders')) id = 'tab-orders';
     }

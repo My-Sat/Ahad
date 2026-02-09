@@ -52,35 +52,29 @@ html(lang="en")
             nav#topTabs.nav.d-none.d-md-block
               ul.nav.nav-pills.mb-0.rounded-pill.shadow-sm(style='overflow:visible')
                 if role === 'admin'
-                  li.nav-item
-                    a.nav-link.d-flex.align-items-center(href='/admin/services', data-ajax='true', role='tab', id='tab-services')
-                      i.bi.bi-folder2-open.me-2(aria-hidden='true')
-                      | Services
-                      span.badge.bg-primary.ms-2#badge-services
+                  li.nav-item.dropdown
+                    a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-configs', role='button', data-bs-toggle='dropdown', aria-expanded='false')
+                      i.bi.bi-gear.me-2(aria-hidden='true')
+                      | Configs
+                    ul.dropdown-menu
+                      li
+                        a.dropdown-item(href='/admin/services', data-ajax='true', id='tab-services') Services
+                      li
+                        a.dropdown-item(href='/admin/users', data-ajax='true', id='tab-users') Users
+                      li
+                        a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging') Messaging
+                      li
+                        a.dropdown-item(href='/admin/discounts', data-ajax='true', id='tab-orders-discounts') Discounts
 
-                  li.nav-item
-                    a.nav-link.d-flex.align-items-center(href='/admin/printers', data-ajax='true', role='tab', id='tab-printers')
-                      i.bi.bi-printer.me-2(aria-hidden='true')
-                      | Printers
-                      span.badge.bg-secondary.ms-2#badge-printers
-
-                  li.nav-item
-                    a.nav-link.d-flex.align-items-center(href='/admin/stock', data-ajax='true', role='tab', id='tab-stock')
-                      i.bi.bi-box-seam.me-2(aria-hidden='true')
-                      | Stock
-                      span.badge.bg-success.ms-2#badge-stock
-
-                  li.nav-item
-                    a.nav-link.d-flex.align-items-center(href='/admin/users', data-ajax='true', role='tab', id='tab-users')
-                      i.bi.bi-people.me-2(aria-hidden='true')
-                      | Users
-                      span.badge.bg-info.ms-2#badge-users
-
-                  li.nav-item
-                    a.nav-link.d-flex.align-items-center(href='/admin/messaging', data-ajax='true', role='tab', id='tab-messaging')
-                      i.bi.bi-chat-dots.me-2(aria-hidden='true')
-                      | Messaging
-                      span.badge.bg-warning.ms-2#badge-messaging
+                  li.nav-item.dropdown
+                    a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-assets', role='button', data-bs-toggle='dropdown', aria-expanded='false')
+                      i.bi.bi-tools.me-2(aria-hidden='true')
+                      | Assets
+                    ul.dropdown-menu
+                      li
+                        a.dropdown-item(href='/admin/printers', data-ajax='true', id='tab-printers') Printers
+                      li
+                        a.dropdown-item(href='/admin/stock', data-ajax='true', id='tab-stock') Stock
 
                   // Orders dropdown for admin (both entries)
                   li.nav-item.dropdown
@@ -93,8 +87,6 @@ html(lang="en")
                         a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Operations
                       li
                         a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay') Payment
-                      li
-                        a.dropdown-item(href='/admin/discounts', data-ajax='true', id='tab-orders-discounts') Discounts
 
                   li.nav-item
                     a.nav-link.d-flex.align-items-center(href='/admin/reports', data-ajax='true', role='tab', id='tab-reports')
@@ -167,21 +159,21 @@ html(lang="en")
 
                   if roleSm === 'admin'
                     li
-                      a.dropdown-item(href='/admin/services', data-ajax='true', id='tab-services-sm') Services
+                      a.dropdown-item(href='/admin/services', data-ajax='true', id='tab-services-sm') Configs - Services
                     li
-                      a.dropdown-item(href='/admin/printers', data-ajax='true', id='tab-printers-sm') Printers
+                      a.dropdown-item(href='/admin/printers', data-ajax='true', id='tab-printers-sm') Assets - Printers
                     li
-                      a.dropdown-item(href='/admin/stock', data-ajax='true', id='tab-stock-sm') Stock
+                      a.dropdown-item(href='/admin/stock', data-ajax='true', id='tab-stock-sm') Assets - Stock
                     li
-                      a.dropdown-item(href='/admin/users', data-ajax='true', id='tab-users-sm') Users
+                      a.dropdown-item(href='/admin/users', data-ajax='true', id='tab-users-sm') Configs - Users
                     li
-                      a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging-sm') Messaging
+                      a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging-sm') Configs - Messaging
                     li
                       a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — Operations
                     li
                       a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Orders — Pay
                     li
-                      a.dropdown-item(href='/admin/discounts', data-ajax='true', id='tab-orders-discounts-sm') Discounts
+                      a.dropdown-item(href='/admin/discounts', data-ajax='true', id='tab-orders-discounts-sm') Configs - Discounts
                     li
                       a.dropdown-item(href='/admin/reports', data-ajax='true', id='tab-reports-sm') Reports
                     li
