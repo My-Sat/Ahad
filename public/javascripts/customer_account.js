@@ -1,7 +1,8 @@
-// public/javascripts/customer_account.js
+﻿// public/javascripts/customer_account.js
 function initCustomerAccountPage() {
   const customerId = window.__CUSTOMER_ID__;
-  const balanceEl = document.getElementById('acctBalance');
+  if (!customerId) return;
+
   const openCustomerOrdersBtn = document.getElementById('openCustomerOrdersBtn');
   if (!openCustomerOrdersBtn) return;
   if (openCustomerOrdersBtn.dataset.customerAccountInit === '1') return;
@@ -13,6 +14,9 @@ function initCustomerAccountPage() {
     : null;
   const customerOrdersStatus = document.getElementById('customerOrdersStatus');
   const customerOrdersTable = document.getElementById('customerOrdersTable');
+  const txnBody = document.getElementById('txnBody');
+  const accountBalanceTypeEl = document.getElementById('accountBalanceType');
+  const accountBalanceValueEl = document.getElementById('accountBalanceValue');
 
   function escapeHtml(s) {
     if (!s) return '';
@@ -26,17 +30,116 @@ function initCustomerAccountPage() {
     return d.toLocaleString();
   }
 
+  function fmtMoney(n) {
+    return `GH₵ ${Number(n || 0).toFixed(2)}`;
+  }
+
+  function setBalanceSummary(net) {
+    if (!accountBalanceTypeEl || !accountBalanceValueEl) return;
+
+    const n = Number(net || 0);
+    if (n > 0) {
+      accountBalanceTypeEl.textContent = 'Credit Balance';
+      accountBalanceValueEl.textContent = fmtMoney(n);
+      accountBalanceTypeEl.className = 'ms-2 fw-semibold text-success';
+    } else if (n < 0) {
+      accountBalanceTypeEl.textContent = 'Debit Balance';
+      accountBalanceValueEl.textContent = fmtMoney(Math.abs(n));
+      accountBalanceTypeEl.className = 'ms-2 fw-semibold text-danger';
+    } else {
+      accountBalanceTypeEl.textContent = 'Settled';
+      accountBalanceValueEl.textContent = fmtMoney(0);
+      accountBalanceTypeEl.className = 'ms-2 fw-semibold text-muted-light';
+    }
+  }
+
+  function renderLedger(rows) {
+    if (!txnBody) return;
+
+    if (!Array.isArray(rows) || !rows.length) {
+      txnBody.innerHTML = '<tr><td class="text-muted" colspan="7">No transactions yet.</td></tr>';
+      setBalanceSummary(0);
+      return;
+    }
+
+    const ordered = rows
+      .slice()
+      .sort((a, b) => {
+        const ta = new Date(a.createdAt || 0).getTime();
+        const tb = new Date(b.createdAt || 0).getTime();
+        if (ta !== tb) return ta - tb;
+        return String(a._id || '').localeCompare(String(b._id || ''));
+      });
+
+    let totalCredits = 0;
+    let totalDebits = 0;
+
+    txnBody.innerHTML = '';
+    ordered.forEach(t => {
+      const type = String(t.type || '').toLowerCase();
+      const amount = Number(t.amount || 0);
+      const credit = type === 'credit' ? amount : 0;
+      const debit = type === 'debit' ? amount : 0;
+
+      totalCredits = Number((totalCredits + credit).toFixed(2));
+      totalDebits = Number((totalDebits + debit).toFixed(2));
+
+      const runningNet = Number((totalCredits - totalDebits).toFixed(2));
+      const runningType = runningNet >= 0 ? 'Credit' : 'Debit';
+      const runningAbs = Math.abs(runningNet);
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(formatDateTime(t.createdAt))}</td>
+        <td>${escapeHtml(t.note || type.toUpperCase())}</td>
+        <td class="text-end">${credit > 0 ? escapeHtml(fmtMoney(credit)) : '-'}</td>
+        <td class="text-end">${debit > 0 ? escapeHtml(fmtMoney(debit)) : '-'}</td>
+        <td>${runningType}</td>
+        <td class="text-end">${escapeHtml(fmtMoney(runningAbs))}</td>
+        <td>${escapeHtml(t.recordedByName || '')}</td>
+      `;
+      txnBody.appendChild(tr);
+    });
+
+    const finalNet = Number((totalCredits - totalDebits).toFixed(2));
+    setBalanceSummary(finalNet);
+  }
+
+  async function fetchAccountAndRender() {
+    if (!txnBody) return;
+    txnBody.innerHTML = '<tr><td class="text-muted" colspan="7">Loading...</td></tr>';
+
+    try {
+      const res = await fetch(`/customers/${encodeURIComponent(customerId)}/account/api`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        cache: 'no-store',
+        credentials: 'same-origin'
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j || !j.ok || !Array.isArray(j.txns)) {
+        throw new Error(j?.error || 'Failed to load account');
+      }
+      renderLedger(j.txns);
+    } catch (err) {
+      console.error('fetchAccountAndRender error', err);
+      txnBody.innerHTML = '<tr><td class="text-danger" colspan="7">Failed to load account ledger.</td></tr>';
+      setBalanceSummary(0);
+    }
+  }
+
   async function fetchCustomerOrders() {
     if (!customerOrdersTable || !customerOrdersStatus) return;
     const tbody = customerOrdersTable.querySelector('tbody');
     if (!tbody) return;
 
     customerOrdersStatus.textContent = 'Loading...';
-    tbody.innerHTML = `<tr><td class="text-muted" colspan="2">Loading...</td></tr>`;
+    tbody.innerHTML = '<tr><td class="text-muted" colspan="2">Loading...</td></tr>';
 
     try {
       const res = await fetch(`/customers/${encodeURIComponent(customerId)}/orders`, {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin',
+        cache: 'no-store'
       });
       const j = await res.json().catch(() => null);
       if (!res.ok || !j || !Array.isArray(j.orders)) {
@@ -45,7 +148,7 @@ function initCustomerAccountPage() {
 
       if (!j.orders.length) {
         customerOrdersStatus.textContent = 'No orders found.';
-        tbody.innerHTML = `<tr><td class="text-muted" colspan="2">No orders yet.</td></tr>`;
+        tbody.innerHTML = '<tr><td class="text-muted" colspan="2">No orders yet.</td></tr>';
         return;
       }
 
@@ -59,7 +162,7 @@ function initCustomerAccountPage() {
         const orderUrl = `/orders/view/${encodeURIComponent(oid)}`;
         tr.innerHTML = `
           <td>
-            <a class="text-white text-decoration-underline" href="${orderUrl}">
+            <a class="text-white text-decoration-underline" href="${orderUrl}" data-ajax="true">
               ${escapeHtml(oid)}
             </a>
           </td>
@@ -73,7 +176,7 @@ function initCustomerAccountPage() {
       if (customerOrdersTable) {
         const tbody = customerOrdersTable.querySelector('tbody');
         if (tbody) {
-          tbody.innerHTML = `<tr><td class="text-danger" colspan="2">Failed to load orders.</td></tr>`;
+          tbody.innerHTML = '<tr><td class="text-danger" colspan="2">Failed to load orders.</td></tr>';
         }
       }
     }
@@ -83,7 +186,8 @@ function initCustomerAccountPage() {
     const res = await fetch(`/customers/${encodeURIComponent(customerId)}/account/adjust`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-      body: JSON.stringify({ type, amount, note })
+      body: JSON.stringify({ type, amount, note }),
+      credentials: 'same-origin'
     });
     const j = await res.json().catch(() => null);
     if (!res.ok) throw new Error(j?.error || 'Request failed');
@@ -91,25 +195,33 @@ function initCustomerAccountPage() {
   }
 
   document.getElementById('creditBtn')?.addEventListener('click', async () => {
-    const amt = Number(document.getElementById('creditAmount').value || 0);
-    const note = (document.getElementById('creditNote').value || '').trim();
+    const amt = Number(document.getElementById('creditAmount')?.value || 0);
+    const note = (document.getElementById('creditNote')?.value || '').trim();
     if (!amt || isNaN(amt) || amt <= 0) return alert('Enter a valid amount');
+
     try {
-      const j = await adjust('credit', amt, note);
-      if (balanceEl) balanceEl.textContent = Number(j.balance || 0).toFixed(2);
-      location.reload(); // simplest: refresh table + balance
-    } catch (e) { alert(e.message); }
+      await adjust('credit', amt, note);
+      if (document.getElementById('creditAmount')) document.getElementById('creditAmount').value = '';
+      if (document.getElementById('creditNote')) document.getElementById('creditNote').value = '';
+      await fetchAccountAndRender();
+    } catch (e) {
+      alert(e.message);
+    }
   });
 
   document.getElementById('debitBtn')?.addEventListener('click', async () => {
-    const amt = Number(document.getElementById('debitAmount').value || 0);
-    const note = (document.getElementById('debitNote').value || '').trim();
+    const amt = Number(document.getElementById('debitAmount')?.value || 0);
+    const note = (document.getElementById('debitNote')?.value || '').trim();
     if (!amt || isNaN(amt) || amt <= 0) return alert('Enter a valid amount');
+
     try {
-      const j = await adjust('debit', amt, note);
-      if (balanceEl) balanceEl.textContent = Number(j.balance || 0).toFixed(2);
-      location.reload();
-    } catch (e) { alert(e.message); }
+      await adjust('debit', amt, note);
+      if (document.getElementById('debitAmount')) document.getElementById('debitAmount').value = '';
+      if (document.getElementById('debitNote')) document.getElementById('debitNote').value = '';
+      await fetchAccountAndRender();
+    } catch (e) {
+      alert(e.message);
+    }
   });
 
   if (openCustomerOrdersBtn) {
@@ -118,6 +230,8 @@ function initCustomerAccountPage() {
       await fetchCustomerOrders();
     });
   }
+
+  fetchAccountAndRender();
 }
 
 if (document.readyState === 'loading') {

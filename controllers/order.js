@@ -84,9 +84,9 @@ exports.apiPayFromCustomerAccount = async (req, res) => {
       // ledger txn
       await CustomerAccountTxn.create([{
         customer: customer._id,
-        type: 'debit',
+        type: 'credit',
         amount: apply,
-        note: `Paid order ${order.orderId} from account`,
+        note: `Payment from account for order ${order.orderId}`,
         recordedBy: req.user?._id || null,
         recordedByName: req.user?.name || req.user?.username || ''
       }], { session });
@@ -836,6 +836,70 @@ order.discountBreakdown = discountBreakdown;
 // IMPORTANT: total becomes final payable total
 order.total = finalTotal;
 
+    // -------------------------------------------------
+    // Customer account coupling on order creation:
+    // 1) record order as DEBIT
+    // 2) auto-settle from available credit (accountBalance) if any
+    // -------------------------------------------------
+    try {
+      if (order.customer) {
+        const recBy = req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null;
+        const recByName = (req.user?.name || req.user?.username || '').toString();
+
+        // Every customer order increases debtor side
+        await CustomerAccountTxn.create([{
+          customer: order.customer,
+          type: 'debit',
+          amount: Number(order.total || 0),
+          note: `Order placed ${order.orderId}`,
+          recordedBy: recBy,
+          recordedByName: recByName
+        }]);
+
+        const customer = await Customer.findById(order.customer);
+        if (customer) {
+          const bal = Number(customer.accountBalance || 0);
+          const canApply = Math.max(0, Number(order.total || 0));
+          const apply = Number(Math.min(bal, canApply).toFixed(2));
+
+          if (apply > 0) {
+            order.payments = order.payments || [];
+            order.payments.push({
+              method: 'account',
+              amount: apply,
+              meta: { source: 'auto_on_order_create' },
+              note: `Auto payment from account for order ${order.orderId}`,
+              createdAt: new Date(),
+              recordedBy: recBy,
+              recordedByName: recByName
+            });
+
+            const paidSoFar = (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+            const outstandingAfterApply = Number((Number(order.total || 0) - paidSoFar).toFixed(2));
+            if (outstandingAfterApply <= 0) {
+              order.status = 'paid';
+              order.paidAt = new Date();
+            }
+
+            customer.accountBalance = Number((bal - apply).toFixed(2));
+            await customer.save();
+
+            // Payment reduces debtor side (credit entry)
+            await CustomerAccountTxn.create([{
+              customer: order.customer,
+              type: 'credit',
+              amount: apply,
+              note: `Payment from account for order ${order.orderId}`,
+              recordedBy: recBy,
+              recordedByName: recByName
+            }]);
+          }
+        }
+      }
+    } catch (accountCouplingErr) {
+      console.error('order create account coupling error', accountCouplingErr);
+    }
+
     await order.save();
 
 // If the order has a customer attached, re-evaluate their 'regular' status
@@ -1121,6 +1185,25 @@ exports.apiGetOrderById = async (req, res) => {
           .lean();
 
         if (c) {
+          let netBalance = null;
+          try {
+            const agg = await CustomerAccountTxn.aggregate([
+              { $match: { customer: new mongoose.Types.ObjectId(customerId) } },
+              {
+                $group: {
+                  _id: null,
+                  credits: { $sum: { $cond: [{ $eq: ['$type', 'credit'] }, '$amount', 0] } },
+                  debits: { $sum: { $cond: [{ $eq: ['$type', 'debit'] }, '$amount', 0] } }
+                }
+              }
+            ]);
+            if (agg && agg[0]) {
+              netBalance = Number((Number(agg[0].credits || 0) - Number(agg[0].debits || 0)).toFixed(2));
+            }
+          } catch (balErr) {
+            console.error('Failed to compute customer net balance', balErr);
+          }
+
           // Support multiple schema shapes
           customerAccountBalance = Number(
             c.accountBalance ??
@@ -1130,7 +1213,8 @@ exports.apiGetOrderById = async (req, res) => {
           ) || 0;
 
           customerInfo = Object.assign({}, c, {
-            accountBalance: customerAccountBalance
+            accountBalance: customerAccountBalance,
+            accountNetBalance: netBalance
           });
         }
       }
@@ -1362,7 +1446,7 @@ exports.apiPayOrder = async (req, res) => {
 
     // NOTE: "account" payments should go through /orders/:orderId/pay-from-account
     if (rawMethod === 'account') {
-      return res.status(400).json({ error: 'Use "Pay from account" option for account payments.' });
+      return res.status(400).json({ error: 'Account payments are applied automatically where applicable.' });
     }
 
     // Normalize method (only allow these to be stored as-is)
@@ -1513,6 +1597,23 @@ exports.apiPayOrder = async (req, res) => {
 
       await order.save({ session });
 
+      // Ledger: order payment reduces debtor side (credit entry)
+      if (hasCustomer) {
+        await CustomerAccountTxn.create(
+          [
+            {
+              customer: order.customer,
+              type: 'credit',
+              amount: Number(toRecordAmount.toFixed(2)),
+              note: `Order payment ${order.orderId}`,
+              recordedBy: payment.recordedBy || null,
+              recordedByName: payment.recordedByName || ''
+            }
+          ],
+          { session }
+        );
+      }
+
       // If overpayment and has customer, credit customer account + ledger record
       if (creditExcess > 0 && hasCustomer) {
         const customerId = order.customer; // ObjectId
@@ -1655,6 +1756,21 @@ exports.apiPayBulkDebtor = async (req, res) => {
       order.paidAt = new Date();
 
       await order.save();
+
+      if (order.customer) {
+        try {
+          await CustomerAccountTxn.create([{
+            customer: order.customer,
+            type: 'credit',
+            amount: Number(outstanding.toFixed(2)),
+            note: `Order payment ${order.orderId} (bulk)`,
+            recordedBy: req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null,
+            recordedByName: (req.user?.name || req.user?.username || '').toString()
+          }]);
+        } catch (ledgerErr) {
+          console.error('bulk payment ledger entry failed', ledgerErr);
+        }
+      }
 
       // -----------------------------
       // AUTO SMS ON PAY (dynamic) - bulk

@@ -438,48 +438,93 @@ exports.apiAdjustAccount = async (req, res) => {
 
     session = await mongoose.startSession();
     let updatedCustomer = null;
+    let settledAmount = 0;
+    let settledOrdersCount = 0;
 
     await session.withTransaction(async () => {
-      if (type === 'debit') {
-        updatedCustomer = await Customer.findOneAndUpdate(
-          { _id: id, accountBalance: { $gte: amount } },
-          { $inc: { accountBalance: -amount } },
-          { new: true, session }
-        );
-
-        if (!updatedCustomer) {
-          const e = new Error('Insufficient balance to debit');
-          e.statusCode = 400;
-          throw e;
-        }
-      } else {
-        updatedCustomer = await Customer.findByIdAndUpdate(
-          id,
-          { $inc: { accountBalance: amount } },
-          { new: true, session }
-        );
-
-        if (!updatedCustomer) {
-          const e = new Error('Customer not found');
-          e.statusCode = 404;
-          throw e;
-        }
+      updatedCustomer = await Customer.findById(id).session(session);
+      if (!updatedCustomer) {
+        const e = new Error('Customer not found');
+        e.statusCode = 404;
+        throw e;
       }
 
-      await CustomerAccountTxn.create(
-        [{
-          customer: updatedCustomer._id,
-          type,
-          amount,
-          note,
-          recordedBy,
-          recordedByName
-        }],
-        { session }
-      );
+      const currentBal = Number(updatedCustomer.accountBalance || 0);
+
+      if (type === 'debit') {
+        // Manual debit should always be allowed (it can create/expand debt).
+        // It only consumes available credit if any.
+        const consume = Number(Math.min(currentBal, amount).toFixed(2));
+        updatedCustomer.accountBalance = Number((currentBal - consume).toFixed(2));
+      } else {
+        // Add credit first, then auto-settle customer debts (oldest outstanding orders first).
+        updatedCustomer.accountBalance = Number((currentBal + amount).toFixed(2));
+      }
+
+      await updatedCustomer.save({ session });
+
+      // Always record the manual adjustment itself.
+      await CustomerAccountTxn.create([{
+        customer: updatedCustomer._id,
+        type,
+        amount,
+        note,
+        recordedBy,
+        recordedByName
+      }], { session });
+
+      if (type === 'credit') {
+        let available = Number(updatedCustomer.accountBalance || 0);
+        if (available > 0) {
+          const openOrders = await Order.find({ customer: updatedCustomer._id })
+            .sort({ createdAt: 1, _id: 1 })
+            .session(session);
+
+          for (const order of openOrders) {
+            const paidSoFar = (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+            const outstanding = Number((Number(order.total || 0) - paidSoFar).toFixed(2));
+            if (outstanding <= 0) continue;
+            if (available <= 0) break;
+
+            const use = Number(Math.min(available, outstanding).toFixed(2));
+            if (use <= 0) continue;
+
+            order.payments = order.payments || [];
+            order.payments.push({
+              method: 'account',
+              amount: use,
+              meta: { source: 'manual_credit_auto_settle' },
+              note: `Auto-settled from manual credit`,
+              createdAt: new Date(),
+              recordedBy: recordedBy || null,
+              recordedByName
+            });
+
+            const newPaid = (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+            const newOutstanding = Number((Number(order.total || 0) - newPaid).toFixed(2));
+            if (newOutstanding <= 0) {
+              order.status = 'paid';
+              order.paidAt = new Date();
+            }
+
+            await order.save({ session });
+            available = Number((available - use).toFixed(2));
+            settledAmount = Number((settledAmount + use).toFixed(2));
+            settledOrdersCount += 1;
+          }
+
+          updatedCustomer.accountBalance = Number(Math.max(0, available).toFixed(2));
+          await updatedCustomer.save({ session });
+        }
+      }
     });
 
-    return res.json({ ok: true, balance: Number(updatedCustomer.accountBalance || 0) });
+    return res.json({
+      ok: true,
+      balance: Number(updatedCustomer.accountBalance || 0),
+      settledAmount: Number(settledAmount || 0),
+      settledOrdersCount: Number(settledOrdersCount || 0)
+    });
   } catch (e) {
     console.error('apiAdjustAccount error', e);
     if (e && e.statusCode) return res.status(e.statusCode).json({ ok: false, error: e.message });

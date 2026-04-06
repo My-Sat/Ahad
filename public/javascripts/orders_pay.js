@@ -663,27 +663,19 @@ function discountAppliedLabel(order) {
   `;
     }
 
+    const netBal = Number(
+      (customerObj && typeof customerObj.accountNetBalance !== 'undefined' && customerObj.accountNetBalance !== null)
+        ? customerObj.accountNetBalance
+        : currentCustomerBalance
+    );
+    const balType = netBal > 0 ? 'Credit Balance' : (netBal < 0 ? 'Debit Balance' : 'Settled');
+    const balAbs = Math.abs(netBal);
     const accountHtml = currentHasCustomer ? `
       <div class="mt-3 p-2 rounded dark-surface" style="border:1px solid rgba(255,255,255,.12);">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-          <div>
-            <div class="small text-muted-light">Customer Account Balance</div>
-            <div class="text-white">
-              <strong id="custAccountBalance">GH₵ ${fmt(currentCustomerBalance)}</strong>
-            </div>
-          </div>
-
-          <div class="form-check form-switch mb-0">
-            <input class="form-check-input" type="checkbox" id="payFromAccountToggle">
-            <label class="form-check-label" for="payFromAccountToggle">Pay from account</label>
-          </div>
-        </div>
-
-        <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
-          <button class="btn btn-sm btn-outline-light-custom" id="applyAccountBtn" type="button" disabled>
-            Apply account
-          </button>
-          <small class="text-muted-light" id="accountHint"></small>
+        <div class="small text-muted-light">Customer Account</div>
+        <div class="text-white">
+          <strong>${escapeHtml(balType)}:</strong>
+          <span class="ms-1">${escapeHtml(`GH₵ ${fmt(balAbs)}`)}</span>
         </div>
       </div>
     ` : '';
@@ -702,10 +694,6 @@ function discountAppliedLabel(order) {
       ${ (outstanding > 0) ? `<p class="text-end"><strong>Remaining: GH₵ ${fmt(outstanding)}</strong></p>` : '' }
       ${accountHtml}
     `;
-
-    bindCustomerAccountControls();
-
-
 
     // show payment controls only if not paid
     if (order.status === 'paid') {
@@ -731,124 +719,6 @@ function discountAppliedLabel(order) {
       partToggle && (partToggle.checked = false);
       partWrapper && (partWrapper.style.display = 'none');
       partAmountInput && (partAmountInput.value = '');
-    }
-  }
-
-    function bindCustomerAccountControls() {
-    const toggle = document.getElementById('payFromAccountToggle');
-    const applyBtn = document.getElementById('applyAccountBtn');
-    const hint = document.getElementById('accountHint');
-
-    if (!toggle || !applyBtn) return;
-
-    function refreshState() {
-      const canApply =
-        !!toggle.checked &&
-        currentHasCustomer &&
-        !!currentCustomerId &&
-        Number(currentCustomerBalance || 0) > 0 &&
-        Number(currentOutstanding || 0) > 0 &&
-        currentOrderStatus !== 'paid';
-
-      applyBtn.disabled = !canApply;
-
-      if (hint) {
-        if (!currentHasCustomer) hint.textContent = '';
-        else if (Number(currentOutstanding || 0) <= 0) hint.textContent = 'No outstanding amount.';
-        else if (Number(currentCustomerBalance || 0) <= 0) hint.textContent = 'Customer has no account credit.';
-        else if (toggle.checked) hint.textContent = 'This will deduct from customer balance and reduce the remaining amount.';
-        else hint.textContent = 'Enable to deduct from customer balance.';
-      }
-    }
-
-    toggle.addEventListener('change', refreshState);
-
-    applyBtn.addEventListener('click', async function () {
-      if (!currentOrderId || !currentCustomerId) return;
-
-      // if Part Payment is ON, we interpret that as: customer is NOT necessarily topping up the rest
-      const mode = (partToggle && partToggle.checked) ? 'part' : 'auto';
-
-      await applyCustomerAccountToOrder(currentOrderId, currentCustomerId, mode);
-    });
-
-    refreshState();
-  }
-
-  async function applyCustomerAccountToOrder(orderId, customerId, mode) {
-    // IMPORTANT:
-    // You MUST implement this endpoint on backend (recommended):
-    // POST /orders/:orderId/pay-from-account
-    // body: { mode: 'auto'|'part' }
-    //
-    // expected response example:
-    // { ok:true, usedFromAccount: 10, newBalance: 5, outstanding: 40, status:'part-paid'|'paid' }
-
-    try {
-      const res = await fetch(`/orders/${encodeURIComponent(orderId)}/pay-from-account`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        body: JSON.stringify({ mode })
-      });
-
-      const j = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        showAlertModal((j && j.error) ? j.error : 'Failed to apply account balance', 'Account payment error');
-        return;
-      }
-
-      // Update cached balance/outstanding from either response shape
-      if (j) {
-        // preferred (new) response
-        if (typeof j.newBalance !== 'undefined') {
-          const b = Number(j.newBalance || 0);
-          if (!isNaN(b)) currentCustomerBalance = Number(b.toFixed(2));
-        }
-        if (typeof j.outstanding !== 'undefined') {
-          const o = Number(j.outstanding || 0);
-          if (!isNaN(o)) currentOutstanding = Number(o.toFixed(2));
-        }
-
-        // fallback: old response { ok, order }
-        if (j.order) {
-          try {
-            const ob = j.order.customer && typeof j.order.customer === 'object'
-              ? Number(j.order.customer.accountBalance || 0)
-              : null;
-            if (ob !== null && !isNaN(ob)) currentCustomerBalance = Number(ob.toFixed(2));
-            currentOutstanding = computeOutstanding(j.order);
-          } catch (e) {}
-        }
-      }
-
-      const used =
-        (j && typeof j.usedFromAccount !== 'undefined') ? Number(j.usedFromAccount || 0) :
-        (j && j.order && j.order.payments && Array.isArray(j.order.payments))
-          ? null
-          : null;
-
-      if (used !== null) {
-        showAlertModal(
-          `Account applied: GH₵ ${fmt(used)}\nNew balance: GH₵ ${fmt(currentCustomerBalance)}\nRemaining: GH₵ ${fmt(currentOutstanding)}`,
-          'Account applied'
-        );
-      } else {
-        showAlertModal('Account applied successfully.', 'Account applied');
-      }
-
-      // If mode === 'part' and there is still outstanding, turn on part payment and prefill amount with outstanding
-      if (mode === 'part' && currentOutstanding > 0 && partToggle && partAmountInput) {
-        partToggle.checked = true;
-        partWrapper && (partWrapper.style.display = '');
-        partAmountInput.value = fmt(currentOutstanding);
-      }
-
-      // Refresh the order view so UI reflects new payments/status
-      await fetchOrderById(orderId);
-    } catch (err) {
-      console.error('applyCustomerAccountToOrder err', err);
-      showAlertModal('Network error while applying account', 'Network error');
     }
   }
 
@@ -969,21 +839,6 @@ function discountAppliedLabel(order) {
         showAlertModal('No order loaded to pay', 'No Order');
         return;
       }
-
-            // If cashier enabled "Pay from account" but didn't click Apply,
-      // auto-apply once before continuing.
-      const payFromToggle = document.getElementById('payFromAccountToggle');
-      if (payFromToggle && payFromToggle.checked && currentHasCustomer && currentCustomerId
-          && Number(currentCustomerBalance || 0) > 0 && Number(currentOutstanding || 0) > 0) {
-        const mode = (partToggle && partToggle.checked) ? 'part' : 'auto';
-        await applyCustomerAccountToOrder(currentOrderId, currentCustomerId, mode);
-
-        // if order became paid after applying account, stop here
-        if (Number(currentOutstanding || 0) <= 0 || currentOrderStatus === 'paid') {
-          return;
-        }
-      }
-
 
       // validate fields depending on method & part payment
       const method = paymentMethodSel ? paymentMethodSel.value : 'cash';
