@@ -90,13 +90,13 @@ function initCustomerAccountPage() {
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${escapeHtml(formatDateTime(t.createdAt))}</td>
-        <td>${escapeHtml(t.note || type.toUpperCase())}</td>
+        <td class="text-nowrap" style="min-width:170px;">${escapeHtml(formatDateTime(t.createdAt))}</td>
+        <td style="min-width:260px;">${escapeHtml(t.note || type.toUpperCase())}</td>
         <td class="text-end">${credit > 0 ? escapeHtml(fmtMoney(credit)) : '-'}</td>
-        <td class="text-end">${debit > 0 ? escapeHtml(fmtMoney(debit)) : '-'}</td>
-        <td>${runningType}</td>
-        <td class="text-end">${escapeHtml(fmtMoney(runningAbs))}</td>
-        <td>${escapeHtml(t.recordedByName || '')}</td>
+        <td class="text-end pe-4" style="min-width:120px;">${debit > 0 ? escapeHtml(fmtMoney(debit)) : '-'}</td>
+        <td class="ps-3 text-nowrap" style="min-width:130px;">${runningType}</td>
+        <td class="text-end pe-4" style="min-width:150px;">${escapeHtml(fmtMoney(runningAbs))}</td>
+        <td class="ps-3 text-nowrap" style="min-width:150px;">${escapeHtml(t.recordedByName || '')}</td>
       `;
       txnBody.appendChild(tr);
     });
