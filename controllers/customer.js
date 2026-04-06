@@ -284,17 +284,20 @@ exports.apiListCustomers = async (req, res) => {
       ];
     }
 
-    const rows = await Customer.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit + 1)
-      .select('_id category firstName businessName phone createdAt')
-      .lean();
+    const [total, rows] = await Promise.all([
+      Customer.countDocuments(filter),
+      Customer.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit + 1)
+        .select('_id category firstName businessName phone createdAt')
+        .lean()
+    ]);
 
     const hasMore = rows.length > limit;
     const customers = hasMore ? rows.slice(0, limit) : rows;
 
-    return res.json({ ok: true, customers, page, limit, hasMore });
+    return res.json({ ok: true, customers, page, limit, hasMore, total: Number(total || 0) });
   } catch (err) {
     console.error('apiListCustomers error', err);
     return res.status(500).json({ error: 'Failed to load customers' });

@@ -168,8 +168,8 @@ function initCustomersIndex() {
       if (countEl) {
         const start = ((currentPage - 1) * pageSize) + 1;
         const end = start + j.customers.length - 1;
-        const prefix = query ? `Matches ${start}-${end}` : `Showing ${start}-${end}`;
-        countEl.textContent = `${prefix} (${j.customers.length} customers on this page)`;
+        const total = Number(j.total || 0);
+        countEl.textContent = `Showing ${start}-${end} of ${total}`;
       }
     } catch (err) {
       console.error('fetchCustomers error', err);
