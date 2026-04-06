@@ -46,6 +46,9 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
   const debtorsModal = (window.bootstrap && debtorsModalEl) ? new bootstrap.Modal(debtorsModalEl) : null;
   const debtorsTable = document.getElementById('debtorsTable');
   const debtorsCount = document.getElementById('debtorsCount');
+  const debtorsTotalDueEl = document.getElementById('debtorsTotalDue');
+  const debtorsTotalPaidEl = document.getElementById('debtorsTotalPaid');
+  const debtorsTotalOutstandingEl = document.getElementById('debtorsTotalOutstanding');
   const fullPaymentModalEl = document.getElementById('fullPaymentConfirmModal');
   const fullPaymentModal = fullPaymentModalEl ? new bootstrap.Modal(fullPaymentModalEl) : null;
   const debtorsSearchInput = document.getElementById('debtorsSearchInput');
@@ -57,6 +60,12 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
   // cache last fetched debtors so we can filter locally too
   let _debtorsCache = [];
   let _debtorsLastQuery = '';
+
+  function setDebtorsSummary(totalDue, totalPaid, totalOutstanding) {
+    if (debtorsTotalDueEl) debtorsTotalDueEl.textContent = formatCedi(totalDue || 0);
+    if (debtorsTotalPaidEl) debtorsTotalPaidEl.textContent = formatCedi(totalPaid || 0);
+    if (debtorsTotalOutstandingEl) debtorsTotalOutstandingEl.textContent = formatCedi(totalOutstanding || 0);
+  }
 
 
   const fullPaymentConfirmText = document.getElementById('fullPaymentConfirmText');
@@ -1313,9 +1322,10 @@ if (cashiersTable) {
   // each debtor row ideally: { orderId, debtorName, amountDue, paidSoFar, outstanding }
   // If you don't have this endpoint yet, the client will show a message. Implement server side to populate.
   // -------------------------
-async function fetchDebtorsList(q = '') {
+  async function fetchDebtorsList(q = '') {
     if (!debtorsTable || !debtorsCount) return;
     debtorsCount.textContent = 'Loading...';
+    setDebtorsSummary(0, 0, 0);
     const tbody = debtorsTable.querySelector('tbody');
     if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">Loading...</td></tr>`;
     try {
@@ -1327,12 +1337,14 @@ async function fetchDebtorsList(q = '') {
         const msg = (j && j.error) ? j.error : `Failed to fetch debtors (${res.status})`;
         if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">${escapeHtml(msg)}</td></tr>`;
         debtorsCount.textContent = '0 results';
+        setDebtorsSummary(0, 0, 0);
         return;
       }
       const j = await res.json().catch(()=>null);
       if (!j || !Array.isArray(j.debtors)) {
         if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">No debtors found.</td></tr>`;
         debtorsCount.textContent = '0 results';
+        setDebtorsSummary(0, 0, 0);
         return;
       }
       const rows = j.debtors;
@@ -1366,8 +1378,20 @@ async function fetchDebtorsList(q = '') {
       if (!filtered.length) {
         if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">No debtors found.</td></tr>`;
         debtorsCount.textContent = '0 results';
+        setDebtorsSummary(0, 0, 0);
         return;
       }
+const summaryTotalDue = filtered.reduce((s, i) => s + Number(i.amountDue || 0), 0);
+const summaryTotalPaid = filtered.reduce((s, i) => s + Number(i.paidSoFar || 0), 0);
+const summaryTotalOutstanding = filtered.reduce(
+  (s, i) => s + Number(i.outstanding || (i.amountDue - i.paidSoFar || 0)),
+  0
+);
+setDebtorsSummary(
+  Number(summaryTotalDue.toFixed(2)),
+  Number(summaryTotalPaid.toFixed(2)),
+  Number(summaryTotalOutstanding.toFixed(2))
+);
 // -------- Group by debtor name --------
 const grouped = {};
 filtered.forEach(d => {
@@ -1386,13 +1410,13 @@ Object.entries(grouped).forEach(([debtorName, items]) => {
     const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
     html += `
       <tr data-order-id="${escapeHtml(d.orderId || '')}">
-        <td>${escapeHtml(d.orderId || '')}</td>
+        <td><span class="badge bg-secondary" style="color:#fff !important;">${escapeHtml(d.orderId || '')}</span></td>
         <td>${escapeHtml(debtorName)}</td>
         <td class="text-end">GH₵ ${Number(d.amountDue || 0).toFixed(2)}</td>
         <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
-        <td class="text-end">GH₵ ${out}</td>
+        <td class="text-end"><span class="fw-semibold">${'GH₵ ' + out}</span></td>
         <td class="text-center">
-          <button class="btn btn-sm btn-primary view-debtor-order"
+          <button class="btn btn-sm btn-outline-primary view-debtor-order"
             type="button"
             data-order-id="${escapeHtml(d.orderId || '')}">
             Update
@@ -1420,7 +1444,7 @@ html += `
       data-debtor-name="${escapeHtml(debtorName)}"
       style="cursor:pointer;">
     <td colspan="2">
-      <span class="me-2 debtor-toggle-icon">â–¶</span>
+      <span class="me-2 debtor-toggle-icon"><i class="bi bi-chevron-right"></i></span>
       <strong>${escapeHtml(debtorName)}</strong>
       <span class="text-muted ms-2">(${items.length} orders)</span>
     </td>
@@ -1429,7 +1453,7 @@ html += `
     <td class="text-end fw-semibold">GH₵ ${totalOutstanding.toFixed(2)}</td>
     <td class="text-center">
       <button
-        class="btn btn-sm btn-success pay-debtor-full"
+        class="btn btn-sm btn-outline-success pay-debtor-full"
         type="button"
         data-order-ids='${JSON.stringify(items.map(i => i.orderId))}'
         data-total="${totalOutstanding.toFixed(2)}">
@@ -1443,13 +1467,13 @@ html += `
     const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
     html += `
       <tr class="debtor-group-row ${groupId}" style="display:none;">
-        <td>${escapeHtml(d.orderId || '')}</td>
+        <td><span class="badge bg-secondary" style="color:#fff !important;">${escapeHtml(d.orderId || '')}</span></td>
         <td>${escapeHtml(debtorName)}</td>
         <td class="text-end">GH₵ ${Number(d.amountDue || 0).toFixed(2)}</td>
         <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
-        <td class="text-end">GH₵ ${out}</td>
+        <td class="text-end"><span class="fw-semibold">${'GH₵ ' + out}</span></td>
         <td class="text-center">
-          <button class="btn btn-sm btn-primary view-debtor-order"
+          <button class="btn btn-sm btn-outline-primary view-debtor-order"
             type="button"
             data-order-id="${escapeHtml(d.orderId || '')}">
             Update
@@ -1461,12 +1485,7 @@ html += `
 
 html += `
   <tr class="debtor-group-end ${groupId}" style="display:none;">
-    <td colspan="6">
-      <div style="
-        border-bottom: 5px solid #E6FFE6;
-        margin: 6px 0 4px;
-      "></div>
-    </td>
+    <td colspan="6"><div class="my-1 border-bottom border-secondary-subtle"></div></td>
   </tr>
 `;
 
@@ -1479,6 +1498,7 @@ html += `
       console.error('fetch debtors err', err);
       if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">Network error while fetching debtors.</td></tr>`;
       debtorsCount.textContent = '0 results';
+      setDebtorsSummary(0, 0, 0);
     }
   }
 
@@ -1603,7 +1623,11 @@ if (debtorsTable) {
     toggleRow.setAttribute('aria-expanded', expanded ? 'false' : 'true');
 
     const icon = toggleRow.querySelector('.debtor-toggle-icon');
-    if (icon) icon.textContent = expanded ? 'â–¶' : 'â–¼';
+    if (icon) {
+      icon.innerHTML = expanded
+        ? '<i class="bi bi-chevron-right"></i>'
+        : '<i class="bi bi-chevron-down"></i>';
+    }
   });
 }
 

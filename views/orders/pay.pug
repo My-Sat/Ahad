@@ -224,13 +224,32 @@ block content
 
   // Debtors modal
   .modal.fade(id='debtorsModal', tabindex='-1', aria-labelledby='debtorsModalLabel', aria-hidden='true')
-    .modal-dialog.modal-lg.modal-dialog-centered
+    .modal-dialog.modal-xl.modal-dialog-centered
       .modal-content.dark-surface
         .modal-header
-          h5.modal-title(id='debtorsModalLabel') Debtors / Part-payments
+          .d-flex.flex-column
+            h5.modal-title(id='debtorsModalLabel') Debtors / Part-payments
+            small.text-muted-light Open an order to update payment, or settle grouped orders fully.
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
         .modal-body.dark-card-body
           p.text-muted.small#debtorsCount Loading...
+
+          .row.g-2.mb-3
+            .col-12.col-md-4
+              .card.border-1.dark-surface
+                .card-body.py-2.dark-card-body
+                  .small.text-muted-light Total Amount Due
+                  strong#debtorsTotalDue GH₵ 0.00
+            .col-12.col-md-4
+              .card.border-1.dark-surface
+                .card-body.py-2.dark-card-body
+                  .small.text-muted-light Total Paid So Far
+                  strong#debtorsTotalPaid GH₵ 0.00
+            .col-12.col-md-4
+              .card.border-1.dark-surface
+                .card-body.py-2.dark-card-body
+                  .small.text-muted-light Total Outstanding
+                  strong#debtorsTotalOutstanding GH₵ 0.00
 
           // Search (filters by debtor/order id/phone)
           .mb-2
