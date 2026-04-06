@@ -1457,7 +1457,7 @@ html += `
         type="button"
         data-order-ids='${JSON.stringify(items.map(i => i.orderId))}'
         data-total="${totalOutstanding.toFixed(2)}">
-        Full Payment
+        Pay All
       </button>
     </td>
   </tr>
