@@ -195,32 +195,52 @@ function initCustomerAccountPage() {
   }
 
   document.getElementById('creditBtn')?.addEventListener('click', async () => {
+    const creditBtn = document.getElementById('creditBtn');
     const amt = Number(document.getElementById('creditAmount')?.value || 0);
     const note = (document.getElementById('creditNote')?.value || '').trim();
     if (!amt || isNaN(amt) || amt <= 0) return alert('Enter a valid amount');
 
     try {
+      if (creditBtn) {
+        creditBtn.disabled = true;
+        creditBtn.textContent = 'Processing...';
+      }
       await adjust('credit', amt, note);
       if (document.getElementById('creditAmount')) document.getElementById('creditAmount').value = '';
       if (document.getElementById('creditNote')) document.getElementById('creditNote').value = '';
       await fetchAccountAndRender();
     } catch (e) {
       alert(e.message);
+    } finally {
+      if (creditBtn) {
+        creditBtn.disabled = false;
+        creditBtn.textContent = 'Credit';
+      }
     }
   });
 
   document.getElementById('debitBtn')?.addEventListener('click', async () => {
+    const debitBtn = document.getElementById('debitBtn');
     const amt = Number(document.getElementById('debitAmount')?.value || 0);
     const note = (document.getElementById('debitNote')?.value || '').trim();
     if (!amt || isNaN(amt) || amt <= 0) return alert('Enter a valid amount');
 
     try {
+      if (debitBtn) {
+        debitBtn.disabled = true;
+        debitBtn.textContent = 'Processing...';
+      }
       await adjust('debit', amt, note);
       if (document.getElementById('debitAmount')) document.getElementById('debitAmount').value = '';
       if (document.getElementById('debitNote')) document.getElementById('debitNote').value = '';
       await fetchAccountAndRender();
     } catch (e) {
       alert(e.message);
+    } finally {
+      if (debitBtn) {
+        debitBtn.disabled = false;
+        debitBtn.textContent = 'Debit';
+      }
     }
   });
 
