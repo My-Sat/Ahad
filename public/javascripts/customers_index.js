@@ -96,23 +96,41 @@ function initCustomersIndex() {
             ? (c.businessName || '-')
             : (c.firstName || '-');
         const accountUrl = `/customers/${encodeURIComponent(c._id)}/account`;
+        const newJobUrl = `/orders/new?customerId=${encodeURIComponent(c._id)}`;
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>
-            <a class="text-white text-decoration-underline"
-               href="${accountUrl}"
-               data-ajax="true"
-               title="Open customer account">
-              ${escapeHtml(name)}
-            </a>
+            ${escapeHtml(name)}
           </td>
           <td>${escapeHtml(c.phone || '')}</td>
-          <td><span class="badge bg-secondary">${escapeHtml(c.category || '')}</span></td>
+          <td><span class="badge bg-secondary" style="color:#fff !important;">${escapeHtml(c.category || '')}</span></td>
           <td>${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '-'}</td>
           <td class="text-center">
-            <button type="button" class="btn btn-sm btn-primary me-1 edit-customer-btn">Edit</button>
-            <button type="button" class="btn btn-sm btn-outline-danger delete-customer-btn">Delete</button>
+            <div class="dropdown">
+              <button
+                class="btn btn-sm btn-outline-light-custom"
+                type="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+                title="Actions">
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li>
+                  <a class="dropdown-item" href="${newJobUrl}" data-ajax="true">New Job</a>
+                </li>
+                <li>
+                  <a class="dropdown-item" href="${accountUrl}" data-ajax="true">Debit/Credit</a>
+                </li>
+                <li>
+                  <button type="button" class="dropdown-item edit-customer-btn">Edit</button>
+                </li>
+                <li>
+                  <button type="button" class="dropdown-item text-danger delete-customer-btn">Delete</button>
+                </li>
+              </ul>
+            </div>
           </td>
         `;
 
