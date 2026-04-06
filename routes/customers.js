@@ -2,10 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const customerController = require('../controllers/customer');
-const { ensureHasPermission, ensureHasAnyPermission } = require('../middlewares/auth');
+const { ensureAdmin, ensureHasPermission, ensureHasAnyPermission } = require('../middlewares/auth');
 
 // front desk customer page (clerk)
-router.get('/', ensureHasPermission('/customers'), customerController.frontPage);
+router.get('/', ensureAdmin, customerController.frontPage);
 
 // API: lookup customer by phone
 router.get(
@@ -17,13 +17,13 @@ router.get(
 // API: list all customers (admin)
 router.get(
   '/api/list',
-  ensureHasPermission('/customers'),
+  ensureAdmin,
   customerController.apiListCustomers
 );
 
 router.get(
   '/api/stats',
-  ensureHasPermission('/customers'),
+  ensureAdmin,
   customerController.apiCustomerStats
 );
 
@@ -57,7 +57,7 @@ router.get(
 // ✅ Customer account page (Admin use via Pay page customer modal)
 router.get(
   '/:id/account',
-  ensureHasPermission('/customers'),
+  ensureAdmin,
   customerController.accountPage
 );
 
@@ -71,14 +71,14 @@ router.get(
 // ✅ API: fetch account info
 router.get(
   '/:id/account/api',
-  ensureHasPermission('/customers'),
+  ensureAdmin,
   customerController.apiGetAccount
 );
 
 // ✅ API: debit/credit customer account
 router.post(
   '/:id/account/adjust',
-  ensureHasPermission('/customers'),
+  ensureAdmin,
   customerController.apiAdjustAccount
 );
 

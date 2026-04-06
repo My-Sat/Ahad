@@ -46,7 +46,7 @@ html(lang="en")
             // Extra visibility comes from cross-assigned permissions.
             - const canSeeOrdersNew = (role === 'admin') || perms.includes('/orders/new');
             - const canSeeOrdersPay = (role === 'admin') || (role === 'cashier') || (role === 'clerk' && hasAny(cashierRoutes));
-            - const canSeeCustomers = (role === 'admin') || perms.includes('/customers');
+            - const canSeeCustomers = (role === 'admin');
 
 
             // Desktop nav
@@ -167,7 +167,7 @@ html(lang="en")
                   - const cashierRoutesSm = ['/orders/pay','/orders/debtors','/orders/:orderId','/orders/:orderId/pay'];
                   - const canSeeOrdersNewSm = (roleSm === 'admin') || permsSm.includes('/orders/new');
                   - const canSeeOrdersPaySm = (roleSm === 'admin') || (roleSm === 'cashier') || (roleSm === 'clerk' && hasAnySm(cashierRoutesSm));
-                  - const canSeeCustomersSm = (roleSm === 'admin') || permsSm.includes('/customers');
+                  - const canSeeCustomersSm = (roleSm === 'admin');
 
                   if roleSm === 'admin'
                     li
