@@ -101,6 +101,10 @@ function reExecuteScripts(newRoot, targetRoot) {
       const payments = document.getElementById('tab-payments');
       if (payments) list.push(payments);
     }
+    if (id === 'tab-customers-sm') {
+      const customers = document.getElementById('tab-customers');
+      if (customers) list.push(customers);
+    }
     return list;
   }
 
@@ -224,7 +228,8 @@ function setActiveTabByUrl(url) {
       '/admin/orders': 'tab-operations', // legacy admin path
       '/orders': 'tab-operations',       // orders root
       '/orders/new': 'tab-operations',
-      '/orders/pay': 'tab-payments'
+      '/orders/pay': 'tab-payments',
+      '/customers': 'tab-customers'
     };
 
     // default to services if root /admin
@@ -246,6 +251,8 @@ function setActiveTabByUrl(url) {
       // also accept root-level /orders and its subpaths (new URLs)
       if (path === '/orders' || path.startsWith('/orders')) {
         id = path.startsWith('/orders/pay') ? 'tab-payments' : 'tab-operations';
+      } else if (path.startsWith('/customers')) {
+        id = 'tab-customers';
       }
     }
 

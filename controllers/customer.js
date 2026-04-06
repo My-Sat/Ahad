@@ -9,7 +9,7 @@ const CustomerAccountTxn = require('../models/customer_account_txn');
  */
 exports.frontPage = async (req, res) => {
   try {
-    return res.redirect('/orders/new#customer-lookup');
+    return res.render('customers/index', { title: 'Customers' });
   } catch (err) {
     console.error('customer.frontPage error', err);
     return res.status(500).send('Error loading customers page');
@@ -269,6 +269,9 @@ exports.apiListCustomers = async (req, res) => {
     let limit = parseInt(req.query.limit, 10);
     if (isNaN(limit) || limit <= 0) limit = 200;
     limit = Math.min(limit, 500);
+    let page = parseInt(req.query.page, 10);
+    if (isNaN(page) || page <= 0) page = 1;
+    const skip = (page - 1) * limit;
 
     const filter = {};
     if (q) {
@@ -281,16 +284,58 @@ exports.apiListCustomers = async (req, res) => {
       ];
     }
 
-    const customers = await Customer.find(filter)
+    const rows = await Customer.find(filter)
       .sort({ createdAt: -1 })
-      .limit(limit)
+      .skip(skip)
+      .limit(limit + 1)
       .select('_id category firstName businessName phone createdAt')
       .lean();
 
-    return res.json({ ok: true, customers });
+    const hasMore = rows.length > limit;
+    const customers = hasMore ? rows.slice(0, limit) : rows;
+
+    return res.json({ ok: true, customers, page, limit, hasMore });
   } catch (err) {
     console.error('apiListCustomers error', err);
     return res.status(500).json({ error: 'Failed to load customers' });
+  }
+};
+
+exports.apiCustomerStats = async (req, res) => {
+  try {
+    const now = new Date();
+    const since30Days = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+    const oidThreshold = mongoose.Types.ObjectId.createFromTime(
+      Math.floor(since30Days.getTime() / 1000)
+    );
+
+    const [totalCustomers, activeRows] = await Promise.all([
+      Customer.countDocuments({}),
+      Order.aggregate([
+        {
+          $match: {
+            customer: { $type: 'objectId', $ne: null },
+            $or: [
+              { createdAt: { $gte: since30Days } },
+              { createdAt: { $exists: false }, _id: { $gte: oidThreshold } }
+            ]
+          }
+        },
+        { $group: { _id: '$customer' } },
+        { $count: 'total' }
+      ])
+    ]);
+
+    const activeCustomers = (activeRows && activeRows[0] && activeRows[0].total) ? Number(activeRows[0].total) : 0;
+
+    return res.json({
+      ok: true,
+      totalCustomers: Number(totalCustomers || 0),
+      activeCustomers: Number(activeCustomers || 0)
+    });
+  } catch (err) {
+    console.error('apiCustomerStats error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load customer stats' });
   }
 };
 

@@ -1,0 +1,95 @@
+extends ../layout
+
+block content
+  .container#customersPageRoot
+    .d-none(data-main-width='wide')
+    .row
+      .col-12
+        .card.shadow-sm.dark-surface
+          .card-body.dark-card-body
+            .d-flex.justify-content-between.align-items-center.mb-3
+              h4.mb-0.text-white Customers
+
+            .row.g-2.mb-3
+              .col-12.col-md-6
+                .card.border-1.dark-surface
+                  .card-body.py-2.dark-card-body
+                    .small.text-muted-light Total customers
+                    strong#customersTotalCount 0
+              .col-12.col-md-6
+                .card.border-1.dark-surface
+                  .card-body.py-2.dark-card-body
+                    .small.text-muted-light Active customers (last 30 days)
+                    strong#customersActiveCount 0
+
+            p.text-muted.small#customersCount Loading...
+
+            .mb-2
+              .input-group.input-group-sm
+                span.input-group-text.bg-transparent.text-muted-light
+                  i.bi.bi-search
+                input.form-control.form-control-sm.form-control-dark#customersSearchInput(
+                  type='text',
+                  placeholder='Search by name or phone...',
+                  autocomplete='off'
+                )
+                button.btn.btn-outline-light-custom#customersSearchClearBtn(type='button') Clear
+              .small.text-muted-light.mt-1 Type to filter customers by phone or name.
+
+            .d-flex.justify-content-between.align-items-center.mb-2
+              .d-flex.align-items-center.gap-2
+                label.small.text-muted-light.mb-0(for='customersPageSize') Display
+                select.form-select.form-select-sm.form-select-dark#customersPageSize(style='width:auto;')
+                  option(value='50' selected) 50
+                  option(value='100') 100
+                span.small.text-muted-light customers
+              button.btn.btn-outline-light-custom.btn-sm#customersNextBtn(type='button') Next
+
+            .table-responsive
+              table.table.table-hover.table-sm#customersTable
+                thead
+                  tr
+                    th Name
+                    th Phone
+                    th Category
+                    th Registered
+                    th.text-center Actions
+                tbody
+                  tr
+                    td.text-muted(colspan='5') Loading customers...
+
+  // Registration modal (used for edit customer)
+  .modal.fade(id='registerCustomerModal', tabindex='-1', aria-labelledby='registerCustomerModalLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title(id='registerCustomerModalLabel').text-white Register Customer
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          form#registerCustomerForm
+            .mb-2
+              label.form-label(for='regCategory') Register as
+              select.form-select#regCategory
+                option(value='one_time') Customer
+                option(value='artist') Artist
+                option(value='organisation') Organisation / NGO
+            .mb-2#regFirstNameGroup
+              label.form-label(for='regFirstName') Full Name
+              input.form-control.form-control-dark#regFirstName(type='text', placeholder='Full name')
+            .mb-2#regBusinessNameGroup(style='display:none;')
+              label.form-label(for='regBusinessName') Business name
+              input.form-control.form-control-dark#regBusinessName(type='text', placeholder='Business name')
+            .mb-2
+              label.form-label(for='regPhone') Phone
+              input.form-control.form-control-dark#regPhone(type='text', placeholder='Phone number')
+            .mb-2
+              label.form-label(for='regNotes') Notes (optional)
+              input.form-control.form-control-dark#regNotes(type='text', placeholder='Notes')
+              input(type='hidden', id='regCustomerId')
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary#saveCustomerBtn(type='button') Register
+
+  script(defer src='/javascripts/customer_editor.js')
+  script(defer src='/javascripts/customers_front.js')
+  script(defer src='/javascripts/customers_index.js')

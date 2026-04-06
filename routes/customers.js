@@ -21,6 +21,12 @@ router.get(
   customerController.apiListCustomers
 );
 
+router.get(
+  '/api/stats',
+  ensureHasPermission('/customers'),
+  customerController.apiCustomerStats
+);
+
 
 // API: create new customer
 router.post('/', ensureHasPermission('/customers'), customerController.apiCreateCustomer);

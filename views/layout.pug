@@ -46,6 +46,7 @@ html(lang="en")
             // Extra visibility comes from cross-assigned permissions.
             - const canSeeOrdersNew = (role === 'admin') || perms.includes('/orders/new');
             - const canSeeOrdersPay = (role === 'admin') || (role === 'cashier') || (role === 'clerk' && hasAny(cashierRoutes));
+            - const canSeeCustomers = (role === 'admin') || perms.includes('/customers');
 
 
             // Desktop nav
@@ -79,12 +80,18 @@ html(lang="en")
                   li.nav-item
                     a.nav-link.d-flex.align-items-center(href='/orders/new', data-ajax='true', role='tab', id='tab-operations')
                       i.bi.bi-clipboard2-check.me-2(aria-hidden='true')
-                      | Orders
+                      | Jobs
 
                   li.nav-item
                     a.nav-link.d-flex.align-items-center(href='/orders/pay', data-ajax='true', role='tab', id='tab-payments')
                       i.bi.bi-cash-coin.me-2(aria-hidden='true')
                       | Payments
+
+                  if canSeeCustomers
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/customers', data-ajax='true', role='tab', id='tab-customers')
+                        i.bi.bi-people.me-2(aria-hidden='true')
+                        | Customers
 
                   li.nav-item
                     a.nav-link.d-flex.align-items-center(href='/admin/reports', data-ajax='true', role='tab', id='tab-reports')
@@ -97,24 +104,34 @@ html(lang="en")
                     li.nav-item
                       a.nav-link.d-flex.align-items-center(href='/orders/new', data-ajax='true', role='tab', id='tab-operations')
                         i.bi.bi-clipboard2-check.me-2(aria-hidden='true')
-                        | Orders
+                        | Jobs
                   if canSeeOrdersPay
                     li.nav-item
                       a.nav-link.d-flex.align-items-center(href='/orders/pay', data-ajax='true', role='tab', id='tab-payments')
                         i.bi.bi-cash-coin.me-2(aria-hidden='true')
                         | Payments
+                  if canSeeCustomers
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/customers', data-ajax='true', role='tab', id='tab-customers')
+                        i.bi.bi-people.me-2(aria-hidden='true')
+                        | Customers
                 else if role === 'clerk'
                   // Clerk: quick access tabs
                   if canSeeOrdersNew
                     li.nav-item
                       a.nav-link.d-flex.align-items-center(href='/orders/new', data-ajax='true', role='tab', id='tab-operations')
                         i.bi.bi-clipboard2-check.me-2(aria-hidden='true')
-                        | Orders
+                        | Jobs
                   if canSeeOrdersPay
                     li.nav-item
                       a.nav-link.d-flex.align-items-center(href='/orders/pay', data-ajax='true', role='tab', id='tab-payments')
                         i.bi.bi-cash-coin.me-2(aria-hidden='true')
                         | Payments
+                  if canSeeCustomers
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/customers', data-ajax='true', role='tab', id='tab-customers')
+                        i.bi.bi-people.me-2(aria-hidden='true')
+                        | Customers
             // Desktop user menu (show name + logout)
             .d-none.d-md-flex.align-items-center.gap-2
               .dropdown
@@ -150,6 +167,7 @@ html(lang="en")
                   - const cashierRoutesSm = ['/orders/pay','/orders/debtors','/orders/:orderId','/orders/:orderId/pay'];
                   - const canSeeOrdersNewSm = (roleSm === 'admin') || permsSm.includes('/orders/new');
                   - const canSeeOrdersPaySm = (roleSm === 'admin') || (roleSm === 'cashier') || (roleSm === 'clerk' && hasAnySm(cashierRoutesSm));
+                  - const canSeeCustomersSm = (roleSm === 'admin') || permsSm.includes('/customers');
 
                   if roleSm === 'admin'
                     li
@@ -163,9 +181,11 @@ html(lang="en")
                     li
                       a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging-sm') Configs - Messaging
                     li
-                      a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — Operations
+                      a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Jobs — Operations
                     li
-                      a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Orders — Pay
+                      a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Jobs — Pay
+                    li
+                      a.dropdown-item(href='/customers', data-ajax='true', id='tab-customers-sm') Customers
                     li
                       a.dropdown-item(href='/admin/discounts', data-ajax='true', id='tab-orders-discounts-sm') Configs - Discounts
                     li
@@ -184,10 +204,13 @@ html(lang="en")
                   else if roleSm === 'cashier'
                     if canSeeOrdersNewSm
                       li
-                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — New
+                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Jobs — New
                     if canSeeOrdersPaySm
                       li
                         a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Payment
+                    if canSeeCustomersSm
+                      li
+                        a.dropdown-item(href='/customers', data-ajax='true', id='tab-customers-sm') Customers
                     li
                       hr.dropdown-divider
                     li
@@ -198,10 +221,13 @@ html(lang="en")
                   else if roleSm === 'clerk'
                     if canSeeOrdersNewSm
                       li
-                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Orders — New
+                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Jobs — New
                     if canSeeOrdersPaySm
                       li
-                        a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Orders — Pay
+                        a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Jobs — Pay
+                    if canSeeCustomersSm
+                      li
+                        a.dropdown-item(href='/customers', data-ajax='true', id='tab-customers-sm') Customers
                     li
                       hr.dropdown-divider
                     li
