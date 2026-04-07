@@ -15,6 +15,33 @@ const Store = require('../models/store');
 const StoreStock = require('../models/store_stock');
 
 
+async function getUsableCustomerCredit(customerId, session = null) {
+  if (!customerId || !mongoose.Types.ObjectId.isValid(customerId)) return 0;
+  const cid = new mongoose.Types.ObjectId(customerId);
+
+  const pipeline = [
+    { $match: { customer: cid } },
+    {
+      $group: {
+        _id: null,
+        credits: { $sum: { $cond: [{ $eq: ['$type', 'credit'] }, '$amount', 0] } },
+        debits: { $sum: { $cond: [{ $eq: ['$type', 'debit'] }, '$amount', 0] } },
+        count: { $sum: 1 }
+      }
+    }
+  ];
+
+  const agg = await CustomerAccountTxn.aggregate(pipeline).session(session || null);
+  if (agg && agg[0] && Number(agg[0].count || 0) > 0) {
+    const net = Number((Number(agg[0].credits || 0) - Number(agg[0].debits || 0)).toFixed(2));
+    return Number(Math.max(0, net).toFixed(2));
+  }
+
+  // Legacy fallback: if no txns exist yet, honor stored accountBalance.
+  const c = await Customer.findById(cid).select('accountBalance').session(session || null);
+  return Number(Math.max(0, Number(c?.accountBalance || 0)).toFixed(2));
+}
+
 function customerTypeLabel(category) {
   const c = String(category || '').toLowerCase();
   if (c === 'regular') return 'Regular';
@@ -68,7 +95,7 @@ exports.apiPayFromCustomerAccount = async (req, res) => {
         throw e;
       }
 
-      const bal = Number(customer.accountBalance || 0);
+      const bal = await getUsableCustomerCredit(customer._id, session);
       const apply = Number(Math.min(bal, outstanding).toFixed(2));
 
       if (apply <= 0) {
@@ -863,7 +890,7 @@ order.total = finalTotal;
         try {
           customer = await Customer.findById(order.customer);
           if (customer) {
-            const bal = Number(customer.accountBalance || 0);
+            const bal = await getUsableCustomerCredit(customer._id);
             const canApply = Math.max(0, Number(order.total || 0));
             apply = Number(Math.min(bal, canApply).toFixed(2));
           }

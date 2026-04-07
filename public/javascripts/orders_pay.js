@@ -266,12 +266,13 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
     }, refreshMs);
   }
 
-    function computeOutstanding(order) {
+  function computeOutstanding(order) {
     if (!order) return 0;
 
     if (typeof order.outstanding !== 'undefined' && order.outstanding !== null) {
       const o = Number(order.outstanding);
-      return isNaN(o) ? 0 : Number(o.toFixed(2));
+      if (isNaN(o)) return 0;
+      return Number(Math.max(0, o).toFixed(2));
     }
 
     let paid = 0;
@@ -283,7 +284,8 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
     }
 
     const out = Number((Number(order.total || 0) - paid).toFixed(2));
-    return isNaN(out) ? 0 : out;
+    if (isNaN(out)) return 0;
+    return Number(Math.max(0, out).toFixed(2));
   }
 
 
@@ -700,7 +702,7 @@ function discountAppliedLabel(order) {
       ${itemsHtml}
       ${discountHtml}
       <p class="text-end"><strong>Total to pay: GH₵ ${fmt(order.total)}</strong></p>
-      ${ (outstanding > 0) ? `<p class="text-end"><strong>Remaining: GH₵ ${fmt(outstanding)}</strong></p>` : '' }
+      <p class="text-end"><strong>Remaining: GH₵ ${fmt(Math.max(0, outstanding))}</strong></p>
       ${accountHtml}
     `;
 
