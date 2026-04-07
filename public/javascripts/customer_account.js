@@ -53,7 +53,7 @@ function initCustomerAccountPage() {
     }
   }
 
-  function renderLedger(rows) {
+  function renderLedger(rows, explicitSettledOrderIds) {
     if (!txnBody) return;
 
     if (!Array.isArray(rows) || !rows.length) {
@@ -70,6 +70,14 @@ function initCustomerAccountPage() {
         if (ta !== tb) return ta - tb;
         return String(a._id || '').localeCompare(String(b._id || ''));
       });
+
+    const accountSettledOrderIds = new Set(Array.isArray(explicitSettledOrderIds) ? explicitSettledOrderIds : []);
+    ordered.forEach(t => {
+      const note = String(t && t.note ? t.note : '');
+      let m = note.match(/^Paid from account\s+([A-Za-z0-9_-]+)/i);
+      if (!m) m = note.match(/^Auto payment from account for order\s+([A-Za-z0-9_-]+)/i);
+      if (m && m[1]) accountSettledOrderIds.add(String(m[1]));
+    });
 
     let totalCredits = 0;
     let totalDebits = 0;
@@ -88,10 +96,20 @@ function initCustomerAccountPage() {
       const runningType = runningNet >= 0 ? 'Credit' : 'Debit';
       const runningAbs = Math.abs(runningNet);
 
+      let entryNote = String(t.note || type.toUpperCase());
+      const orderPlacedMatch = entryNote.match(/^Order placed\s+([A-Za-z0-9_-]+)/i);
+      if (orderPlacedMatch && orderPlacedMatch[1]) {
+        const oid = String(orderPlacedMatch[1]);
+        const alreadyTagged = /\(A\/C\)/i.test(entryNote);
+        if (!alreadyTagged && accountSettledOrderIds.has(oid)) {
+          entryNote = `${entryNote} (A/C)`;
+        }
+      }
+
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="text-nowrap" style="min-width:170px;">${escapeHtml(formatDateTime(t.createdAt))}</td>
-        <td style="min-width:260px;">${escapeHtml(t.note || type.toUpperCase())}</td>
+        <td style="min-width:260px;">${escapeHtml(entryNote)}</td>
         <td class="text-end">${credit > 0 ? escapeHtml(fmtMoney(credit)) : '-'}</td>
         <td class="text-end pe-4" style="min-width:120px;">${debit > 0 ? escapeHtml(fmtMoney(debit)) : '-'}</td>
         <td class="ps-3 text-nowrap" style="min-width:130px;">${runningType}</td>
@@ -119,7 +137,7 @@ function initCustomerAccountPage() {
       if (!res.ok || !j || !j.ok || !Array.isArray(j.txns)) {
         throw new Error(j?.error || 'Failed to load account');
       }
-      renderLedger(j.txns);
+      renderLedger(j.txns, j.accountSettledOrderIds || []);
     } catch (err) {
       console.error('fetchAccountAndRender error', err);
       txnBody.innerHTML = '<tr><td class="text-danger" colspan="7">Failed to load account ledger.</td></tr>';

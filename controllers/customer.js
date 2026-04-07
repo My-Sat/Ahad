@@ -402,7 +402,23 @@ exports.apiGetAccount = async (req, res) => {
       .limit(100)
       .lean();
 
-    return res.json({ ok: true, customer: { _id: customer._id, accountBalance: Number(customer.accountBalance || 0) }, txns });
+    const accountSettledOrders = await Order.find({
+      customer: customer._id,
+      'payments.method': 'account'
+    })
+      .select('orderId')
+      .lean();
+
+    const accountSettledOrderIds = (accountSettledOrders || [])
+      .map(o => String(o.orderId || '').trim())
+      .filter(Boolean);
+
+    return res.json({
+      ok: true,
+      customer: { _id: customer._id, accountBalance: Number(customer.accountBalance || 0) },
+      txns,
+      accountSettledOrderIds
+    });
   } catch (e) {
     console.error('apiGetAccount error', e);
     return res.status(500).json({ ok: false, error: 'Server error' });

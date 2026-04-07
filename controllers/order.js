@@ -81,15 +81,27 @@ exports.apiPayFromCustomerAccount = async (req, res) => {
       customer.accountBalance = Number((bal - apply).toFixed(2));
       await customer.save({ session });
 
-      // ledger txn
+      // ledger txn:
+      // paying from account consumes customer's credit, so this is a DEBIT entry.
       await CustomerAccountTxn.create([{
         customer: customer._id,
-        type: 'credit',
+        type: 'debit',
         amount: apply,
-        note: `Payment from account for order ${order.orderId}`,
+        note: `Paid from account ${order.orderId}`,
         recordedBy: req.user?._id || null,
         recordedByName: req.user?.name || req.user?.username || ''
       }], { session });
+
+      // Ensure original order entry is tagged as account-settled for visibility in ledger.
+      await CustomerAccountTxn.updateMany(
+        {
+          customer: customer._id,
+          type: 'debit',
+          note: `Order placed ${order.orderId}`
+        },
+        { $set: { note: `Order placed ${order.orderId} (A/C)` } },
+        { session }
+      );
 
       // record payment on order 
       order.payments = order.payments || [];
@@ -846,21 +858,35 @@ order.total = finalTotal;
         const recBy = req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null;
         const recByName = (req.user?.name || req.user?.username || '').toString();
 
-        // Every customer order increases debtor side
+        let customer = null;
+        let apply = 0;
+        try {
+          customer = await Customer.findById(order.customer);
+          if (customer) {
+            const bal = Number(customer.accountBalance || 0);
+            const canApply = Math.max(0, Number(order.total || 0));
+            apply = Number(Math.min(bal, canApply).toFixed(2));
+          }
+        } catch (e) {
+          customer = null;
+          apply = 0;
+        }
+
+        // Every customer order increases debtor side.
+        // Tag with (A/C) when the order is auto-paid from account.
+        const orderPlacedNote = apply > 0
+          ? `Order placed ${order.orderId} (A/C)`
+          : `Order placed ${order.orderId}`;
         await CustomerAccountTxn.create([{
           customer: order.customer,
           type: 'debit',
           amount: Number(order.total || 0),
-          note: `Order placed ${order.orderId}`,
+          note: orderPlacedNote,
           recordedBy: recBy,
           recordedByName: recByName
         }]);
 
-        const customer = await Customer.findById(order.customer);
         if (customer) {
-          const bal = Number(customer.accountBalance || 0);
-          const canApply = Math.max(0, Number(order.total || 0));
-          const apply = Number(Math.min(bal, canApply).toFixed(2));
 
           if (apply > 0) {
             order.payments = order.payments || [];
@@ -884,15 +910,21 @@ order.total = finalTotal;
             customer.accountBalance = Number((bal - apply).toFixed(2));
             await customer.save();
 
-            // Payment reduces debtor side (credit entry)
-            await CustomerAccountTxn.create([{
-              customer: order.customer,
-              type: 'credit',
-              amount: apply,
-              note: `Payment from account for order ${order.orderId}`,
-              recordedBy: recBy,
-              recordedByName: recByName
-            }]);
+            // IMPORTANT:
+            // Do not add a CREDIT entry here. The order debit already records the debt,
+            // and account-based settlement is represented by reducing accountBalance plus
+            // order payment method='account'. Adding a credit here would cancel out the
+            // debit and incorrectly preserve the prior net balance.
+
+            // Ensure order entry is visibly tagged as account-settled in ledger.
+            await CustomerAccountTxn.updateMany(
+              {
+                customer: order.customer,
+                type: 'debit',
+                note: `Order placed ${order.orderId}`
+              },
+              { $set: { note: `Order placed ${order.orderId} (A/C)` } }
+            );
           }
         }
       }
