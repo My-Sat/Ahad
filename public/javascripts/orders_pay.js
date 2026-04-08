@@ -723,6 +723,7 @@ function discountAppliedLabel(order) {
       ${ customerDisplay ? `<p><strong>Customer:</strong> ${escapeHtml(customerDisplay)}</p>` : '' }
       ${ customerPhone ? `<p><strong>Customer Phone:</strong> ${escapeHtml(customerPhone)}</p>` : '' }
       <p><strong>Order ID:</strong> ${escapeHtml(order.orderId)}</p>
+      ${ order.jobNote ? `<p><strong>Note / Job Type:</strong> ${escapeHtml(order.jobNote)}</p>` : '' }
       ${ orderDateDisplay ? `<p><strong>Order Date:</strong> ${escapeHtml(orderDateDisplay)}</p>` : '' }
       <p><strong>Status:</strong> ${statusLabel}</p>
       ${itemsHtml}
@@ -1355,7 +1356,7 @@ if (cashiersTable) {
     debtorsCount.textContent = 'Loading...';
     setDebtorsSummary(0, 0, 0);
     const tbody = debtorsTable.querySelector('tbody');
-    if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">Loading...</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="7">Loading...</td></tr>`;
     try {
         const query = (q || '').toString().trim();
         const url = '/orders/debtors' + (query ? ('?q=' + encodeURIComponent(query)) : '');
@@ -1363,14 +1364,14 @@ if (cashiersTable) {
       if (!res.ok) {
         const j = await res.json().catch(()=>null);
         const msg = (j && j.error) ? j.error : `Failed to fetch debtors (${res.status})`;
-        if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">${escapeHtml(msg)}</td></tr>`;
+        if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="7">${escapeHtml(msg)}</td></tr>`;
         debtorsCount.textContent = '0 results';
         setDebtorsSummary(0, 0, 0);
         return;
       }
       const j = await res.json().catch(()=>null);
       if (!j || !Array.isArray(j.debtors)) {
-        if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">No debtors found.</td></tr>`;
+        if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="7">No debtors found.</td></tr>`;
         debtorsCount.textContent = '0 results';
         setDebtorsSummary(0, 0, 0);
         return;
@@ -1389,6 +1390,7 @@ if (cashiersTable) {
           const hay = [
             d.debtorName,
             d.orderId,
+            d.jobNote,
             d.customerPhone,
             d.phone,
             d.customer && d.customer.phone,
@@ -1404,7 +1406,7 @@ if (cashiersTable) {
       }
 
       if (!filtered.length) {
-        if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">No debtors found.</td></tr>`;
+        if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="7">No debtors found.</td></tr>`;
         debtorsCount.textContent = '0 results';
         setDebtorsSummary(0, 0, 0);
         return;
@@ -1436,11 +1438,13 @@ Object.entries(grouped).forEach(([debtorName, items]) => {
   if (items.length === 1) {
     const d = items[0];
     const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
+    const rowNote = String(d.jobNote || '').trim();
     const accountUrl = d.customerId ? `/customers/${encodeURIComponent(d.customerId)}/account` : '';
     html += `
       <tr data-order-id="${escapeHtml(d.orderId || '')}">
         <td><span class="badge bg-secondary" style="color:#fff !important;">${escapeHtml(d.orderId || '')}</span></td>
         <td>${escapeHtml(debtorName)}</td>
+        <td>${rowNote ? escapeHtml(rowNote) : '<span class="text-muted">-</span>'}</td>
         <td class="text-end">GH₵ ${Number(d.amountDue || 0).toFixed(2)}</td>
         <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
         <td class="text-end"><span class="fw-semibold">${'GH₵ ' + out}</span></td>
@@ -1479,6 +1483,8 @@ const totalOutstanding = items.reduce(
   (s, i) => s + Number(i.outstanding || (i.amountDue - i.paidSoFar || 0)),
   0
 );
+const noteSet = Array.from(new Set(items.map(i => String(i.jobNote || '').trim()).filter(Boolean)));
+const groupNote = noteSet.length === 1 ? noteSet[0] : (noteSet.length > 1 ? 'Multiple notes' : '');
 const accountCustomerId = (items.find(i => i.customerId) || {}).customerId || '';
 const accountUrl = accountCustomerId ? `/customers/${encodeURIComponent(accountCustomerId)}/account` : '';
 
@@ -1493,6 +1499,7 @@ html += `
       <strong>${escapeHtml(debtorName)}</strong>
       <span class="text-muted ms-2">(${items.length} orders)</span>
     </td>
+    <td>${groupNote ? escapeHtml(groupNote) : '<span class="text-muted">-</span>'}</td>
     <td class="text-end">GH₵ ${totalDue.toFixed(2)}</td>
     <td class="text-end">GH₵ ${totalPaid.toFixed(2)}</td>
     <td class="text-end fw-semibold">GH₵ ${totalOutstanding.toFixed(2)}</td>
@@ -1524,10 +1531,12 @@ html += `
 
   items.forEach(d => {
     const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
+    const rowNote = String(d.jobNote || '').trim();
     html += `
       <tr class="debtor-group-row ${groupId}" style="display:none;">
         <td><span class="badge bg-secondary" style="color:#fff !important;">${escapeHtml(d.orderId || '')}</span></td>
         <td>${escapeHtml(debtorName)}</td>
+        <td>${rowNote ? escapeHtml(rowNote) : '<span class="text-muted">-</span>'}</td>
         <td class="text-end">GH₵ ${Number(d.amountDue || 0).toFixed(2)}</td>
         <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
         <td class="text-end"><span class="fw-semibold">${'GH₵ ' + out}</span></td>
@@ -1544,7 +1553,7 @@ html += `
 
 html += `
   <tr class="debtor-group-end ${groupId}" style="display:none;">
-    <td colspan="6">
+    <td colspan="7">
       <div class="d-flex align-items-center gap-2 py-2">
         <div class="flex-grow-1" style="border-top:2px solid rgba(13, 110, 253, .6);"></div>
         <small class="fw-semibold text-uppercase" style="letter-spacing:.06em; color:rgba(13, 110, 253, .95);">End of ${escapeHtml(debtorName)}</small>
@@ -1561,7 +1570,7 @@ html += `
       debtorsCount.textContent = `${filtered.length} result${filtered.length > 1 ? 's' : ''}`;
     } catch (err) {
       console.error('fetch debtors err', err);
-      if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="6">Network error while fetching debtors.</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="7">Network error while fetching debtors.</td></tr>`;
       debtorsCount.textContent = '0 results';
       setDebtorsSummary(0, 0, 0);
     }
@@ -2099,7 +2108,7 @@ if (dailyOrdersSelect) {
 
     async function fetchOrdersList(from, to) {
       if (!from || !to) return renderOrdersListError('Invalid date range');
-      table.querySelector('tbody').innerHTML = `<tr><td class="text-muted" colspan="5">Loading...</td></tr>`;
+      table.querySelector('tbody').innerHTML = `<tr><td class="text-muted" colspan="6">Loading...</td></tr>`;
       try {
         const url = `/orders/list?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
         const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
@@ -2118,7 +2127,7 @@ if (dailyOrdersSelect) {
     }
 
     function renderOrdersListError(msg) {
-      table.querySelector('tbody').innerHTML = `<tr><td class="text-muted" colspan="5">${msg}</td></tr>`;
+      table.querySelector('tbody').innerHTML = `<tr><td class="text-muted" colspan="6">${msg}</td></tr>`;
       if (countEl) countEl.textContent = '0 results';
     }
 
@@ -2131,7 +2140,7 @@ function renderOrdersList(orders) {
   const tbody = table.querySelector('tbody');
 
   if (!orders || !orders.length) {
-    tbody.innerHTML = '<tr><td class="text-muted" colspan="5">No orders in this range.</td></tr>';
+    tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No orders in this range.</td></tr>';
     if (countEl) countEl.textContent = '0 results';
     return;
   }
@@ -2141,6 +2150,7 @@ function renderOrdersList(orders) {
   orders.forEach(o => {
     const oid = escapeHtml(o.orderId || o._id || '');
     const name = escapeHtml(o.name || 'Walk-in');
+    const jobNote = escapeHtml(o.jobNote || '-');
     const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : '';
 
     const tr = document.createElement('tr');
@@ -2152,6 +2162,7 @@ function renderOrdersList(orders) {
           ${name}
         </a>
       </td>
+      <td>${jobNote}</td>
       <td class="text-end">GH₵ ${Number(o.total || 0).toFixed(2)}</td>
       <td>${escapeHtml(o.status || '')}</td>
       <td>${escapeHtml(created)}</td>

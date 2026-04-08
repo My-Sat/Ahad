@@ -491,6 +491,7 @@ exports.payPage = async (req, res) => {
 exports.apiCreateOrder = async (req, res) => {
   try {
     let { items } = req.body;
+    const jobNote = String(req.body && req.body.jobNote ? req.body.jobNote : '').trim().slice(0, 140);
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'No items provided' });
     }
@@ -648,6 +649,7 @@ const selectionsForOrder = (pr.selections || []).map(s => ({
     const order = new Order({
       orderId: makeOrderId(),
       items: builtItems,
+      jobNote,
       total
     });
 
@@ -1126,7 +1128,12 @@ for (let idx = 0; idx < builtItems.length; idx++) {
   console.error('Printer usage recording error', puErr);
 }
     // return order info
-    return res.json({ ok: true, orderId: order.orderId, total: order.total });
+    return res.json({
+      ok: true,
+      orderId: order.orderId,
+      total: order.total,
+      jobNote: String(order.jobNote || '').trim()
+    });
   } catch (err) {
     console.error('apiCreateOrder error', err);
     return res.status(500).json({ error: 'Error creating order' });
@@ -1369,11 +1376,12 @@ exports.apiGetOrderById = async (req, res) => {
       // ✅ this helps orders_pay.js show balance reliably
       customerAccountBalance: Number(customerAccountBalance.toFixed(2)),
 
-      order: {
-        orderId: order.orderId,
+        order: {
+          orderId: order.orderId,
+          jobNote: String(order.jobNote || '').trim(),
 
-        // totals
-        total: order.total,
+          // totals
+          total: order.total,
 
         // discount fields needed by pay page
         totalBeforeDiscount: order.totalBeforeDiscount,
@@ -1992,19 +2000,21 @@ exports.apiGetDebtors = async (req, res) => {
             { debtorName: { $regex: qRegex } },
             { customerPhone: { $regex: qRegex } },
             { orderId: { $regex: qRegex } },
+            { jobNote: { $regex: qRegex } },
             { customerName: { $regex: qRegex } } // if you store it sometimes
           ]
         }
       }] : []),
 
       // project fields useful for frontend
-      { $project: {
-          orderId: 1,
-          customer: 1,
-          total: 1,
-          paidSoFar: 1,
-          outstanding: 1,
-          debtorName: 1,
+        { $project: {
+            orderId: 1,
+            customer: 1,
+            jobNote: 1,
+            total: 1,
+            paidSoFar: 1,
+            outstanding: 1,
+            debtorName: 1,
           customerPhone: 1,   // <-- add this
           createdAt: 1,
           status: 1
@@ -2020,6 +2030,7 @@ exports.apiGetDebtors = async (req, res) => {
     const out = (rows || []).map(r => ({
       orderId: r.orderId,
       customerId: r.customer ? String(r.customer) : '',
+      jobNote: String(r.jobNote || '').trim(),
       debtorName: r.debtorName || '',
       customerPhone: r.customerPhone || '',   // <-- add this
       amountDue: Number((r.total || 0).toFixed(2)),
@@ -2252,11 +2263,12 @@ const out = orders.map(o => {
     return sum + amt;
   }, 0);
 
-  return {
-    _id: o._id,
-    name: displayName,      // ✅ NEW
-    orderId: o.orderId,     // keep for actions
-    total: o.total,
+    return {
+      _id: o._id,
+      name: displayName,      // ✅ NEW
+      jobNote: String(o.jobNote || '').trim(),
+      orderId: o.orderId,     // keep for actions
+      total: o.total,
     paidInRange: Number(paidInRange.toFixed(2)),
     status: o.status,
     createdAt: o.createdAt

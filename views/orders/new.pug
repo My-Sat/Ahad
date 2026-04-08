@@ -77,6 +77,15 @@ block content
                 small.text-muted-light.d-block.mt-2
                   | Type a phone or name to search. Select a suggestion to attach to this order.
 
+            .card.mb-3.dark-surface(style='border:1px solid rgba(255,255,255,.08);')
+              .card-body.dark-card-body.py-2
+                label.form-label.mb-1(for='orderJobNote') Order Note (optional)
+                input.form-control.form-control-dark#orderJobNote(
+                  type='text',
+                  maxlength='140',
+                  placeholder='e.g. add a note or job type'
+                )
+
             // selection row (service category + services + books)
             .row.g-2.mb-3
               .col-md-4
@@ -205,13 +214,14 @@ block content
               thead
                 tr
                   th Name
+                  th Note / Job Type
                   th.text-end Total
                   th Status
                   th Created
                   th.text-center Actions
               tbody
                 tr
-                  td.text-muted-light(colspan='5') Use the date filters above and click Refresh to load orders.
+                  td.text-muted-light(colspan='6') Use the date filters above and click Refresh to load orders.
 
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close

@@ -31,6 +31,10 @@ block content
               p.mb-1
                 strong Order ID:
                 |  #{order.orderId}
+              if order.jobNote
+                p.mb-1
+                  strong Note / Job Type:
+                  |  #{order.jobNote}
 
               p.mb-1
                 strong Status:

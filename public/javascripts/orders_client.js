@@ -30,6 +30,7 @@
   const cartTotalEl = document.getElementById('cartTotal');
   const orderNowBtn = document.getElementById('orderNowBtn');
   const saveDraftBtn = document.getElementById('saveDraftBtn');
+  const orderJobNoteEl = document.getElementById('orderJobNote');
 
     // Admin-only manual discount UI (may not exist for non-admin)
   const manualDiscountMode = document.getElementById('manualDiscountMode');
@@ -510,7 +511,7 @@ async function loadServicesForCategory(catId) {
   }
 
   // Order success modal (lazy) - dark-surface friendly
-  function showOrderSuccessModal(orderId, total) {
+  function showOrderSuccessModal(orderId, total, jobNote) {
     let modalEl = document.getElementById('orderSuccessModal');
     if (!modalEl) {
       const html = `
@@ -541,9 +542,11 @@ async function loadServicesForCategory(catId) {
 
     const body = modalEl.querySelector('#orderSuccessBody');
     if (body) {
+      const cleanNote = String(jobNote || '').trim();
       body.innerHTML = `
         <strong>Order ID:</strong> <span id="orderSuccessId">${escapeHtml(orderId || '')}</span> <br/>
         <strong>Total:</strong> GH₵ <span id="orderSuccessTotal">${formatMoney(total)}</span>
+        ${cleanNote ? `<br/><strong>Note / Job Type:</strong> <span id="orderSuccessJobNote">${escapeHtml(cleanNote)}</span>` : ''}
       `;
     }
 
@@ -575,8 +578,10 @@ async function loadServicesForCategory(catId) {
     function printOrder() {
       const idEl = modalEl.querySelector('#orderSuccessId');
       const totalEl = modalEl.querySelector('#orderSuccessTotal');
+      const noteEl = modalEl.querySelector('#orderSuccessJobNote');
       const idText = idEl ? idEl.textContent.trim() : (orderId || '');
       const totalText = totalEl ? totalEl.textContent.trim() : (formatMoney(total));
+      const noteText = noteEl ? noteEl.textContent.trim() : String(jobNote || '').trim();
       const w = window.open('', '_blank', 'toolbar=0,location=0,menubar=0');
       if (!w) {
         alert('Unable to open print window (blocked). Please copy order ID and print manually.');
@@ -603,6 +608,7 @@ async function loadServicesForCategory(catId) {
           <div class="details">
             <p><strong>Order ID:</strong> ${escapeHtml(idText)}</p>
             <p><strong>Total:</strong> GH₵ ${escapeHtml(totalText)}</p>
+            ${noteText ? `<p><strong>Note / Job Type:</strong> ${escapeHtml(noteText)}</p>` : ''}
             <p class="muted">Show this ID at payment.</p>
           </div>
           <p class="small-note">Printed from Ahad POS.</p>
@@ -620,7 +626,7 @@ async function loadServicesForCategory(catId) {
     if (copyBtn && !copyBtn._bound) { copyBtn._bound = true; copyBtn.addEventListener('click', copyOrderId); }
     if (printBtn && !printBtn._bound) { printBtn._bound = true; printBtn.addEventListener('click', printOrder); }
 
-    try { const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl); inst.show(); } catch (err) { alert(`Order created: ${orderId}\nTotal: GH₵ ${formatMoney(total)}`); }
+    try { const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl); inst.show(); } catch (err) { alert(`Order created: ${orderId}\nTotal: GH₵ ${formatMoney(total)}${jobNote ? `\nNote / Job Type: ${jobNote}` : ''}`); }
   }
 
 // ---------- Price rules rendering ----------
@@ -1395,14 +1401,18 @@ async function placeOrderFlow() {
       }
     });
 
-    const payload = {
-      items,
-      customerId:
-        (document.getElementById('orderCustomerId') &&
-         document.getElementById('orderCustomerId').value)
-          ? document.getElementById('orderCustomerId').value
-          : null
-    };
+      const payload = {
+        items,
+        customerId:
+          (document.getElementById('orderCustomerId') &&
+           document.getElementById('orderCustomerId').value)
+            ? document.getElementById('orderCustomerId').value
+            : null
+      };
+      if (orderJobNoteEl) {
+        const jobNote = String(orderJobNoteEl.value || '').trim();
+        if (jobNote) payload.jobNote = jobNote;
+      }
 
     // -----------------------------------------
     // Admin-only: manual discount (per order)
@@ -1456,7 +1466,7 @@ async function placeOrderFlow() {
       return;
     }
 
-    showOrderSuccessModal(j.orderId, j.total);
+    showOrderSuccessModal(j.orderId, j.total, (j && j.jobNote) ? j.jobNote : (orderJobNoteEl ? orderJobNoteEl.value : ''));
     if (typeof showGlobalToast === 'function') {
       showGlobalToast(`Order created: ${j.orderId}`, 3200);
     }
@@ -1464,9 +1474,10 @@ async function placeOrderFlow() {
     // Stock just changed on the server — force refresh so next Apply uses updated remaining
     await refreshMaterialsIfStale(true);
 
-    // Reset cart and discount (discount must be re-applied per order)
-    cart = [];
-    // clear any saved draft for this customer after a successful order
+      // Reset cart and discount (discount must be re-applied per order)
+      cart = [];
+      if (orderJobNoteEl) orderJobNoteEl.value = '';
+      // clear any saved draft for this customer after a successful order
     const currentCustomerId = getCurrentCustomerId();
     if (currentCustomerId) clearDraft(currentCustomerId);
 
@@ -1686,7 +1697,7 @@ async function placeOrderFlow() {
   function renderOrdersListError(msg) {
     if (!ordersTable) return;
     const tbody = ordersTable.querySelector('tbody');
-    tbody.innerHTML = `<tr><td class="text-muted" colspan="5">${escapeHtml(msg)}</td></tr>`;
+    tbody.innerHTML = `<tr><td class="text-muted" colspan="6">${escapeHtml(msg)}</td></tr>`;
     if (ordersCountEl) ordersCountEl.textContent = '0 results';
   }
 
@@ -1696,7 +1707,7 @@ function renderOrdersList(orders) {
   const tbody = ordersTable.querySelector('tbody');
 
   if (!orders || !orders.length) {
-    tbody.innerHTML = '<tr><td class="text-muted" colspan="5">No orders in this range.</td></tr>';
+    tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No orders in this range.</td></tr>';
     if (ordersCountEl) ordersCountEl.textContent = '0 results';
     return;
   }
@@ -1707,6 +1718,7 @@ function renderOrdersList(orders) {
     const orderId = o.orderId || o._id || '';
     const safeOrderId = escapeHtml(orderId);
     const name = escapeHtml(o.name || 'Walk-in');
+    const jobNote = escapeHtml(o.jobNote || '-');
     const viewHref = '/orders/view/' + encodeURIComponent(orderId);
     const created = o.createdAt
       ? formatDateTimeForDisplay(o.createdAt)
@@ -1723,6 +1735,7 @@ function renderOrdersList(orders) {
           ${name}
         </a>
       </td>
+      <td>${jobNote}</td>
       <td class="text-end">GH₵ ${formatMoney(o.total)}</td>
       <td>${escapeHtml(o.status || '')}</td>
       <td>${escapeHtml(created)}</td>
@@ -1764,8 +1777,9 @@ function renderOrdersList(orders) {
         return;
       }
       const o = j.order;
+      const jobNote = String(o.jobNote || '').trim();
 
-      const metaText = `Order ID: ${o.orderId} — Total: GH₵ ${formatMoney(o.total)} — Status: ${o.status} — Created: ${formatDateTimeForDisplay(o.createdAt)}`;
+      const metaText = `Order ID: ${o.orderId} — Total: GH₵ ${formatMoney(o.total)} — Status: ${o.status} — Created: ${formatDateTimeForDisplay(o.createdAt)}${jobNote ? ` — Note / Job Type: ${jobNote}` : ''}`;
       if (orderDetailsMeta) orderDetailsMeta.textContent = metaText;
 
       let html = '';
@@ -1804,6 +1818,7 @@ function renderOrdersList(orders) {
 
       html += `<div class="mt-3 small text-muted">
         <div>Created: ${formatDateTimeForDisplay(o.createdAt)}</div>
+        ${jobNote ? `<div>Note / Job Type: ${escapeHtml(jobNote)}</div>` : ''}
         <div>Paid at: ${o.paidAt ? formatDateTimeForDisplay(o.paidAt) : 'Not paid'}</div>
       </div>`;
 

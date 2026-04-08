@@ -44,6 +44,8 @@ const PaymentSchema = new mongoose.Schema({
 const OrderSchema = new mongoose.Schema({
   orderId: { type: String, unique: true, index: true }, // generated human-friendly ID
   items: [OrderItemSchema],
+  // Optional operator note / job type label set at order creation.
+  jobNote: { type: String, trim: true, default: '' },
     // --- Discounts snapshot (applied at creation time) ---
   totalBeforeDiscount: { type: Number, default: 0 },
   discountAmount: { type: Number, default: 0 },
