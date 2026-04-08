@@ -41,6 +41,12 @@ router.get(
 );
 
 router.get(
+  '/creditors',
+  ensureHasPermission('/orders/debtors'),
+  orderController.apiGetCreditors
+);
+
+router.get(
   '/pay',
   ensureHasPermission('/orders/pay'),
   orderController.payPage

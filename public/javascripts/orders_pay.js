@@ -53,18 +53,36 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
   const fullPaymentModal = fullPaymentModalEl ? new bootstrap.Modal(fullPaymentModalEl) : null;
   const debtorsSearchInput = document.getElementById('debtorsSearchInput');
   const debtorsSearchClearBtn = document.getElementById('debtorsSearchClearBtn');
+  const openCreditorsBtn = document.getElementById('openCreditorsBtn');
+  const creditorsModalEl = document.getElementById('creditorsModal');
+  const creditorsModal = (window.bootstrap && creditorsModalEl) ? new bootstrap.Modal(creditorsModalEl) : null;
+  const creditorsTable = document.getElementById('creditorsTable');
+  const creditorsCount = document.getElementById('creditorsCount');
+  const creditorsTotalCountEl = document.getElementById('creditorsTotalCount');
+  const creditorsTotalBalanceEl = document.getElementById('creditorsTotalBalance');
+  const creditorsSearchInput = document.getElementById('creditorsSearchInput');
+  const creditorsSearchClearBtn = document.getElementById('creditorsSearchClearBtn');
 
   let debtorsSearchTimer = null;
   const DEBTORS_SEARCH_DEBOUNCE = 220;
+  let creditorsSearchTimer = null;
+  const CREDITORS_SEARCH_DEBOUNCE = 220;
 
   // cache last fetched debtors so we can filter locally too
   let _debtorsCache = [];
   let _debtorsLastQuery = '';
+  let _creditorsCache = [];
+  let _creditorsLastQuery = '';
 
   function setDebtorsSummary(totalDue, totalPaid, totalOutstanding) {
     if (debtorsTotalDueEl) debtorsTotalDueEl.textContent = formatCedi(totalDue || 0);
     if (debtorsTotalPaidEl) debtorsTotalPaidEl.textContent = formatCedi(totalPaid || 0);
     if (debtorsTotalOutstandingEl) debtorsTotalOutstandingEl.textContent = formatCedi(totalOutstanding || 0);
+  }
+
+  function setCreditorsSummary(totalCredit, totalCount) {
+    if (creditorsTotalBalanceEl) creditorsTotalBalanceEl.textContent = formatCedi(totalCredit || 0);
+    if (creditorsTotalCountEl) creditorsTotalCountEl.textContent = String(Number(totalCount || 0));
   }
 
 
@@ -110,6 +128,14 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
 
   function formatCedi(n) {
     return `GH\u20B5 ${fmt(n)}`;
+  }
+
+  function categoryLabel(category) {
+    const c = String(category || '').toLowerCase();
+    if (c === 'regular') return 'Regular';
+    if (c === 'artist') return 'Artist';
+    if (c === 'organisation') return 'Organisation';
+    return 'One-time';
   }
 
   let dailyTotalsLoading = false;
@@ -1681,6 +1707,138 @@ if (debtorsTable) {
     }
   });
 }
+
+  // Creditors modal: customers with available account credit
+  async function fetchCreditorsList(q = '') {
+    if (!creditorsTable || !creditorsCount) return;
+    creditorsCount.textContent = 'Loading...';
+    setCreditorsSummary(0, 0);
+    const tbody = creditorsTable.querySelector('tbody');
+    if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="5">Loading...</td></tr>`;
+
+    try {
+      const query = (q || '').toString().trim();
+      const url = '/orders/creditors' + (query ? ('?q=' + encodeURIComponent(query)) : '');
+      const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        const msg = (j && j.error) ? j.error : `Failed to fetch creditors (${res.status})`;
+        if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="5">${escapeHtml(msg)}</td></tr>`;
+        creditorsCount.textContent = '0 results';
+        setCreditorsSummary(0, 0);
+        return;
+      }
+
+      const j = await res.json().catch(() => null);
+      if (!j || !Array.isArray(j.creditors)) {
+        if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="5">No creditors found.</td></tr>`;
+        creditorsCount.textContent = '0 results';
+        setCreditorsSummary(0, 0);
+        return;
+      }
+
+      const rows = j.creditors || [];
+      _creditorsCache = rows.slice();
+
+      const qNorm = query.toLowerCase();
+      const filtered = qNorm
+        ? rows.filter(c => {
+            const hay = [
+              c.creditorName,
+              c.phone,
+              c.category
+            ].filter(Boolean).join(' ').toLowerCase();
+            return hay.includes(qNorm);
+          })
+        : rows;
+
+      if (!filtered.length) {
+        if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="5">No creditors found.</td></tr>`;
+        creditorsCount.textContent = '0 results';
+        setCreditorsSummary(0, 0);
+        return;
+      }
+
+      const totalCredit = filtered.reduce((s, c) => s + Number(c.creditBalance || 0), 0);
+      setCreditorsSummary(Number(totalCredit.toFixed(2)), filtered.length);
+
+      let html = '';
+      filtered.forEach(c => {
+        const accountUrl = c.customerId ? `/customers/${encodeURIComponent(c.customerId)}/account` : '';
+        html += `
+          <tr>
+            <td>${escapeHtml(c.creditorName || 'Unknown')}</td>
+            <td>${escapeHtml(categoryLabel(c.category))}</td>
+            <td>${escapeHtml(c.phone || '-')}</td>
+            <td class="text-end fw-semibold">GH₵ ${Number(c.creditBalance || 0).toFixed(2)}</td>
+            <td class="text-center">
+              ${accountUrl ? `<a class="btn btn-sm btn-outline-light-custom creditor-account-link" href="${accountUrl}" data-ajax="true">Account</a>` : '<span class="text-muted">-</span>'}
+            </td>
+          </tr>
+        `;
+      });
+
+      if (tbody) tbody.innerHTML = html;
+      creditorsCount.textContent = `${filtered.length} result${filtered.length > 1 ? 's' : ''}`;
+    } catch (err) {
+      console.error('fetch creditors err', err);
+      if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="5">Network error while fetching creditors.</td></tr>`;
+      creditorsCount.textContent = '0 results';
+      setCreditorsSummary(0, 0);
+    }
+  }
+
+  function scheduleCreditorsSearch() {
+    if (!creditorsSearchInput) return;
+    const q = creditorsSearchInput.value || '';
+    _creditorsLastQuery = q;
+
+    if (creditorsSearchTimer) clearTimeout(creditorsSearchTimer);
+    creditorsSearchTimer = setTimeout(() => {
+      fetchCreditorsList(q);
+    }, CREDITORS_SEARCH_DEBOUNCE);
+  }
+
+  if (creditorsSearchInput) {
+    creditorsSearchInput.addEventListener('input', scheduleCreditorsSearch);
+    creditorsSearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        creditorsSearchInput.value = '';
+        _creditorsLastQuery = '';
+        fetchCreditorsList('');
+      }
+    });
+  }
+
+  if (creditorsSearchClearBtn) {
+    creditorsSearchClearBtn.addEventListener('click', () => {
+      if (creditorsSearchInput) creditorsSearchInput.value = '';
+      _creditorsLastQuery = '';
+      fetchCreditorsList('');
+      try { creditorsSearchInput && creditorsSearchInput.focus(); } catch (e) {}
+    });
+  }
+
+  if (openCreditorsBtn) {
+    openCreditorsBtn.addEventListener('click', function () {
+      if (creditorsModal) creditorsModal.show();
+      if (creditorsSearchInput) creditorsSearchInput.value = '';
+      _creditorsLastQuery = '';
+      fetchCreditorsList('');
+      setTimeout(() => { try { creditorsSearchInput && creditorsSearchInput.focus(); } catch (e) {} }, 80);
+    });
+  }
+
+  if (creditorsTable) {
+    creditorsTable.addEventListener('click', function (ev) {
+      const accountLink = ev.target.closest('.creditor-account-link');
+      if (accountLink) {
+        ev.stopPropagation();
+        if (creditorsModal) creditorsModal.hide();
+      }
+    });
+  }
 
 // =====================================================
 // CONFIRM FULL PAYMENT (bulk debtor payment)

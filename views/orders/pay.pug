@@ -34,6 +34,9 @@ block content
                 button.btn.btn-outline-light-custom.btn-sm#openDebtorsBtn(type='button', title='Debtors')
                   i.bi.bi-list-check.me-1
                   | Debtors
+                button.btn.btn-outline-light-custom.btn-sm#openCreditorsBtn(type='button', title='Creditors')
+                  i.bi.bi-wallet2.me-1
+                  | Creditors
 
                 // Admin-only tools
                 if currentUser && currentUser.role && currentUser.role.toLowerCase() === 'admin'
@@ -277,6 +280,56 @@ block content
               tbody
                 tr
                   td.text-muted(colspan='6') Loading...
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
+
+  // Creditors modal
+  .modal.fade(id='creditorsModal', tabindex='-1', aria-labelledby='creditorsModalLabel', aria-hidden='true')
+    .modal-dialog.modal-lg.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          .d-flex.flex-column
+            h5.modal-title(id='creditorsModalLabel') Creditors
+            small.text-muted-light Customers with available account credit.
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          p.text-muted.small#creditorsCount Loading...
+          .row.g-2.mb-3
+            .col-12.col-md-4
+              .card.border-1.dark-surface
+                .card-body.py-2.dark-card-body
+                  .small.text-muted-light Total Creditors
+                  strong#creditorsTotalCount 0
+            .col-12.col-md-8
+              .card.border-1.dark-surface
+                .card-body.py-2.dark-card-body
+                  .small.text-muted-light Total Credit Balance
+                  strong#creditorsTotalBalance GH₵ 0.00
+
+          .mb-2
+            .input-group.input-group-sm
+              span.input-group-text.bg-transparent.text-muted-light
+                i.bi.bi-search
+              input.form-control.form-control-sm.form-control-dark#creditorsSearchInput(
+                type='text',
+                placeholder='Search by customer name / phone...',
+                autocomplete='off'
+              )
+              button.btn.btn-outline-light-custom#creditorsSearchClearBtn(type='button') Clear
+            .small.text-muted-light.mt-1 Type to filter creditors as you type.
+
+          .table-responsive
+            table.table.table-sm.table-hover#creditorsTable
+              thead
+                tr
+                  th Creditor
+                  th Category
+                  th Phone
+                  th.text-end Credit Balance
+                  th.text-center Actions
+              tbody
+                tr
+                  td.text-muted(colspan='5') Loading...
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 

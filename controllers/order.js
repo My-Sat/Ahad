@@ -2036,6 +2036,127 @@ exports.apiGetDebtors = async (req, res) => {
   }
 };
 
+// API: list creditors (customers with net credit balance > 0)
+// GET /orders/creditors
+exports.apiGetCreditors = async (req, res) => {
+  try {
+    let allowedCustomerIds = null;
+    try {
+      const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
+      if (!isAdmin && req.user && req.user._id) {
+        const ids = await Order.distinct('customer', {
+          handledBy: new mongoose.Types.ObjectId(req.user._id),
+          customer: { $type: 'objectId', $ne: null }
+        });
+
+        allowedCustomerIds = (ids || [])
+          .map(id => String(id || '').trim())
+          .filter(Boolean)
+          .filter(id => mongoose.Types.ObjectId.isValid(id))
+          .map(id => new mongoose.Types.ObjectId(id));
+
+        if (!allowedCustomerIds.length) {
+          return res.json({ ok: true, creditors: [] });
+        }
+      }
+    } catch (e) {
+      console.warn('apiGetCreditors: could not determine user filter', e);
+    }
+
+    const q = String(req.query.q || '').trim();
+    function escapeRegex(s) {
+      return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    const qRegex = q ? new RegExp(escapeRegex(q), 'i') : null;
+
+    const pipeline = [
+      { $match: allowedCustomerIds ? { customer: { $in: allowedCustomerIds } } : {} },
+      {
+        $group: {
+          _id: '$customer',
+          credits: { $sum: { $cond: [{ $eq: ['$type', 'credit'] }, '$amount', 0] } },
+          debits: { $sum: { $cond: [{ $eq: ['$type', 'debit'] }, '$amount', 0] } },
+          lastTxnAt: { $max: '$createdAt' }
+        }
+      },
+      { $addFields: { creditBalance: { $subtract: ['$credits', '$debits'] } } },
+      { $match: { creditBalance: { $gt: 0 } } },
+      {
+        $lookup: {
+          from: 'customers',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'customer_doc'
+        }
+      },
+      { $unwind: { path: '$customer_doc', preserveNullAndEmptyArrays: false } },
+      {
+        $addFields: {
+          creditorName: {
+            $cond: [
+              { $in: ['$customer_doc.category', ['artist', 'organisation']] },
+              {
+                $ifNull: [
+                  '$customer_doc.businessName',
+                  { $ifNull: ['$customer_doc.phone', ''] }
+                ]
+              },
+              {
+                $ifNull: [
+                  '$customer_doc.firstName',
+                  {
+                    $ifNull: [
+                      '$customer_doc.businessName',
+                      { $ifNull: ['$customer_doc.phone', ''] }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      ...(qRegex ? [{
+        $match: {
+          $or: [
+            { creditorName: { $regex: qRegex } },
+            { 'customer_doc.phone': { $regex: qRegex } },
+            { 'customer_doc.firstName': { $regex: qRegex } },
+            { 'customer_doc.businessName': { $regex: qRegex } }
+          ]
+        }
+      }] : []),
+      {
+        $project: {
+          customerId: '$_id',
+          creditorName: 1,
+          phone: { $ifNull: ['$customer_doc.phone', ''] },
+          category: { $ifNull: ['$customer_doc.category', 'one_time'] },
+          creditBalance: 1,
+          lastTxnAt: 1
+        }
+      },
+      { $sort: { creditBalance: -1, lastTxnAt: -1 } },
+      { $limit: 1000 }
+    ];
+
+    const rows = await CustomerAccountTxn.aggregate(pipeline);
+    const out = (rows || []).map(r => ({
+      customerId: r.customerId ? String(r.customerId) : '',
+      creditorName: String(r.creditorName || '').trim(),
+      phone: String(r.phone || '').trim(),
+      category: String(r.category || 'one_time'),
+      creditBalance: Number((Number(r.creditBalance || 0)).toFixed(2)),
+      lastTxnAt: r.lastTxnAt || null
+    }));
+
+    return res.json({ ok: true, creditors: out });
+  } catch (err) {
+    console.error('apiGetCreditors error', err);
+    return res.status(500).json({ error: 'Error fetching creditors' });
+  }
+};
+
 exports.apiListOrders = async (req, res) => {
   try {
     // Accepts ?from=YYYY-MM-DD&to=YYYY-MM-DD
