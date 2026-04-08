@@ -2000,6 +2000,7 @@ exports.apiGetDebtors = async (req, res) => {
       // project fields useful for frontend
       { $project: {
           orderId: 1,
+          customer: 1,
           total: 1,
           paidSoFar: 1,
           outstanding: 1,
@@ -2018,6 +2019,7 @@ exports.apiGetDebtors = async (req, res) => {
     // Normalize output so amounts are numbers with 2 decimals
     const out = (rows || []).map(r => ({
       orderId: r.orderId,
+      customerId: r.customer ? String(r.customer) : '',
       debtorName: r.debtorName || '',
       customerPhone: r.customerPhone || '',   // <-- add this
       amountDue: Number((r.total || 0).toFixed(2)),

@@ -1410,6 +1410,7 @@ Object.entries(grouped).forEach(([debtorName, items]) => {
   if (items.length === 1) {
     const d = items[0];
     const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
+    const accountUrl = d.customerId ? `/customers/${encodeURIComponent(d.customerId)}/account` : '';
     html += `
       <tr data-order-id="${escapeHtml(d.orderId || '')}">
         <td><span class="badge bg-secondary" style="color:#fff !important;">${escapeHtml(d.orderId || '')}</span></td>
@@ -1418,11 +1419,25 @@ Object.entries(grouped).forEach(([debtorName, items]) => {
         <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
         <td class="text-end"><span class="fw-semibold">${'GH₵ ' + out}</span></td>
         <td class="text-center">
-          <button class="btn btn-sm btn-outline-primary view-debtor-order"
-            type="button"
-            data-order-id="${escapeHtml(d.orderId || '')}">
-            Update
-          </button>
+          <div class="dropdown d-inline-block">
+            <button class="btn btn-sm btn-outline-light-custom debtor-actions-menu"
+              type="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+              title="Actions">
+              <i class="bi bi-three-dots-vertical"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li>
+                <button class="dropdown-item view-debtor-order"
+                  type="button"
+                  data-order-id="${escapeHtml(d.orderId || '')}">
+                  Update
+                </button>
+              </li>
+              ${accountUrl ? `<li><a class="dropdown-item debtor-account-link" href="${accountUrl}" data-ajax="true">Account</a></li>` : ''}
+            </ul>
+          </div>
         </td>
       </tr>
     `;
@@ -1438,6 +1453,8 @@ const totalOutstanding = items.reduce(
   (s, i) => s + Number(i.outstanding || (i.amountDue - i.paidSoFar || 0)),
   0
 );
+const accountCustomerId = (items.find(i => i.customerId) || {}).customerId || '';
+const accountUrl = accountCustomerId ? `/customers/${encodeURIComponent(accountCustomerId)}/account` : '';
 
 html += `
   <tr class="table-active debtor-group-toggle align-middle"
@@ -1454,13 +1471,27 @@ html += `
     <td class="text-end">GH₵ ${totalPaid.toFixed(2)}</td>
     <td class="text-end fw-semibold">GH₵ ${totalOutstanding.toFixed(2)}</td>
     <td class="text-center">
-      <button
-        class="btn btn-sm btn-outline-success pay-debtor-full"
-        type="button"
-        data-order-ids='${JSON.stringify(items.map(i => i.orderId))}'
-        data-total="${totalOutstanding.toFixed(2)}">
-        Pay All
-      </button>
+      <div class="dropdown d-inline-block">
+        <button class="btn btn-sm btn-outline-light-custom debtor-actions-menu"
+          type="button"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+          title="Actions">
+          <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li>
+            <button
+              class="dropdown-item pay-debtor-full"
+              type="button"
+              data-order-ids='${JSON.stringify(items.map(i => i.orderId))}'
+              data-total="${totalOutstanding.toFixed(2)}">
+              Pay All
+            </button>
+          </li>
+          ${accountUrl ? `<li><a class="dropdown-item debtor-account-link" href="${accountUrl}" data-ajax="true">Account</a></li>` : ''}
+        </ul>
+      </div>
     </td>
   </tr>
 `;
@@ -1557,6 +1588,18 @@ if (openDebtorsBtn) {
 // delegate click in debtors table - view order (open that order in the pay page)
 if (debtorsTable) {
   debtorsTable.addEventListener('click', async function (ev) {
+    const menuBtn = ev.target.closest('.debtor-actions-menu');
+    if (menuBtn) {
+      ev.stopPropagation();
+      return;
+    }
+
+    const accountLink = ev.target.closest('.debtor-account-link');
+    if (accountLink) {
+      ev.stopPropagation();
+      if (debtorsModal) debtorsModal.hide();
+      return; // allow link navigation (AJAX interceptor handles data-ajax links)
+    }
 
     // ===============================
     // FULL PAYMENT (GROUPED DEBTORS)
