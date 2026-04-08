@@ -1520,9 +1520,9 @@ html += `
   <tr class="debtor-group-end ${groupId}" style="display:none;">
     <td colspan="6">
       <div class="d-flex align-items-center gap-2 py-2">
-        <div class="flex-grow-1 border-top border-secondary-subtle"></div>
-        <small class="text-muted-light text-uppercase" style="letter-spacing:.06em;">End of ${escapeHtml(debtorName)}</small>
-        <div class="flex-grow-1 border-top border-secondary-subtle"></div>
+        <div class="flex-grow-1" style="border-top:2px solid rgba(13, 110, 253, .6);"></div>
+        <small class="fw-semibold text-uppercase" style="letter-spacing:.06em; color:rgba(13, 110, 253, .95);">End of ${escapeHtml(debtorName)}</small>
+        <div class="flex-grow-1" style="border-top:2px solid rgba(13, 110, 253, .6);"></div>
       </div>
     </td>
   </tr>
