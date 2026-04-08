@@ -73,11 +73,12 @@ exports.apiGetPricesForService = async (req, res) => {
         subUnit: (s.subUnit && s.subUnit._id) ? String(s.subUnit._id) : String(s.subUnit)
       })),
 
-      selectionLabel: p.selectionLabel || ((p.selections || []).map(s => {
+      selectionLabel: (p.customLabel && String(p.customLabel).trim()) || ((p.selections || []).map(s => {
         const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
         const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
         return `${u}: ${su}`;
       }).join(' + ')),
+      customLabel: p.customLabel || '',
 
       unitPrice: p.price,
       price2: (p.price2 !== undefined && p.price2 !== null) ? p.price2 : null
@@ -122,7 +123,7 @@ exports.get = async (req, res) => {
 
     // Build human-friendly labels for each price
     prices.forEach(p => {
-      p.selectionLabel = (p.selections || []).map(s => {
+      p.selectionLabel = (p.customLabel && String(p.customLabel).trim()) || (p.selections || []).map(s => {
         const unitName = s.unit && s.unit.name ? s.unit.name : String(s.unit);
         const subName = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
         return `${unitName}: ${subName}`;
@@ -303,7 +304,7 @@ exports.addComponent = async (req, res) => {
 exports.assignPrice = async (req, res) => {
   try {
     const serviceId = req.params.id;
-    let { selections, price, price2 } = req.body;
+    let { selections, price, price2, customLabel } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(serviceId)) return res.status(400).send('Invalid service id');
     if (!selections) return res.status(400).send('No selections provided');
@@ -323,6 +324,7 @@ exports.assignPrice = async (req, res) => {
     } else {
       price2 = null;
     }
+    customLabel = (customLabel || '').toString().trim();
 
     // Validate and normalize selections
     const normalized = [];
@@ -352,6 +354,7 @@ exports.assignPrice = async (req, res) => {
         key,
         price,
         price2,
+        customLabel,
         updatedAt: new Date()
       },
       $setOnInsert: { createdAt: new Date() }
@@ -369,7 +372,7 @@ exports.assignPrice = async (req, res) => {
       const subName = subDoc && subDoc.name ? subDoc.name : String(sel.subUnit);
       hydratedParts.push(`${unitName}: ${subName}`);
     }
-    const label = hydratedParts.join(' + ');
+    const label = customLabel || hydratedParts.join(' + ');
 
     // Redirect back with success query params (URL-encode label and price)
     const redirectUrl = `/admin/services/${serviceId}?assigned=1&price=${encodeURIComponent(String(price))}&label=${encodeURIComponent(label)}`;

@@ -564,7 +564,7 @@ const subtotal = Number(
 );
 
 // Build human-friendly selection label (append F/B suffix always when usedFB)
-const baseLabel = pr.selectionLabel || ((pr.selections || []).map(s => {
+const baseLabel = (pr.customLabel && String(pr.customLabel).trim()) || ((pr.selections || []).map(s => {
   const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
   const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
   return `${u}: ${su}`;

@@ -9,6 +9,8 @@ const ServicePriceSchema = new mongoose.Schema({
   service: { type: mongoose.Schema.Types.ObjectId, ref: 'service', required: true, index: true },
   selections: { type: [SelectionSchema], required: true },
   key: { type: String, required: true, index: true }, // stable key for exact-match lookups
+  // Optional short label for this rule (used in Jobs/cart/order views instead of long selection composition)
+  customLabel: { type: String, trim: true, default: '' },
   price: { type: Number, required: true, min: 0 },
 
   // Optional second price — used for "Front + Back" reduced pricing.

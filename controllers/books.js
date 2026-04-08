@@ -11,6 +11,7 @@ const { ObjectId } = mongoose.Types;
  */
 function buildSelectionLabelFromPrice(pr) {
   try {
+    if (pr.customLabel && String(pr.customLabel).trim()) return String(pr.customLabel).trim();
     if (pr.selectionLabel) return pr.selectionLabel;
     if (!pr.selections || !pr.selections.length) return '';
     return (pr.selections || []).map(s => {

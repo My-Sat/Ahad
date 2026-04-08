@@ -38,6 +38,10 @@ function initServiceDetailPage() {
               <label class="form-label" for="editPrice2Input">F/B Price (optional)</label>
               <input class="form-control form-control-dark" type="number" step="0.01" id="editPrice2Input" name="price2" />
             </div>
+            <div class="mb-3">
+              <label class="form-label" for="editCustomLabelInput">Optional Rule Name</label>
+              <input class="form-control form-control-dark" type="text" id="editCustomLabelInput" name="customLabel" placeholder="Short display name" />
+            </div>
             <div class="mb-2">
               <small class="text-muted" id="editSelectionLabel"></small>
             </div>
@@ -70,6 +74,7 @@ function initServiceDetailPage() {
         const priceId = document.getElementById('editPriceId')?.value;
         const newVal = document.getElementById('editPriceInput')?.value;
         const newP2 = document.getElementById('editPrice2Input')?.value;
+        const newCustomLabel = document.getElementById('editCustomLabelInput')?.value || '';
         if (!serviceId || !priceId) { alert('Missing service or price id'); return; }
         if (!newVal || isNaN(newVal) || Number(newVal) < 0) { document.getElementById('editPriceInput').classList.add('is-invalid'); return; }
 
@@ -79,6 +84,7 @@ function initServiceDetailPage() {
           body.append('price', String(Number(newVal)));
           if (newP2 !== undefined && newP2 !== null && String(newP2).trim() !== '') body.append('price2', String(Number(newP2)));
           else body.append('price2', '');
+          body.append('customLabel', String(newCustomLabel).trim());
 
           const res = await fetch(`/admin/services/${serviceId}/prices/${priceId}`, {
             method: 'PUT',
@@ -128,6 +134,7 @@ function initServiceDetailPage() {
       const idEl = document.getElementById('editPriceId'); if (idEl) idEl.value = ds.priceId || '';
       const pEl = document.getElementById('editPriceInput'); if (pEl) pEl.value = ds.price || '';
       const p2El = document.getElementById('editPrice2Input'); if (p2El) p2El.value = ds.price2 || '';
+      const cEl = document.getElementById('editCustomLabelInput'); if (cEl) cEl.value = ds.customLabel || '';
       const labelEl = document.getElementById('editSelectionLabel'); if (labelEl) labelEl.textContent = ds.selectionLabel || '';
       wireSaveHandlerOnce();
       try {
@@ -145,6 +152,7 @@ function initServiceDetailPage() {
   const assignSpinner = document.getElementById('assignSpinner');
   const priceInput = document.getElementById('priceInput');
   const price2Input = document.getElementById('price2Input');
+  const customLabelInput = document.getElementById('customLabelInput');
   const pricesSectionSelector = '#pricesSection';
 
   const serviceId = (function () {
@@ -353,10 +361,12 @@ function initServiceDetailPage() {
       const val = priceInput ? priceInput.value : '';
       if (!val || isNaN(val) || Number(val) < 0) { if (priceInput) priceInput.classList.add('is-invalid'); return; }
       const price2Val = price2Input && price2Input.value ? price2Input.value : '';
+      const customLabelVal = customLabelInput && customLabelInput.value ? customLabelInput.value : '';
       const payload = new URLSearchParams();
       payload.append('selections', JSON.stringify(selections));
       payload.append('price', String(Number(val)));
       if (price2Val !== '') payload.append('price2', String(Number(price2Val)));
+      payload.append('customLabel', String(customLabelVal).trim());
       try {
         setAssignLoading(true);
         const res = await fetch(assignForm.action, {
@@ -369,6 +379,7 @@ function initServiceDetailPage() {
           document.querySelectorAll('.unit-sub-checkbox:checked').forEach(cb => cb.checked = false);
           if (priceInput) priceInput.value = '';
           if (price2Input) price2Input.value = '';
+          if (customLabelInput) customLabelInput.value = '';
           showToast('Price rule assigned', 2500);
         } else {
           const ct = res.headers.get('content-type') || '';

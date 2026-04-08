@@ -15,13 +15,22 @@ exports.listForService = async (req, res) => {
       .populate('selections.unit selections.subUnit')
       .lean();
 
+    const shaped = (prices || []).map(p => ({
+      ...p,
+      selectionLabel: (p.customLabel && String(p.customLabel).trim()) || (p.selections || []).map(s => {
+        const u = (s.unit && s.unit.name) ? s.unit.name : String(s.unit || '');
+        const su = (s.subUnit && s.subUnit.name) ? s.subUnit.name : String(s.subUnit || '');
+        return `${u}: ${su}`;
+      }).join(' + ')
+    }));
+
     // If AJAX asked for JSON, return JSON
     if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
-      return res.json({ ok: true, prices });
+      return res.json({ ok: true, prices: shaped });
     }
 
     // Otherwise render the server-side view you used before
-    return res.render('prices/list', { prices, serviceId: req.params.id });
+    return res.render('prices/list', { prices: shaped, serviceId: req.params.id });
   } catch (err) {
     console.error('price.listForService error', err);
     if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
@@ -39,7 +48,7 @@ exports.listForService = async (req, res) => {
 exports.createPrice = async (req, res) => {
   try {
     const serviceId = req.params.id;
-    let { selections, price, price2 } = req.body;
+    let { selections, price, price2, customLabel } = req.body;
 
     // if selections sent as JSON string, parse it
     if (typeof selections === 'string') {
@@ -65,6 +74,7 @@ exports.createPrice = async (req, res) => {
     } else {
       price2 = null;
     }
+    customLabel = (customLabel || '').toString().trim();
 
     // validate each selection: unit/subUnit exist and belong together, and (optionally) belong to service component
     for (const s of selections) {
@@ -94,7 +104,7 @@ exports.createPrice = async (req, res) => {
     }
 
     // Create the ServicePrice doc (include price2)
-    const sp = new ServicePrice({ service: serviceId, selections, price, price2 });
+    const sp = new ServicePrice({ service: serviceId, selections, price, price2, customLabel });
     await sp.save();
 
     // populate selections for client convenience
@@ -153,7 +163,7 @@ exports.removePrice = async (req, res) => {
 exports.updatePrice = async (req, res) => {
   try {
     const { id: serviceId, priceId } = req.params;
-    let { price, price2 } = req.body;
+    let { price, price2, customLabel } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(serviceId) || !mongoose.Types.ObjectId.isValid(priceId)) {
       if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
@@ -182,10 +192,11 @@ exports.updatePrice = async (req, res) => {
     } else {
       price2 = null;
     }
+    customLabel = (customLabel || '').toString().trim();
 
     const doc = await ServicePrice.findOneAndUpdate(
       { _id: priceId, service: serviceId },
-      { $set: { price, price2, updatedAt: new Date() } },
+      { $set: { price, price2, customLabel, updatedAt: new Date() } },
       { new: true }
     ).lean();
 
