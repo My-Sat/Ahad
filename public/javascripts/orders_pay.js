@@ -1518,7 +1518,13 @@ html += `
 
 html += `
   <tr class="debtor-group-end ${groupId}" style="display:none;">
-    <td colspan="6"><div class="my-1 border-bottom border-secondary-subtle"></div></td>
+    <td colspan="6">
+      <div class="d-flex align-items-center gap-2 py-2">
+        <div class="flex-grow-1 border-top border-secondary-subtle"></div>
+        <small class="text-muted-light text-uppercase" style="letter-spacing:.06em;">End of ${escapeHtml(debtorName)}</small>
+        <div class="flex-grow-1 border-top border-secondary-subtle"></div>
+      </div>
+    </td>
   </tr>
 `;
 
