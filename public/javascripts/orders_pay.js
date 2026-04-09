@@ -2145,34 +2145,104 @@ function renderOrdersList(orders) {
 
   tbody.innerHTML = '';
 
-  orders.forEach(o => {
-    const oid = escapeHtml(o.orderId || o._id || '');
-    const name = escapeHtml(o.name || 'Walk-in');
-    const jobNote = escapeHtml(o.jobNote || '-');
-    const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : '';
+  const grouped = {};
+  (orders || []).forEach(o => {
+    const key = String(o && o.name ? o.name : 'Walk-in');
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(o);
+  });
 
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
+  let groupIndex = 0;
+  Object.entries(grouped).forEach(([nameRaw, items]) => {
+    // single order: keep normal row behavior
+    if (!items || items.length <= 1) {
+      const o = items[0];
+      const oid = escapeHtml(o.orderId || o._id || '');
+      const name = escapeHtml(o.name || 'Walk-in');
+      const jobNote = escapeHtml(o.jobNote || '-');
+      const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : '';
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          <a href="/orders/view/${encodeURIComponent(o.orderId || o._id || '')}"
+             class="orders-explorer-link"
+             title="Order ID: ${oid}">
+            ${name}
+          </a>
+        </td>
+        <td>${jobNote}</td>
+        <td class="text-end">GH₵ ${Number(o.total || 0).toFixed(2)}</td>
+        <td>${escapeHtml(o.status || '')}</td>
+        <td>${escapeHtml(created)}</td>
+        <td class="text-center">
+          <button
+            class="btn btn-sm btn-primary orders-explorer-view-btn"
+            data-order-id="${oid}">
+            View
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+      return;
+    }
+
+    const groupId = `orders-group-${groupIndex++}`;
+    const safeName = escapeHtml(nameRaw || 'Walk-in');
+    const groupTotal = items.reduce((s, it) => s + Number(it.total || 0), 0);
+    const latestCreated = items
+      .map(it => it && it.createdAt ? new Date(it.createdAt) : null)
+      .filter(d => d && !isNaN(d.getTime()))
+      .sort((a, b) => b - a)[0];
+
+    const groupTr = document.createElement('tr');
+    groupTr.className = 'table-active orders-group-toggle';
+    groupTr.setAttribute('data-target', groupId);
+    groupTr.setAttribute('aria-expanded', 'false');
+    groupTr.style.cursor = 'pointer';
+    groupTr.innerHTML = `
       <td>
-        <a href="/orders/view/${encodeURIComponent(o.orderId || o._id || '')}"
-           class="orders-explorer-link"
-           title="Order ID: ${oid}">
-          ${name}
-        </a>
+        <span class="me-2 orders-group-toggle-icon"><i class="bi bi-chevron-right"></i></span>
+        <strong>${safeName}</strong>
+        <span class="text-muted ms-2">(${items.length} orders)</span>
       </td>
-      <td>${jobNote}</td>
-      <td class="text-end">GH₵ ${Number(o.total || 0).toFixed(2)}</td>
-      <td>${escapeHtml(o.status || '')}</td>
-      <td>${escapeHtml(created)}</td>
-      <td class="text-center">
-        <button
-          class="btn btn-sm btn-primary orders-explorer-view-btn"
-          data-order-id="${oid}">
-          View
-        </button>
-      </td>
+      <td><span class="text-muted">-</span></td>
+      <td class="text-end">GH₵ ${groupTotal.toFixed(2)}</td>
+      <td>Grouped</td>
+      <td>${latestCreated ? escapeHtml(formatDateTimeForDisplay(latestCreated.toISOString())) : '-'}</td>
+      <td class="text-center"><span class="text-muted">Expand</span></td>
     `;
-    tbody.appendChild(tr);
+    tbody.appendChild(groupTr);
+
+    items.forEach(o => {
+      const oid = escapeHtml(o.orderId || o._id || '');
+      const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : '';
+      const jobNote = escapeHtml(o.jobNote || '-');
+      const childTr = document.createElement('tr');
+      childTr.className = `orders-group-row ${groupId}`;
+      childTr.style.display = 'none';
+      childTr.innerHTML = `
+        <td>
+          <a href="/orders/view/${encodeURIComponent(o.orderId || o._id || '')}"
+             class="orders-explorer-link"
+             title="Order ID: ${oid}">
+            ${safeName}
+          </a>
+        </td>
+        <td>${jobNote}</td>
+        <td class="text-end">GH₵ ${Number(o.total || 0).toFixed(2)}</td>
+        <td>${escapeHtml(o.status || '')}</td>
+        <td>${escapeHtml(created)}</td>
+        <td class="text-center">
+          <button
+            class="btn btn-sm btn-primary orders-explorer-view-btn"
+            data-order-id="${oid}">
+            View
+          </button>
+        </td>
+      `;
+      tbody.appendChild(childTr);
+    });
   });
 
   if (countEl) {
@@ -2224,6 +2294,21 @@ function renderOrdersList(orders) {
 
     // delegate clicks inside table: anchor -> native navigation; view button -> navigate programmatically
     table.addEventListener('click', function (ev) {
+      const toggleRow = ev.target.closest('.orders-group-toggle');
+      if (toggleRow) {
+        const target = toggleRow.dataset.target;
+        const expanded = toggleRow.getAttribute('aria-expanded') === 'true';
+        const rows = table.querySelectorAll(`.${target}`);
+        rows.forEach(r => { r.style.display = expanded ? 'none' : ''; });
+        toggleRow.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+        const icon = toggleRow.querySelector('.orders-group-toggle-icon');
+        if (icon) {
+          icon.innerHTML = expanded
+            ? '<i class="bi bi-chevron-right"></i>'
+            : '<i class="bi bi-chevron-down"></i>';
+        }
+        return;
+      }
       const a = ev.target.closest('.orders-explorer-link');
       if (a) {
         // let native navigation happen

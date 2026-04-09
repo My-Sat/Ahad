@@ -1714,41 +1714,114 @@ function renderOrdersList(orders) {
 
   tbody.innerHTML = '';
 
-  orders.forEach(o => {
-    const orderId = o.orderId || o._id || '';
-    const safeOrderId = escapeHtml(orderId);
-    const name = escapeHtml(o.name || 'Walk-in');
-    const jobNote = escapeHtml(o.jobNote || '-');
-    const viewHref = '/orders/view/' + encodeURIComponent(orderId);
-    const created = o.createdAt
-      ? formatDateTimeForDisplay(o.createdAt)
-      : (o.createdAt || '');
+  const grouped = {};
+  (orders || []).forEach(o => {
+    const key = String(o && o.name ? o.name : 'Walk-in');
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(o);
+  });
 
-    const tr = document.createElement('tr');
-    tr.dataset.orderId = orderId;
+  let groupIndex = 0;
+  Object.entries(grouped).forEach(([nameRaw, items]) => {
+    if (!items || items.length <= 1) {
+      const o = items[0];
+      const orderId = o.orderId || o._id || '';
+      const safeOrderId = escapeHtml(orderId);
+      const name = escapeHtml(o.name || 'Walk-in');
+      const jobNote = escapeHtml(o.jobNote || '-');
+      const viewHref = '/orders/view/' + encodeURIComponent(orderId);
+      const created = o.createdAt
+        ? formatDateTimeForDisplay(o.createdAt)
+        : (o.createdAt || '');
 
-    tr.innerHTML = `
+      const tr = document.createElement('tr');
+      tr.dataset.orderId = orderId;
+      tr.innerHTML = `
+        <td>
+          <a href="${viewHref}"
+             class="orders-explorer-open-order"
+             title="Order ID: ${safeOrderId}">
+            ${name}
+          </a>
+        </td>
+        <td>${jobNote}</td>
+        <td class="text-end">GH₵ ${formatMoney(o.total)}</td>
+        <td>${escapeHtml(o.status || '')}</td>
+        <td>${escapeHtml(created)}</td>
+        <td class="text-center">
+          <button
+            class="btn btn-sm btn-outline-secondary view-order-btn"
+            data-order-id="${safeOrderId}">
+            View
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+      return;
+    }
+
+    const groupId = `orders-group-${groupIndex++}`;
+    const safeName = escapeHtml(nameRaw || 'Walk-in');
+    const groupTotal = items.reduce((s, it) => s + Number(it.total || 0), 0);
+    const latestCreated = items
+      .map(it => it && it.createdAt ? new Date(it.createdAt) : null)
+      .filter(d => d && !isNaN(d.getTime()))
+      .sort((a, b) => b - a)[0];
+
+    const groupTr = document.createElement('tr');
+    groupTr.className = 'table-active orders-group-toggle';
+    groupTr.setAttribute('data-target', groupId);
+    groupTr.setAttribute('aria-expanded', 'false');
+    groupTr.style.cursor = 'pointer';
+    groupTr.innerHTML = `
       <td>
-        <a href="${viewHref}"
-           class="orders-explorer-open-order"
-           title="Order ID: ${safeOrderId}">
-          ${name}
-        </a>
+        <span class="me-2 orders-group-toggle-icon"><i class="bi bi-chevron-right"></i></span>
+        <strong>${safeName}</strong>
+        <span class="text-muted ms-2">(${items.length} orders)</span>
       </td>
-      <td>${jobNote}</td>
-      <td class="text-end">GH₵ ${formatMoney(o.total)}</td>
-      <td>${escapeHtml(o.status || '')}</td>
-      <td>${escapeHtml(created)}</td>
-      <td class="text-center">
-        <button
-          class="btn btn-sm btn-outline-secondary view-order-btn"
-          data-order-id="${safeOrderId}">
-          View
-        </button>
-      </td>
+      <td><span class="text-muted">-</span></td>
+      <td class="text-end">GH₵ ${formatMoney(groupTotal)}</td>
+      <td>Grouped</td>
+      <td>${latestCreated ? escapeHtml(formatDateTimeForDisplay(latestCreated.toISOString())) : '-'}</td>
+      <td class="text-center"><span class="text-muted">Expand</span></td>
     `;
+    tbody.appendChild(groupTr);
 
-    tbody.appendChild(tr);
+    items.forEach(o => {
+      const orderId = o.orderId || o._id || '';
+      const safeOrderId = escapeHtml(orderId);
+      const jobNote = escapeHtml(o.jobNote || '-');
+      const viewHref = '/orders/view/' + encodeURIComponent(orderId);
+      const created = o.createdAt
+        ? formatDateTimeForDisplay(o.createdAt)
+        : (o.createdAt || '');
+
+      const tr = document.createElement('tr');
+      tr.className = `orders-group-row ${groupId}`;
+      tr.style.display = 'none';
+      tr.dataset.orderId = orderId;
+      tr.innerHTML = `
+        <td>
+          <a href="${viewHref}"
+             class="orders-explorer-open-order"
+             title="Order ID: ${safeOrderId}">
+            ${safeName}
+          </a>
+        </td>
+        <td>${jobNote}</td>
+        <td class="text-end">GH₵ ${formatMoney(o.total)}</td>
+        <td>${escapeHtml(o.status || '')}</td>
+        <td>${escapeHtml(created)}</td>
+        <td class="text-center">
+          <button
+            class="btn btn-sm btn-outline-secondary view-order-btn"
+            data-order-id="${safeOrderId}">
+            View
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
   });
 
   if (ordersCountEl) {
@@ -1837,6 +1910,21 @@ function renderOrdersList(orders) {
   // Orders table click delegation (view button)
   if (ordersTable) {
     ordersTable.addEventListener('click', function (ev) {
+      const toggleRow = ev.target.closest('.orders-group-toggle');
+      if (toggleRow) {
+        const target = toggleRow.dataset.target;
+        const expanded = toggleRow.getAttribute('aria-expanded') === 'true';
+        const rows = ordersTable.querySelectorAll(`.${target}`);
+        rows.forEach(r => { r.style.display = expanded ? 'none' : ''; });
+        toggleRow.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+        const icon = toggleRow.querySelector('.orders-group-toggle-icon');
+        if (icon) {
+          icon.innerHTML = expanded
+            ? '<i class="bi bi-chevron-right"></i>'
+            : '<i class="bi bi-chevron-down"></i>';
+        }
+        return;
+      }
       const a = ev.target.closest('.orders-explorer-open-order');
       if (a) return; // allow native navigation
       const vbtn = ev.target.closest('.view-order-btn');
