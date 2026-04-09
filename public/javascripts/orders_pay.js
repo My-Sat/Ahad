@@ -1483,8 +1483,6 @@ const totalOutstanding = items.reduce(
   (s, i) => s + Number(i.outstanding || (i.amountDue - i.paidSoFar || 0)),
   0
 );
-const noteSet = Array.from(new Set(items.map(i => String(i.jobNote || '').trim()).filter(Boolean)));
-const groupNote = noteSet.length === 1 ? noteSet[0] : (noteSet.length > 1 ? 'Multiple notes' : '');
 const accountCustomerId = (items.find(i => i.customerId) || {}).customerId || '';
 const accountUrl = accountCustomerId ? `/customers/${encodeURIComponent(accountCustomerId)}/account` : '';
 
@@ -1499,7 +1497,7 @@ html += `
       <strong>${escapeHtml(debtorName)}</strong>
       <span class="text-muted ms-2">(${items.length} orders)</span>
     </td>
-    <td>${groupNote ? escapeHtml(groupNote) : '<span class="text-muted">-</span>'}</td>
+    <td><span class="text-muted">-</span></td>
     <td class="text-end">GH₵ ${totalDue.toFixed(2)}</td>
     <td class="text-end">GH₵ ${totalPaid.toFixed(2)}</td>
     <td class="text-end fw-semibold">GH₵ ${totalOutstanding.toFixed(2)}</td>
