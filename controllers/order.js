@@ -782,6 +782,8 @@ try {
   const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
   if (isAdmin && req.body && req.body.manualDiscount && typeof req.body.manualDiscount === 'object') {
     const md = req.body.manualDiscount;
+    const kindRaw = String(md.kind || 'discount').trim().toLowerCase();
+    const kind = (kindRaw === 'premium') ? 'premium' : 'discount';
     const mode = String(md.mode || '').trim();
     const value = Number(md.value);
 
@@ -789,7 +791,7 @@ try {
       if (mode === 'percent' && value > 100) {
         // ignore invalid percent
       } else {
-        manual = { mode, value: Number(value) };
+        manual = { kind, mode, value: Number(value) };
       }
     }
   }
@@ -801,17 +803,19 @@ let discountAmount = 0;
 let discountBreakdown = null;
 
 if (manual) {
-  // compute manual discount
-  discountAmount = computeDiscountAmount(baseTotal, manual);
-  discountAmount = Number(Math.min(baseTotal, Math.max(0, discountAmount)).toFixed(2));
+  // compute manual discount/premium adjustment
+  const unsignedAmount = Number(Math.min(baseTotal, Math.max(0, computeDiscountAmount(baseTotal, manual))).toFixed(2));
+  const signedAmount = manual.kind === 'premium' ? -unsignedAmount : unsignedAmount;
+  discountAmount = signedAmount;
 
-  if (discountAmount > 0) {
+  if (unsignedAmount > 0) {
     discountBreakdown = {
       scope: 'manual',
+      kind: manual.kind,
       mode: manual.mode,
       value: manual.value,
-      computed: discountAmount,
-      label: 'Manual discount'
+      computed: unsignedAmount,
+      label: manual.kind === 'premium' ? 'Manual premium' : 'Manual discount'
     };
   }
 } else {
@@ -858,6 +862,7 @@ if (manual) {
     discountAmount = Number(best.amount || 0);
     discountBreakdown = {
       scope: best.rule.scope,
+      kind: 'discount',
       mode: best.rule.mode,
       value: best.rule.value,
       computed: discountAmount,
@@ -866,7 +871,7 @@ if (manual) {
   }
 }
 
-// Apply discount
+// Apply discount/premium adjustment
 const finalTotal = Number(Math.max(0, baseTotal - Number(discountAmount || 0)).toFixed(2));
 
 // store snapshot on the order doc before saving
@@ -1425,20 +1430,22 @@ exports.apiApplyManualDiscount = async (req, res) => {
     const order = await Order.findOne({ orderId });
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    const hasDiscount = Number(order.discountAmount || 0) > 0;
-    if (hasDiscount) return res.status(400).json({ error: 'Order already has a discount applied' });
+    const hasAdjustment = Math.abs(Number(order.discountAmount || 0)) > 0;
+    if (hasAdjustment) return res.status(400).json({ error: 'Order already has an adjustment applied' });
 
+    const kindRaw = String(req.body?.kind || 'discount').toLowerCase();
+    const kind = (kindRaw === 'premium') ? 'premium' : 'discount';
     const mode = String(req.body?.mode || '').toLowerCase();
     const value = Number(req.body?.value || 0);
 
     if (!['amount', 'percent'].includes(mode)) {
-      return res.status(400).json({ error: 'Invalid discount mode' });
+      return res.status(400).json({ error: 'Invalid adjustment mode' });
     }
     if (!isFinite(value) || value <= 0) {
-      return res.status(400).json({ error: 'Invalid discount value' });
+      return res.status(400).json({ error: 'Invalid adjustment value' });
     }
     if (mode === 'percent' && value > 100) {
-      return res.status(400).json({ error: 'Percentage discount cannot exceed 100%' });
+      return res.status(400).json({ error: 'Percentage adjustment cannot exceed 100%' });
     }
 
     const baseTotal =
@@ -1450,15 +1457,16 @@ exports.apiApplyManualDiscount = async (req, res) => {
       return res.status(400).json({ error: 'Invalid order total' });
     }
 
-    const discountAmount = computeDiscountAmount(baseTotal, { mode, value });
-    if (!isFinite(discountAmount) || discountAmount <= 0) {
-      return res.status(400).json({ error: 'Discount amount must be greater than zero' });
+    const unsignedAmount = computeDiscountAmount(baseTotal, { mode, value });
+    if (!isFinite(unsignedAmount) || unsignedAmount <= 0) {
+      return res.status(400).json({ error: 'Adjustment amount must be greater than zero' });
     }
+    const discountAmount = Number((kind === 'premium' ? -unsignedAmount : unsignedAmount).toFixed(2));
 
     const paidSoFar = (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
     const newTotal = Number(Math.max(0, baseTotal - discountAmount).toFixed(2));
 
-    if (newTotal < paidSoFar) {
+    if (kind === 'discount' && newTotal < paidSoFar) {
       return res.status(400).json({ error: 'Discount exceeds remaining balance' });
     }
 
@@ -1466,10 +1474,11 @@ exports.apiApplyManualDiscount = async (req, res) => {
     order.discountAmount = Number(discountAmount.toFixed(2));
     order.discountBreakdown = {
       scope: 'manual',
+      kind,
       mode,
       value,
-      computed: Number(discountAmount.toFixed(2)),
-      label: 'Manual discount'
+      computed: Number(unsignedAmount.toFixed(2)),
+      label: kind === 'premium' ? 'Manual premium' : 'Manual discount'
     };
     order.total = newTotal;
 

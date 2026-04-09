@@ -109,7 +109,8 @@ block content
               p.text-muted-light No items listed.
 
             // Totals + payments summary (DISCOUNT INCLUDED)
-            - var hasDiscount = Number(order.discountAmount || 0) > 0
+            - var hasAdjustment = Math.abs(Number(order.discountAmount || 0)) > 0
+            - var isPremiumAdj = Number(order.discountAmount || 0) < 0
             - var totalBeforeDiscount = 0
             - if (typeof order.totalBeforeDiscount !== 'undefined' && order.totalBeforeDiscount !== null) {
             -   totalBeforeDiscount = Number(order.totalBeforeDiscount || 0)
@@ -119,7 +120,7 @@ block content
             - var db = (order.discountBreakdown && typeof order.discountBreakdown === 'object') ? order.discountBreakdown : {}
             - var scope = String(db.scope || '').trim()
             - var discountApplied = ''
-            - if (hasDiscount) {
+            - if (hasAdjustment) {
             -   if (db.appliedLabel) discountApplied = String(db.appliedLabel)
             -   else if (db.appliedName) discountApplied = String(db.appliedName)
             -   else if (scope === 'customer_type') {
@@ -148,16 +149,16 @@ block content
             - }
 
             .d-flex.justify-content-end.mb-2
-              if hasDiscount
+              if hasAdjustment
                 .me-3
-                  div.text-white Discount Applied:
-                  strong #{discountApplied || 'Discount'}
+                  div.text-white #{isPremiumAdj ? 'Premium Applied:' : 'Discount Applied:'}
+                  strong #{discountApplied || (isPremiumAdj ? 'Premium' : 'Discount')}
                 .me-3
-                  div.text-white Total before discount:
+                  div.text-white Total before adjustment:
                   strong GH₵ #{Number(totalBeforeDiscount || 0).toFixed(2)}
                 .me-3
-                  div.text-white Discount:
-                  strong.text-white - GH₵ #{Number(order.discountAmount || 0).toFixed(2)}
+                  div.text-white #{isPremiumAdj ? 'Premium:' : 'Discount:'}
+                  strong.text-white #{isPremiumAdj ? '+ GH₵ ' : '- GH₵ '}#{Math.abs(Number(order.discountAmount || 0)).toFixed(2)}
 
               .me-3
                 div.text-white Total:

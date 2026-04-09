@@ -16,6 +16,7 @@ function initOrdersPay() {
   const orderInfo = document.getElementById('orderInfo');
   const payNowBtn = document.getElementById('payNowBtn');
   const payManualDiscountCard = document.getElementById('payManualDiscountCard');
+  const payManualAdjustmentType = document.getElementById('payManualAdjustmentType');
   const payManualDiscountMode = document.getElementById('payManualDiscountMode');
   const payManualDiscountValue = document.getElementById('payManualDiscountValue');
   const applyManualDiscountBtn = document.getElementById('applyManualDiscountBtn');
@@ -130,6 +131,16 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
     return `GH\u20B5 ${fmt(n)}`;
   }
 
+  function getPayManualAdjustmentKind() {
+    const v = payManualAdjustmentType ? String(payManualAdjustmentType.value || 'discount').toLowerCase() : 'discount';
+    return v === 'premium' ? 'premium' : 'discount';
+  }
+
+  function refreshPayManualAdjustmentButton() {
+    if (!applyManualDiscountBtn) return;
+    applyManualDiscountBtn.textContent = getPayManualAdjustmentKind() === 'premium' ? 'Apply Premium' : 'Apply Discount';
+  }
+
   function categoryLabel(category) {
     const c = String(category || '').toLowerCase();
     if (c === 'regular') return 'Regular';
@@ -190,7 +201,9 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
     if (!show) {
       if (payManualDiscountValue) payManualDiscountValue.value = '';
       if (payManualDiscountMode) payManualDiscountMode.value = 'amount';
+      if (payManualAdjustmentType) payManualAdjustmentType.value = 'discount';
     }
+    refreshPayManualAdjustmentButton();
   }
 
   function isoDate(d) {
@@ -669,32 +682,35 @@ function discountAppliedLabel(order) {
     }
     // ------------------------------------------------------------
 
-    const hasDiscount = Number(order.discountAmount || 0) > 0;
-    currentHasDiscount = hasDiscount;
-    const showManualDiscount = isAdminUser && !hasDiscount && order.status !== 'paid';
+    const rawAdjustment = Number(order.discountAmount || 0);
+    const hasAdjustment = Math.abs(rawAdjustment) > 0;
+    currentHasDiscount = hasAdjustment;
+    const showManualDiscount = isAdminUser && !hasAdjustment && order.status !== 'paid';
     setPayManualDiscountVisibility(showManualDiscount);
 
     let discountHtml = '';
-    if (hasDiscount) {
+    if (hasAdjustment) {
+      const isPremium = rawAdjustment < 0;
+      const adjustmentAmount = Math.abs(rawAdjustment);
       const before = (typeof order.totalBeforeDiscount !== 'undefined' && order.totalBeforeDiscount !== null)
         ? Number(order.totalBeforeDiscount)
-        : Number(order.total || 0) + Number(order.discountAmount || 0);
+        : Number(order.total || 0) + Number(rawAdjustment || 0);
 
       const applied = discountAppliedLabel(order);
 
       discountHtml = `
     <div class="mt-2">
       <p class="text-end mb-1">
-        <span class="text-muted">Discount Applied:</span>
-        <strong>${escapeHtml(applied || 'Discount')}</strong>
+        <span class="text-muted">${isPremium ? 'Premium Applied:' : 'Discount Applied:'}</span>
+        <strong>${escapeHtml(applied || (isPremium ? 'Premium' : 'Discount'))}</strong>
       </p>
       <p class="text-end mb-1">
-        <span class="text-muted">Total before discount:</span>
+        <span class="text-muted">Total before adjustment:</span>
         <strong>GH₵ ${fmt(before)}</strong>
       </p>
       <p class="text-end mb-1">
-        <span class="text-muted">Discount:</span>
-        <strong class="text-white">- GH₵ ${fmt(order.discountAmount)}</strong>
+        <span class="text-muted">${isPremium ? 'Premium:' : 'Discount:'}</span>
+        <strong class="text-white">${isPremium ? '+ GH₵' : '- GH₵'} ${fmt(adjustmentAmount)}</strong>
       </p>
     </div>
   `;
@@ -760,7 +776,7 @@ function discountAppliedLabel(order) {
     }
   }
 
-  async function applyManualDiscountToOrder(orderId, mode, value) {
+  async function applyManualDiscountToOrder(orderId, kind, mode, value) {
     try {
       const res = await fetch(`/orders/${encodeURIComponent(orderId)}/discount`, {
         method: 'POST',
@@ -768,21 +784,24 @@ function discountAppliedLabel(order) {
           'Content-Type': 'application/json',
           'X-Requested-With': 'XMLHttpRequest'
         },
-        body: JSON.stringify({ mode, value })
+        body: JSON.stringify({ kind, mode, value })
       });
 
       const j = await res.json().catch(() => null);
       if (!res.ok) {
-        const msg = (j && j.error) ? j.error : 'Failed to apply discount';
-        showAlertModal(msg, 'Discount error');
+        const msg = (j && j.error) ? j.error : `Failed to apply ${kind === 'premium' ? 'premium' : 'discount'}`;
+        showAlertModal(msg, kind === 'premium' ? 'Premium error' : 'Discount error');
         return;
       }
 
-      showAlertModal('Manual discount applied.', 'Discount');
+      showAlertModal(
+        `Manual ${kind === 'premium' ? 'premium' : 'discount'} applied.`,
+        kind === 'premium' ? 'Premium' : 'Discount'
+      );
       await fetchOrderById(orderId);
     } catch (err) {
       console.error('applyManualDiscountToOrder err', err);
-      showAlertModal('Network error while applying discount', 'Network error');
+      showAlertModal(`Network error while applying ${kind === 'premium' ? 'premium' : 'discount'}`, 'Network error');
     }
   }
 
@@ -1993,12 +2012,13 @@ if (dailyOrdersSelect) {
   if (applyManualDiscountBtn) {
     applyManualDiscountBtn.addEventListener('click', async function () {
       if (!isAdminUser) return;
+      const kind = getPayManualAdjustmentKind();
       if (!currentOrderId) {
-        showAlertModal('Fetch an order before applying discount.', 'Missing order');
+        showAlertModal(`Fetch an order before applying ${kind === 'premium' ? 'premium' : 'discount'}.`, 'Missing order');
         return;
       }
       if (currentHasDiscount) {
-        showAlertModal('This order already has a discount applied.', 'Discount');
+        showAlertModal('This order already has an adjustment applied.', kind === 'premium' ? 'Premium' : 'Discount');
         return;
       }
 
@@ -2007,11 +2027,11 @@ if (dailyOrdersSelect) {
       const value = Number(raw);
 
       if (!isFinite(value) || value <= 0) {
-        showAlertModal('Enter a valid discount value (> 0).', 'Discount');
+        showAlertModal(`Enter a valid ${kind === 'premium' ? 'premium' : 'discount'} value (> 0).`, kind === 'premium' ? 'Premium' : 'Discount');
         return;
       }
       if (mode === 'percent' && value > 100) {
-        showAlertModal('Percentage discount cannot exceed 100%.', 'Discount');
+        showAlertModal(`Percentage ${kind === 'premium' ? 'premium' : 'discount'} cannot exceed 100%.`, kind === 'premium' ? 'Premium' : 'Discount');
         return;
       }
 
@@ -2019,13 +2039,18 @@ if (dailyOrdersSelect) {
       const originalText = applyManualDiscountBtn.textContent;
       applyManualDiscountBtn.textContent = 'Applying...';
       try {
-        await applyManualDiscountToOrder(currentOrderId, mode, value);
+        await applyManualDiscountToOrder(currentOrderId, kind, mode, value);
       } finally {
         applyManualDiscountBtn.disabled = false;
         applyManualDiscountBtn.textContent = originalText;
       }
     });
   }
+
+  if (payManualAdjustmentType) {
+    payManualAdjustmentType.addEventListener('change', refreshPayManualAdjustmentButton);
+  }
+  refreshPayManualAdjustmentButton();
 
   // at the end of orders_pay.js (after initial render)
 (function prefillFromQuery() {

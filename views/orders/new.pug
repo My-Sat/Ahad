@@ -119,7 +119,7 @@ block content
 
                 // ADMIN-ONLY: Manual discount (per order, not saved)
                 if currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin'
-                  span.badge.bg-info Manual discount
+                  span.badge.bg-info Manual adjustment
 
               // ADMIN-ONLY: manual discount UI (applies AFTER items are in cart)
               // NOTE: This block now contains ONLY the inputs/buttons.
@@ -129,19 +129,24 @@ block content
                   .card-body.dark-card-body.py-2
                     .row.g-2.align-items-end
                       .col-12.col-md-3
-                        label.form-label.mb-1(for='manualDiscountMode') Discount mode
+                        label.form-label.mb-1(for='manualAdjustmentType') Adjustment
+                        select.form-select.form-select-sm.form-select-dark#manualAdjustmentType
+                          option(value='discount' selected) Discount
+                          option(value='premium') Premium
+                      .col-12.col-md-3
+                        label.form-label.mb-1(for='manualDiscountMode') Mode
                         select.form-select.form-select-sm.form-select-dark#manualDiscountMode
                           option(value='amount') Amount (GH₵)
                           option(value='percent') Percent (%)
                       .col-12.col-md-3
                         label.form-label.mb-1(for='manualDiscountValue') Value
                         input.form-control.form-control-sm.form-control-dark#manualDiscountValue(type='number', min='0', step='0.01', placeholder='e.g. 5 or 10')
-                      .col-12.col-md-6.d-flex.gap-2.justify-content-end
+                      .col-12.col-md-3.d-flex.gap-2.justify-content-end
                         button.btn.btn-sm.btn-outline-light-custom#applyManualDiscountBtn(type='button') Apply Discount
                         button.btn.btn-sm.btn-outline-light-custom#clearManualDiscountBtn(type='button', style='display:none;') Clear
 
                     p.text-muted-light.small.mt-2.mb-0
-                      | This discount applies only to this order and will not be saved. You must re-apply it for each order when needed.
+                      | This adjustment applies only to this order and will not be saved. You must re-apply it for each order when needed.
 
               .table-responsive
                 table.table.table-sm.table-borderless#cartTable
@@ -168,7 +173,7 @@ block content
                         strong#manualDiscountTotalBefore.text-white GH₵ 0.00
                     .d-flex.justify-content-end
                       .text-end
-                        div.small.text-muted-light Discount:
+                        div.small.text-muted-light#manualDiscountAmountLabel Discount:
                         strong#manualDiscountAmount.text-white - GH₵ 0.00
                 .d-flex.justify-content-end.mt-2
 

@@ -98,14 +98,19 @@ block content
                       .card-body.dark-card-body.py-2
                         .row.g-2.align-items-end
                           .col-12.col-md-3
-                            label.form-label.mb-1(for='payManualDiscountMode') Discount mode
+                            label.form-label.mb-1(for='payManualAdjustmentType') Adjustment
+                            select.form-select.form-select-sm.form-select-dark#payManualAdjustmentType
+                              option(value='discount' selected) Discount
+                              option(value='premium') Premium
+                          .col-12.col-md-3
+                            label.form-label.mb-1(for='payManualDiscountMode') Mode
                             select.form-select.form-select-sm.form-select-dark#payManualDiscountMode
                               option(value='amount') Amount (GH₵)
                               option(value='percent') Percent (%)
                           .col-12.col-md-3
                             label.form-label.mb-1(for='payManualDiscountValue') Value
                             input.form-control.form-control-sm.form-control-dark#payManualDiscountValue(type='number', min='0', step='0.01', placeholder='e.g. 5 or 10')
-                          .col-12.col-md-6.d-flex.gap-2.justify-content-end
+                          .col-12.col-md-3.d-flex.gap-2.justify-content-end
                             button.btn.btn-sm.btn-outline-light-custom#applyManualDiscountBtn(type='button') Apply Discount
 
                   // Payment method selector
