@@ -658,6 +658,18 @@ function renderPrices(bookMode = false) {
     label.innerHTML = `<strong class="d-inline-block text-truncate" style="max-width:420px;">${escapeHtml(subOnly)}</strong>`;
     left.appendChild(label);
 
+    const hasBackPrice = (p.price2 !== null && p.price2 !== undefined && !isNaN(Number(p.price2)));
+    const frontPrice = Number(p.unitPrice || 0);
+    const backPrice = hasBackPrice ? Number(p.price2) : null;
+    const priceLine = document.createElement('div');
+    priceLine.className = 'small text-muted-light mt-1';
+    if (hasBackPrice) {
+      priceLine.innerHTML = `Front: <strong class="text-white">GH₵ ${formatMoney(frontPrice)}</strong> <span class="mx-1">|</span> F/B: <strong class="text-white">GH₵ ${formatMoney(backPrice)}</strong>`;
+    } else {
+      priceLine.innerHTML = `Price: <strong class="text-white">GH₵ ${formatMoney(frontPrice)}</strong>`;
+    }
+    left.appendChild(priceLine);
+
     // middle: qty input, FB checkbox (only if printer required), optional printer + spoiled inputs
     const mid = document.createElement('div');
     mid.className = 'd-flex align-items-center gap-2 flex-nowrap';
