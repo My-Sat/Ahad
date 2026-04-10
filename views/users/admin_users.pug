@@ -81,6 +81,7 @@ block content
               select.form-select.form-select-dark(name='role' required)
                 option(value='clerk' selected) Clerk
                 option(value='cashier') Cashier
+                option(value='secretary') Secretary
                 option(value='admin') Admin
 
             .mb-3
@@ -160,6 +161,10 @@ block content
             .form-check
               input.form-check-input(type='checkbox' id='perm_orders_debtors' value='/orders/debtors' name='permissions')
               label.form-check-label(for='perm_orders_debtors') Debtors page
+
+            .form-check
+              input.form-check-input(type='checkbox' id='perm_registrations' value='/registrations' name='permissions')
+              label.form-check-label(for='perm_registrations') Registerations page
 
             .form-check
               input.form-check-input(type='checkbox' id='perm_admin_services' value='/admin/services' name='permissions')

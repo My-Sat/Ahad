@@ -1,6 +1,35 @@
 // controllers/users.js
 const User = require('../models/user');
 
+function defaultPermissionsForRole(role) {
+  const r = String(role || '').toLowerCase();
+  if (r === 'clerk') {
+    return [
+      '/orders/new',
+      '/orders/list',
+      '/orders/view/:orderId'
+    ];
+  }
+  if (r === 'cashier') {
+    return [
+      '/orders/pay',
+      '/orders/debtors',
+      '/orders/:orderId',
+      '/orders/:orderId/pay',
+      '/search'
+    ];
+  }
+  if (r === 'secretary') {
+    return [
+      '/registrations',
+      '/customers',
+      '/lookup',
+      '/search'
+    ];
+  }
+  return [];
+}
+
 // render users admin page
 exports.list = async function (req, res, next) {
   try {
@@ -22,28 +51,9 @@ exports.create = async function (req, res, next) {
       return res.status(400).send('Missing required fields');
     }
 
-// inside exports.create(...)
-let defaultPerms = [];
-const r = role.toLowerCase();
-
-if (r === 'clerk') {
-  defaultPerms = [
-    '/customers',               // customer registration/management
-    '/lookup',                  // API lookup
-    '/search',                  // API search/typeahead
-    '/orders/new',              // create new order
-    '/orders/list',             // list orders
-    '/orders/view/:orderId'     // view order details
-  ];
-} else if (r === 'cashier') {
-  defaultPerms = [
-    '/orders/pay',              // payments page
-    '/orders/debtors',         // debtors
-    '/orders/:orderId',        // fetch order by id at payment page
-    '/orders/:orderId/pay',    // pay a specific order
-    '/search'                  // API search/typeahead
-  ];
-}
+    let defaultPerms = [];
+    const r = role.toLowerCase();
+    defaultPerms = defaultPermissionsForRole(r);
 
     const user = new User({ username, name, role: r, email, phone, permissions: defaultPerms });
     await user.setPassword(password);
@@ -69,8 +79,13 @@ exports.update = async function (req, res, next) {
     if (name) u.name = name;
     if (email) u.email = email;
     if (phone) u.phone = phone;
-    if (role && ['admin','clerk','cashier'].includes(role.toLowerCase())) {
-      u.role = role.toLowerCase();
+    if (role && ['admin','clerk','cashier','secretary'].includes(role.toLowerCase())) {
+      const nextRole = role.toLowerCase();
+      const roleChanged = u.role !== nextRole;
+      u.role = nextRole;
+      if (roleChanged && nextRole !== 'admin' && (!Array.isArray(u.permissions) || !u.permissions.length)) {
+        u.permissions = defaultPermissionsForRole(nextRole);
+      }
     }
     await u.save();
     return res.redirect('/admin/users');
@@ -162,6 +177,7 @@ exports.updateMyPassword = async function (req, res, next) {
   if (role === 'admin') redirectTo = '/admin/services';
   else if (role === 'clerk') redirectTo = '/orders/new';
   else if (role === 'cashier') redirectTo = '/orders/pay';
+  else if (role === 'secretary') redirectTo = '/registrations';
 
   // Render success modal then redirect
   return res.render('users/user_settings', {

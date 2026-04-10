@@ -45,8 +45,9 @@ html(lang="en")
             // - cashiers see Payment by default
             // Extra visibility comes from cross-assigned permissions.
             - const canSeeOrdersNew = (role === 'admin') || perms.includes('/orders/new');
-            - const canSeeOrdersPay = (role === 'admin') || (role === 'cashier') || (role === 'clerk' && hasAny(cashierRoutes));
+            - const canSeeOrdersPay = (role === 'admin') || perms.includes('/orders/pay') || (role === 'cashier') || (role === 'clerk' && hasAny(cashierRoutes));
             - const canSeeCustomers = (role === 'admin');
+            - const canSeeRegisterations = (role === 'admin') || (role === 'secretary');
 
 
             // Desktop nav
@@ -92,6 +93,11 @@ html(lang="en")
                       a.nav-link.d-flex.align-items-center(href='/customers', data-ajax='true', role='tab', id='tab-customers')
                         i.bi.bi-people.me-2(aria-hidden='true')
                         | Customers
+                  if canSeeRegisterations
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/registrations', data-ajax='true', role='tab', id='tab-registerations')
+                        i.bi.bi-person-vcard.me-2(aria-hidden='true')
+                        | Registerations
 
                   li.nav-item
                     a.nav-link.d-flex.align-items-center(href='/admin/reports', data-ajax='true', role='tab', id='tab-reports')
@@ -115,6 +121,11 @@ html(lang="en")
                       a.nav-link.d-flex.align-items-center(href='/customers', data-ajax='true', role='tab', id='tab-customers')
                         i.bi.bi-people.me-2(aria-hidden='true')
                         | Customers
+                  if canSeeRegisterations
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/registrations', data-ajax='true', role='tab', id='tab-registerations')
+                        i.bi.bi-person-vcard.me-2(aria-hidden='true')
+                        | Registerations
                 else if role === 'clerk'
                   // Clerk: quick access tabs
                   if canSeeOrdersNew
@@ -132,6 +143,27 @@ html(lang="en")
                       a.nav-link.d-flex.align-items-center(href='/customers', data-ajax='true', role='tab', id='tab-customers')
                         i.bi.bi-people.me-2(aria-hidden='true')
                         | Customers
+                  if canSeeRegisterations
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/registrations', data-ajax='true', role='tab', id='tab-registerations')
+                        i.bi.bi-person-vcard.me-2(aria-hidden='true')
+                        | Registerations
+                else if role === 'secretary'
+                  if canSeeRegisterations
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/registrations', data-ajax='true', role='tab', id='tab-registerations')
+                        i.bi.bi-person-vcard.me-2(aria-hidden='true')
+                        | Registerations
+                  if canSeeOrdersNew
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/orders/new', data-ajax='true', role='tab', id='tab-operations')
+                        i.bi.bi-clipboard2-check.me-2(aria-hidden='true')
+                        | Jobs
+                  if canSeeOrdersPay
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/orders/pay', data-ajax='true', role='tab', id='tab-payments')
+                        i.bi.bi-cash-coin.me-2(aria-hidden='true')
+                        | Payments
             // Desktop user menu (show name + logout)
             .d-none.d-md-flex.align-items-center.gap-2
               .dropdown
@@ -166,8 +198,9 @@ html(lang="en")
                   - const clerkRoutesSm = ['/orders/new','/orders/list','/orders/view/:orderId','/customers','/lookup','/search'];
                   - const cashierRoutesSm = ['/orders/pay','/orders/debtors','/orders/:orderId','/orders/:orderId/pay'];
                   - const canSeeOrdersNewSm = (roleSm === 'admin') || permsSm.includes('/orders/new');
-                  - const canSeeOrdersPaySm = (roleSm === 'admin') || (roleSm === 'cashier') || (roleSm === 'clerk' && hasAnySm(cashierRoutesSm));
+                  - const canSeeOrdersPaySm = (roleSm === 'admin') || permsSm.includes('/orders/pay') || (roleSm === 'cashier') || (roleSm === 'clerk' && hasAnySm(cashierRoutesSm));
                   - const canSeeCustomersSm = (roleSm === 'admin');
+                  - const canSeeRegisterationsSm = (roleSm === 'admin') || (roleSm === 'secretary');
 
                   if roleSm === 'admin'
                     li
@@ -186,6 +219,8 @@ html(lang="en")
                       a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Jobs — Pay
                     li
                       a.dropdown-item(href='/customers', data-ajax='true', id='tab-customers-sm') Customers
+                    li
+                      a.dropdown-item(href='/registrations', data-ajax='true', id='tab-registerations-sm') Registerations
                     li
                       a.dropdown-item(href='/admin/discounts', data-ajax='true', id='tab-orders-discounts-sm') Configs - Discounts
                     li
@@ -211,6 +246,9 @@ html(lang="en")
                     if canSeeCustomersSm
                       li
                         a.dropdown-item(href='/customers', data-ajax='true', id='tab-customers-sm') Customers
+                    if canSeeRegisterationsSm
+                      li
+                        a.dropdown-item(href='/registrations', data-ajax='true', id='tab-registerations-sm') Registerations
                     li
                       hr.dropdown-divider
                     li
@@ -228,6 +266,26 @@ html(lang="en")
                     if canSeeCustomersSm
                       li
                         a.dropdown-item(href='/customers', data-ajax='true', id='tab-customers-sm') Customers
+                    if canSeeRegisterationsSm
+                      li
+                        a.dropdown-item(href='/registrations', data-ajax='true', id='tab-registerations-sm') Registerations
+                    li
+                      hr.dropdown-divider
+                    li
+                      a.dropdown-item(href='/logout')
+                        i.bi.bi-box-arrow-right.me-2
+                        | Logout
+
+                  else if roleSm === 'secretary'
+                    if canSeeRegisterationsSm
+                      li
+                        a.dropdown-item(href='/registrations', data-ajax='true', id='tab-registerations-sm') Registerations
+                    if canSeeOrdersNewSm
+                      li
+                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Jobs
+                    if canSeeOrdersPaySm
+                      li
+                        a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Payments
                     li
                       hr.dropdown-divider
                     li

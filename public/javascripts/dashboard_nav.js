@@ -105,6 +105,10 @@ function reExecuteScripts(newRoot, targetRoot) {
       const customers = document.getElementById('tab-customers');
       if (customers) list.push(customers);
     }
+    if (id === 'tab-registerations-sm') {
+      const regs = document.getElementById('tab-registerations');
+      if (regs) list.push(regs);
+    }
     return list;
   }
 
@@ -229,7 +233,8 @@ function setActiveTabByUrl(url) {
       '/orders': 'tab-operations',       // orders root
       '/orders/new': 'tab-operations',
       '/orders/pay': 'tab-payments',
-      '/customers': 'tab-customers'
+      '/customers': 'tab-customers',
+      '/registrations': 'tab-registerations'
     };
 
     // default to services if root /admin
@@ -253,6 +258,8 @@ function setActiveTabByUrl(url) {
         id = path.startsWith('/orders/pay') ? 'tab-payments' : 'tab-operations';
       } else if (path.startsWith('/customers')) {
         id = 'tab-customers';
+      } else if (path.startsWith('/registrations')) {
+        id = 'tab-registerations';
       }
     }
 

@@ -31,6 +31,9 @@
   const orderNowBtn = document.getElementById('orderNowBtn');
   const saveDraftBtn = document.getElementById('saveDraftBtn');
   const orderJobNoteEl = document.getElementById('orderJobNote');
+  const submittedCustomerSelect = document.getElementById('submittedCustomerSelect');
+  const reloadSubmittedCustomersBtn = document.getElementById('reloadSubmittedCustomersBtn');
+  const orderSubmissionIdEl = document.getElementById('orderSubmissionId');
 
     // Admin-only manual discount UI (may not exist for non-admin)
   const manualDiscountMode = document.getElementById('manualDiscountMode');
@@ -48,10 +51,18 @@
   // client-only state (per order)
   let manualDiscount = null; // { kind:'discount'|'premium', mode:'amount'|'percent', value:number }
 
-  function getCurrentCustomerId() {
+    let secretarySubmissions = [];
+    let activeSubmission = null;
+
+    function getCurrentCustomerId() {
     const customerEl = document.getElementById('orderCustomerId');
     const id = customerEl && customerEl.value ? String(customerEl.value).trim() : '';
     return id || '';
+  }
+
+  function getCurrentSubmissionId() {
+    const sid = orderSubmissionIdEl && orderSubmissionIdEl.value ? String(orderSubmissionIdEl.value).trim() : '';
+    return sid || '';
   }
 
   function draftKey(customerId) {
@@ -225,40 +236,91 @@ let materialsFetchedAt = 0;  // ms timestamp when materials were last fetched
 
 async function loadServiceCategories() {
   if (!serviceCategorySelect) return;
-  try {
-    const res = await fetch('/admin/service-categories', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-    if (!res.ok) throw new Error('no categories endpoint');
-    const j = await res.json().catch(()=>null);
-    const cats = (j && Array.isArray(j.categories)) ? j.categories : [];
+  const cats = (activeSubmission && Array.isArray(activeSubmission.categories))
+    ? activeSubmission.categories
+    : [];
 
-    // determine whether current user is admin (page sets window._isAdmin as boolean)
-    const isAdmin = (typeof window._isAdmin !== 'undefined') ? (window._isAdmin === true || window._isAdmin === 'true') : false;
-
-    // filter categories: only those marked showInOrders OR if admin then include all
-    const visibleCats = cats.filter(c => {
-      const show = (typeof c.showInOrders === 'boolean') ? c.showInOrders : (c.showInOrders === '1' || c.showInOrders === 'true' || c.showInOrders === 1);
-      return show || isAdmin;
-    });
-
-    // Start with a non-actionable placeholder so nothing is treated as "selected" on load
+  if (!cats.length) {
+    serviceCategorySelect.innerHTML = '<option value="">-- Select a submitted customer first --</option>';
+  } else {
     serviceCategorySelect.innerHTML = '<option value="" disabled selected hidden>-- Select a category --</option>';
-    visibleCats.forEach(c => {
+    cats.forEach(c => {
       const o = document.createElement('option');
-      o.value = c._id;
-      const show = (typeof c.showInOrders === 'boolean') ? c.showInOrders : (c.showInOrders === '1' || c.showInOrders === 'true' || c.showInOrders === 1);
-      o.textContent = c.name + (isAdmin && !show ? ' (hidden)' : '');
+      o.value = c.id || c._id;
+      o.textContent = c.name || 'Category';
       serviceCategorySelect.appendChild(o);
     });
+  }
 
-    // Ensure services list is empty until a category is chosen
-    if (serviceSelect) {
-      serviceSelect.innerHTML = '<option value="">-- Select a service --</option>';
-      prices = [];
-      if (typeof renderPrices === 'function') renderPrices();
+  if (serviceSelect) {
+    serviceSelect.innerHTML = '<option value="">-- Select a service --</option>';
+    prices = [];
+    if (typeof renderPrices === 'function') renderPrices();
+  }
+}
+
+function setSelectedCustomerFromSubmission(sub) {
+  const customerIdEl = document.getElementById('orderCustomerId');
+  const nameEl = document.getElementById('selectedCustomerName');
+  const phoneEl = document.getElementById('selectedCustomerPhone');
+  const categoryEl = document.getElementById('selectedCustomerCategory');
+  const card = document.getElementById('selectedCustomerCard');
+
+  activeSubmission = sub || null;
+  if (orderSubmissionIdEl) orderSubmissionIdEl.value = sub ? String(sub.id || '') : '';
+
+  if (!sub) {
+    if (customerIdEl) customerIdEl.value = '';
+    if (nameEl) nameEl.textContent = '';
+    if (phoneEl) phoneEl.textContent = '';
+    if (categoryEl) categoryEl.textContent = '';
+    if (card) card.style.display = 'none';
+    loadServiceCategories();
+    updateSaveDraftBtn();
+    return;
+  }
+
+  if (customerIdEl) customerIdEl.value = sub.customerId ? String(sub.customerId) : '';
+  if (nameEl) nameEl.textContent = sub.displayName || '';
+  if (phoneEl) phoneEl.textContent = sub.phone || '';
+  if (categoryEl) categoryEl.textContent = sub.customerId ? '' : 'Walk-in';
+  if (card) card.style.display = '';
+  loadServiceCategories();
+  updateSaveDraftBtn();
+}
+
+async function loadSecretarySubmissions() {
+  if (!submittedCustomerSelect) return;
+  submittedCustomerSelect.disabled = true;
+  submittedCustomerSelect.innerHTML = '<option value="">Loading...</option>';
+  try {
+    const res = await fetch('/orders/submissions', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    const j = await res.json().catch(() => null);
+    if (!res.ok || !j || !j.ok) throw new Error((j && j.error) || 'Failed to load');
+    secretarySubmissions = Array.isArray(j.submissions) ? j.submissions : [];
+
+    submittedCustomerSelect.innerHTML = '<option value="">-- Select submitted customer/walk-in --</option>';
+    secretarySubmissions.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      const suffix = (s.categories && s.categories.length) ? ` (${s.categories.length} categories)` : '';
+      opt.textContent = `${s.displayName || 'Customer'}${suffix}`;
+      submittedCustomerSelect.appendChild(opt);
+    });
+
+    if (activeSubmission) {
+      const stillThere = secretarySubmissions.find(s => String(s.id) === String(activeSubmission.id));
+      if (stillThere) {
+        submittedCustomerSelect.value = String(stillThere.id);
+        setSelectedCustomerFromSubmission(stillThere);
+      } else {
+        setSelectedCustomerFromSubmission(null);
+      }
     }
   } catch (err) {
-    // endpoint not available — ignore
-    console.warn('loadServiceCategories failed', err);
+    submittedCustomerSelect.innerHTML = '<option value="">Failed to load submitted customers</option>';
+  } finally {
+    submittedCustomerSelect.disabled = false;
   }
 }
 
@@ -327,8 +389,35 @@ async function loadServicesForCategory(catId) {
     });
   }
 
+  if (submittedCustomerSelect) {
+    submittedCustomerSelect.addEventListener('change', function () {
+      const sid = this.value || '';
+      if (!sid) {
+        setSelectedCustomerFromSubmission(null);
+        return;
+      }
+      const found = secretarySubmissions.find(s => String(s.id) === String(sid)) || null;
+      setSelectedCustomerFromSubmission(found);
+    });
+  }
+
+  if (reloadSubmittedCustomersBtn) {
+    reloadSubmittedCustomersBtn.addEventListener('click', async function () {
+      const txt = reloadSubmittedCustomersBtn.textContent;
+      reloadSubmittedCustomersBtn.disabled = true;
+      reloadSubmittedCustomersBtn.textContent = 'Reloading...';
+      try {
+        await loadSecretarySubmissions();
+      } finally {
+        reloadSubmittedCustomersBtn.disabled = false;
+        reloadSubmittedCustomersBtn.textContent = txt;
+      }
+    });
+  }
+
   // initial categories load
   loadServiceCategories();
+  loadSecretarySubmissions();
   loadMaterialsForStockChecks();
 
 
@@ -1455,6 +1544,7 @@ async function placeOrderFlow() {
 
       const payload = {
         items,
+        submissionId: getCurrentSubmissionId() || null,
         customerId:
           (document.getElementById('orderCustomerId') &&
            document.getElementById('orderCustomerId').value)
@@ -1525,6 +1615,10 @@ async function placeOrderFlow() {
       showGlobalToast(`Order created: ${j.orderId}`, 3200);
     }
 
+    setSelectedCustomerFromSubmission(null);
+    if (submittedCustomerSelect) submittedCustomerSelect.value = '';
+    await loadSecretarySubmissions();
+
     // Stock just changed on the server — force refresh so next Apply uses updated remaining
     await refreshMaterialsIfStale(true);
 
@@ -1570,78 +1664,10 @@ async function placeOrderFlow() {
   orderNowBtn.addEventListener('click', async function () {
     if (!cart.length) return;
 
-    const customerEl = document.getElementById('orderCustomerId');
-    const hasCustomer = !!(customerEl && customerEl.value && String(customerEl.value).trim());
-
-    if (!hasCustomer) {
-      // show modal offering proceed or go back
-      // showNoCustomerModal replacement (dark-friendly)
-      const choice = await (function showNoCustomerModal() {
-        return new Promise((resolve) => {
-          let modalEl = document.getElementById('noCustomerModal');
-          if (!modalEl) {
-            const html = `
-<div class="modal fade" id="noCustomerModal" tabindex="-1" aria-labelledby="noCustomerModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content dark-surface">
-      <div class="modal-header">
-        <h5 class="modal-title" id="noCustomerModalLabel">No customer attached</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body dark-card-body">
-        <p>This order does not have a customer attached. You can proceed without a customer, or attach one using the Customer Lookup section.</p>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-light-custom" data-action="back">Go to Customer Lookup</button>
-        <button type="button" class="btn btn-primary" data-action="proceed">Proceed anyway</button>
-      </div>
-    </div>
-  </div>
-</div>`;
-            const container = document.createElement('div');
-            container.innerHTML = html;
-            document.body.appendChild(container.firstElementChild);
-            modalEl = document.getElementById('noCustomerModal');
-          }
-
-          const btnProceed = modalEl.querySelector('button[data-action="proceed"]');
-          const btnBack = modalEl.querySelector('button[data-action="back"]');
-          const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-
-          function cleanup() {
-            try {
-              btnProceed.removeEventListener('click', onProceed);
-              btnBack.removeEventListener('click', onBack);
-              modalEl.removeEventListener('hidden.bs.modal', onHidden);
-            } catch (e) {}
-          }
-          function onProceed() { cleanup(); inst.hide(); resolve('proceed'); }
-          function onBack() { cleanup(); inst.hide(); resolve('back'); }
-          function onHidden() { cleanup(); resolve(null); }
-
-          btnProceed.addEventListener('click', onProceed);
-          btnBack.addEventListener('click', onBack);
-          modalEl.addEventListener('hidden.bs.modal', onHidden);
-
-          inst.show();
-        });
-      })();
-
-      if (choice === 'back') {
-        const lookupInput = document.getElementById('lookupPhone');
-        if (lookupInput) {
-          try { lookupInput.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { lookupInput.scrollIntoView(); }
-          try { lookupInput.focus(); } catch (e) {}
-        } else {
-          showAlertModal('Customer lookup is not available on this page.');
-        }
-        return;
-      } else if (choice === 'proceed') {
-        await placeOrderFlow();
-        return;
-      } else {
-        return;
-      }
+    const submissionId = getCurrentSubmissionId();
+    if (!submissionId) {
+      showAlertModal('Select a submitted customer/walk-in before placing an order.');
+      return;
     }
 
     await placeOrderFlow();
@@ -1667,14 +1693,13 @@ async function placeOrderFlow() {
     });
   }
 
-  document.addEventListener('customer:attached', function () {
-    const customerId = getCurrentCustomerId();
-    if (customerId) promptLoadDraft(customerId);
-    updateSaveDraftBtn();
-  });
-  document.addEventListener('customer:cleared', function () {
-    updateSaveDraftBtn();
-  });
+  if (submittedCustomerSelect) {
+    submittedCustomerSelect.addEventListener('change', function () {
+      const cid = getCurrentCustomerId();
+      if (cid) promptLoadDraft(cid);
+      updateSaveDraftBtn();
+    });
+  }
 
   // ---------- Orders explorer wiring (same behavior as before) ----------
   if (openOrdersExplorerBtn) {
@@ -2107,3 +2132,6 @@ if (serviceSelect) {
     initOrdersClient();
   });
 })();
+
+
+

@@ -13,6 +13,7 @@ const { ObjectId } = require('mongoose').Types;
 const DiscountConfig = require('../models/discount');
 const Store = require('../models/store');
 const StoreStock = require('../models/store_stock');
+const RegistrationSubmission = require('../models/registration_submission');
 
 
 async function getUsableCustomerCredit(customerId, session = null) {
@@ -317,6 +318,14 @@ function makeOrderId() {
   return (Date.now().toString(36) + crypto.randomBytes(3).toString('hex')).slice(-10).toUpperCase();
 }
 
+function currentUtcDayKey() {
+  const d = new Date();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // helper: subset match (material selections must be contained in item selections)
 function materialMatchesItem(matSelections, itemSelections) {
   const itemSet = new Set((itemSelections || []).map(s => `${String(s.unit)}:${String(s.subUnit)}`));
@@ -524,6 +533,7 @@ return {
 
     const builtItems = [];
     let total = 0;
+    const usedServiceCategoryIds = new Set();
 
 for (const it of items) {
   if (!mongoose.Types.ObjectId.isValid(it.serviceId) || !mongoose.Types.ObjectId.isValid(it.priceRuleId)) {
@@ -537,6 +547,13 @@ for (const it of items) {
   // Determine which price to use: use price2 only when client requested FB and price2 exists
 // Check whether this service requires a printer
 const svc = await Service.findById(it.serviceId).lean();
+if (!svc) {
+  return res.status(404).json({ error: `Service ${it.serviceId} not found` });
+}
+if (!svc.category) {
+  return res.status(400).json({ error: `Service "${svc.name || it.serviceId}" is not assigned to a category` });
+}
+usedServiceCategoryIds.add(String(svc.category));
 const svcRequiresPrinter = !!(svc && svc.requiresPrinter);
 
 // normalize factor (pricing factor comes from client)
@@ -646,6 +663,37 @@ const selectionsForOrder = (pr.selections || []).map(s => ({
 }
     total = Number(total.toFixed(2));
 
+    const submissionId = String(req.body && req.body.submissionId ? req.body.submissionId : '').trim();
+    if (!submissionId || !mongoose.Types.ObjectId.isValid(submissionId)) {
+      return res.status(400).json({ error: 'Select a submitted customer first.' });
+    }
+
+    const submission = await RegistrationSubmission.findOne({
+      _id: new mongoose.Types.ObjectId(submissionId),
+      status: 'pending',
+      dayKey: currentUtcDayKey()
+    }).select('_id customer displayName categories').lean();
+
+    if (!submission) {
+      return res.status(409).json({ error: 'Selected submission is no longer available. Refresh and try again.' });
+    }
+
+    const allowedCategoryIds = new Set((submission.categories || []).map(id => String(id)));
+    if (!allowedCategoryIds.size) {
+      return res.status(400).json({ error: 'Submitted customer has no allowed categories.' });
+    }
+
+    for (const usedCatId of usedServiceCategoryIds) {
+      if (!allowedCategoryIds.has(String(usedCatId))) {
+        return res.status(400).json({ error: 'One or more selected services are outside secretary-assigned categories.' });
+      }
+    }
+
+    const bodyCustomerId = String(req.body && req.body.customerId ? req.body.customerId : '').trim();
+    if (submission.customer && bodyCustomerId && String(submission.customer) !== bodyCustomerId) {
+      return res.status(400).json({ error: 'Selected customer does not match submitted customer.' });
+    }
+
     const order = new Order({
       orderId: makeOrderId(),
       items: builtItems,
@@ -653,9 +701,10 @@ const selectionsForOrder = (pr.selections || []).map(s => ({
       total
     });
 
-    const customerId = req.body.customerId;
-    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
-      order.customer = new mongoose.Types.ObjectId(customerId);
+    if (submission.customer && mongoose.Types.ObjectId.isValid(String(submission.customer))) {
+      order.customer = new mongoose.Types.ObjectId(String(submission.customer));
+    } else {
+      order.customerName = String(submission.displayName || '').trim() || 'Walk-in';
     }
 
     // NEW: attach the currently logged-in user as the handler of this order (if available)
@@ -967,6 +1016,22 @@ order.total = finalTotal;
     }
 
     await order.save();
+
+    try {
+      await RegistrationSubmission.updateOne(
+        { _id: submission._id, status: 'pending' },
+        {
+          $set: {
+            status: 'consumed',
+            consumedAt: new Date(),
+            consumedOrderId: order.orderId,
+            consumedBy: req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null
+          }
+        }
+      );
+    } catch (consumeErr) {
+      console.error('Failed to consume registration submission', consumeErr);
+    }
 
 // If the order has a customer attached, re-evaluate their 'regular' status
 // AND send a thank-you SMS with the customer's current type.
@@ -2056,6 +2121,37 @@ exports.apiGetDebtors = async (req, res) => {
   }
 };
 
+// GET /orders/submissions
+// Returns pending secretary submissions for today (for Jobs page dropdown)
+exports.apiListSecretarySubmissions = async (req, res) => {
+  try {
+    const rows = await RegistrationSubmission.find({
+      status: 'pending',
+      dayKey: currentUtcDayKey()
+    })
+      .populate('categories', '_id name')
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const submissions = (rows || []).map(r => ({
+      id: String(r._id),
+      displayName: String(r.displayName || '').trim(),
+      phone: String(r.phone || '').trim(),
+      customerId: r.customer ? String(r.customer) : '',
+      walkInNumber: (r.walkInNumber == null ? null : Number(r.walkInNumber)),
+      categories: Array.isArray(r.categories)
+        ? r.categories.map(c => ({ id: String(c._id), name: c.name }))
+        : [],
+      createdAt: r.createdAt
+    }));
+
+    return res.json({ ok: true, submissions });
+  } catch (err) {
+    console.error('apiListSecretarySubmissions error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load submitted customers' });
+  }
+};
+
 // API: list creditors (customers with net credit balance > 0)
 // GET /orders/creditors
 exports.apiGetCreditors = async (req, res) => {
@@ -2246,7 +2342,7 @@ exports.apiListOrders = async (req, res) => {
 
     // Map to minimal info the client needs in the list
 const out = orders.map(o => {
-  let displayName = 'Walk-in';
+  let displayName = String(o.customerName || '').trim() || 'Walk-in';
 
   if (o.customer) {
     if (o.customer.category === 'artist') {

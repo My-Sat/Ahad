@@ -60,6 +60,7 @@ const OrderSchema = new mongoose.Schema({
   paidAt: { type: Date, default: null },
   //optional customer reference
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', default: null },
+  customerName: { type: String, trim: true, default: '' },
   handledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   //record payment events (supports part payments)
   payments: { type: [PaymentSchema], default: [] }

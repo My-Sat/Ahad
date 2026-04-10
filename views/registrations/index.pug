@@ -1,0 +1,97 @@
+extends ../layout
+
+block content
+  .container#registrationsPage
+    .d-none(data-main-width='wide')
+    .row.justify-content-center
+      .col-12.col-md-12
+        .card.shadow-sm.dark-surface
+          .card-body.dark-card-body
+            .d-flex.justify-content-between.align-items-center.mb-3
+              h4.mb-0.text-white Registerations
+              button.btn.btn-outline-light-custom.btn-sm#refreshRegistrationsBtn(type='button')
+                i.bi.bi-arrow-clockwise.me-1
+                | Refresh
+
+            .card.mb-3.dark-surface(style='border:1px solid rgba(255,255,255,.08);')
+              .card-body.dark-card-body.py-2
+                .d-flex.justify-content-between.align-items-center.mb-2
+                  h6.mb-0.text-white Customer Lookup / Registration
+                form#secretaryLookupForm.row.g-2
+                  .col-12.col-md-6
+                    input.form-control.form-control-dark#secretaryLookupInput(type='text', placeholder='Type phone or name')
+                  .col-auto
+                    button.btn.btn-primary#secretaryLookupBtn(type='submit') Lookup
+                  .col-auto
+                    button.btn.btn-outline-secondary#secretaryRegisterBtn(type='button') Register Customer
+                  .col-auto
+                    button.btn.btn-outline-light-custom#secretaryWalkInBtn(type='button') Walk-in
+                small.text-muted-light.d-block.mt-2 Lookup existing customers, register a new one, or submit a walk-in.
+
+            .card.mb-3.dark-surface#selectedSecretaryCustomerCard(style='border:1px solid rgba(255,255,255,.08);display:none;')
+              .card-body.dark-card-body.py-2.text-center
+                div.small.text-muted-light.mb-1 Selected
+                strong#selectedSecretaryCustomerName(style='color:#21BCFF;')
+                strong#selectedSecretaryCustomerPhone.text-muted-light.ms-3
+                strong#selectedSecretaryCustomerCategory.text-muted-light.ms-3
+                .mt-2
+                  button.btn.btn-sm.btn-outline-light-custom#secretaryClearSelectionBtn(type='button') Clear selection
+
+            .card.mb-3.dark-surface(style='border:1px solid rgba(255,255,255,.08);')
+              .card-body.dark-card-body.py-2
+                h6.text-white.mb-2 Assign Service Category(s)
+                .row.g-2#secretaryCategoriesBox
+                  .col-12
+                    span.text-muted-light Loading categories...
+                .mt-3
+                  button.btn.btn-primary#secretarySubmitBtn(type='button') Submit to Jobs
+
+            .card.dark-surface
+              .card-body.dark-card-body
+                .d-flex.justify-content-between.align-items-center.mb-2
+                  h6.mb-0.text-white Pending Registerations (Today)
+                  small.text-muted-light#pendingRegistrationsCount 0
+                .table-responsive
+                  table.table.table-sm.table-hover#pendingRegistrationsTable
+                    thead
+                      tr
+                        th Customer / Walk-in
+                        th Phone
+                        th Categories
+                        th Submitted
+                    tbody
+                      tr
+                        td.text-muted-light(colspan='4') Loading...
+
+  .modal.fade(id='secretaryRegisterCustomerModal', tabindex='-1', aria-labelledby='secretaryRegisterCustomerModalLabel', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title(id='secretaryRegisterCustomerModalLabel').text-white Register Customer
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          form#secretaryRegisterCustomerForm
+            .mb-2
+              label.form-label(for='secretaryRegCategory') Register as
+              select.form-select.form-select-dark#secretaryRegCategory
+                option(value='one_time') Customer
+                option(value='artist') Artist
+                option(value='organisation') Organisation / NGO
+            .mb-2#secretaryRegFirstNameGroup
+              label.form-label(for='secretaryRegFirstName') Full Name
+              input.form-control.form-control-dark#secretaryRegFirstName(type='text', placeholder='Full name')
+            .mb-2#secretaryRegBusinessNameGroup(style='display:none;')
+              label.form-label(for='secretaryRegBusinessName') Business name
+              input.form-control.form-control-dark#secretaryRegBusinessName(type='text', placeholder='Business name')
+            .mb-2
+              label.form-label(for='secretaryRegPhone') Phone
+              input.form-control.form-control-dark#secretaryRegPhone(type='text', placeholder='Phone number')
+            .mb-2
+              label.form-label(for='secretaryRegNotes') Notes (optional)
+              input.form-control.form-control-dark#secretaryRegNotes(type='text', placeholder='Notes')
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary#secretarySaveCustomerBtn(type='button') Register
+
+  script(defer src='/javascripts/registrations_page.js')
+

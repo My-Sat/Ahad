@@ -20,6 +20,12 @@ router.get(
 );
 
 router.get(
+  '/submissions',
+  ensureHasPermission('/orders/new'),
+  orderController.apiListSecretarySubmissions
+);
+
+router.get(
   '/list',
   ensureHasPermission('/orders/list'),
   orderController.apiListOrders
