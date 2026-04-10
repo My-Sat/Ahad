@@ -49,7 +49,7 @@ block content
             .card.dark-surface
               .card-body.dark-card-body
                 .d-flex.justify-content-between.align-items-center.mb-2
-                  h6.mb-0.text-white Pending Registerations (Today)
+                  h6.mb-0.text-white Registerations (Today)
                   small.text-muted-light#pendingRegistrationsCount 0
                 .table-responsive
                   table.table.table-sm.table-hover#pendingRegistrationsTable
@@ -58,10 +58,11 @@ block content
                         th Customer / Walk-in
                         th Phone
                         th Categories
+                        th Status
                         th Submitted
                     tbody
                       tr
-                        td.text-muted-light(colspan='4') Loading...
+                        td.text-muted-light(colspan='5') Loading...
 
   .modal.fade(id='secretaryRegisterCustomerModal', tabindex='-1', aria-labelledby='secretaryRegisterCustomerModalLabel', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
@@ -94,4 +95,3 @@ block content
           button.btn.btn-primary#secretarySaveCustomerBtn(type='button') Register
 
   script(defer src='/javascripts/registrations_page.js')
-

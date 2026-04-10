@@ -135,23 +135,28 @@
         if (pendingCount) pendingCount.textContent = String(rows.length);
         if (!pendingTableBody) return;
         if (!rows.length) {
-          pendingTableBody.innerHTML = '<tr><td class="text-muted-light" colspan="4">No pending registerations for today.</td></tr>';
+          pendingTableBody.innerHTML = '<tr><td class="text-muted-light" colspan="5">No registerations for today.</td></tr>';
           return;
         }
         pendingTableBody.innerHTML = '';
         rows.forEach(r => {
+          const served = !!r.served || String(r.status || '') === 'consumed';
+          const statusHtml = served
+            ? '<span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Served</span>'
+            : '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Not Served</span>';
           const tr = document.createElement('tr');
           tr.innerHTML = `
             <td>${escapeHtml(r.displayName || '')}</td>
             <td>${escapeHtml(r.phone || '-')}</td>
             <td>${escapeHtml((r.categories || []).map(c => c.name).join(', ') || '-')}</td>
+            <td>${statusHtml}</td>
             <td>${new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
           `;
           pendingTableBody.appendChild(tr);
         });
       } catch (err) {
         if (pendingTableBody) {
-          pendingTableBody.innerHTML = '<tr><td class="text-danger" colspan="4">Failed to load pending registerations.</td></tr>';
+          pendingTableBody.innerHTML = '<tr><td class="text-danger" colspan="5">Failed to load registerations.</td></tr>';
         }
       }
     }
@@ -409,4 +414,3 @@
     initRegistrationsPage();
   });
 })();
-

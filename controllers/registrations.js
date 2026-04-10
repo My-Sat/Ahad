@@ -113,9 +113,9 @@ exports.apiSubmit = async function apiSubmit(req, res) {
 exports.apiListPending = async function apiListPending(req, res) {
   try {
     const dayKey = utcDayKey();
-    const rows = await RegistrationSubmission.find({ status: 'pending', dayKey })
+    const rows = await RegistrationSubmission.find({ dayKey, status: { $in: ['pending', 'consumed'] } })
       .populate('categories', '_id name')
-      .sort({ createdAt: 1 })
+      .sort({ createdAt: -1 })
       .lean();
 
     const submissions = (rows || []).map(r => ({
@@ -125,7 +125,9 @@ exports.apiListPending = async function apiListPending(req, res) {
       customerId: r.customer ? String(r.customer) : '',
       walkInNumber: (r.walkInNumber == null ? null : Number(r.walkInNumber)),
       categories: Array.isArray(r.categories) ? r.categories.map(c => ({ id: String(c._id), name: c.name })) : [],
-      createdAt: r.createdAt
+      createdAt: r.createdAt,
+      status: String(r.status || 'pending'),
+      served: String(r.status || '') === 'consumed'
     }));
 
     return res.json({ ok: true, submissions });
