@@ -2003,10 +2003,29 @@ exports.apiGetDebtors = async (req, res) => {
       // only those with outstanding > 0
       { $match: { outstanding: { $gt: 0 } } },
 
+      // Normalize customer id for mixed legacy data:
+      // - ObjectId
+      // - string ObjectId
+      // - populated object like { _id: ... }
+      { $addFields: {
+          customerRawId: {
+            $cond: [
+              { $eq: [{ $type: '$customer' }, 'object'] },
+              { $ifNull: ['$customer._id', '$customer'] },
+              '$customer'
+            ]
+          }
+      } },
+      { $addFields: {
+          customerObjId: {
+            $convert: { input: '$customerRawId', to: 'objectId', onError: null, onNull: null }
+          }
+      } },
+
       // lookup customer doc (if order.customer references a Customer)
       { $lookup: {
           from: 'customers',
-          localField: 'customer',
+          localField: 'customerObjId',
           foreignField: '_id',
           as: 'customer_doc'
       } },
@@ -2028,42 +2047,50 @@ exports.apiGetDebtors = async (req, res) => {
       // otherwise fallback to empty string
       { $addFields: {
         debtorName: {
-          $ifNull: [
-            '$customerName',
-            {
+          $let: {
+            vars: {
+              explicitName: { $trim: { input: { $ifNull: ['$customerName', ''] } } }
+            },
+            in: {
               $cond: [
-                { $gt: [ { $size: '$customer_doc' }, 0 ] },
+                { $gt: [{ $strLenCP: '$$explicitName' }, 0] },
+                '$$explicitName',
                 {
-                  $let: {
-                    vars: { c: { $arrayElemAt: ['$customer_doc', 0] } },
-                    in: {
-                      $cond: [
-                        { $in: ['$$c.category', ['artist', 'organisation']] },
-                        {
-                          $ifNull: [
-                            '$$c.businessName',
-                            { $ifNull: ['$$c.phone', ''] }
-                          ]
-                        },
-                        {
-                          $ifNull: [
-                            '$$c.firstName',
+                  $cond: [
+                    { $gt: [ { $size: '$customer_doc' }, 0 ] },
+                    {
+                      $let: {
+                        vars: { c: { $arrayElemAt: ['$customer_doc', 0] } },
+                        in: {
+                          $cond: [
+                            { $in: ['$$c.category', ['artist', 'organisation']] },
                             {
                               $ifNull: [
                                 '$$c.businessName',
                                 { $ifNull: ['$$c.phone', ''] }
                               ]
+                            },
+                            {
+                              $ifNull: [
+                                '$$c.firstName',
+                                {
+                                  $ifNull: [
+                                    '$$c.businessName',
+                                    { $ifNull: ['$$c.phone', ''] }
+                                  ]
+                                }
+                              ]
                             }
                           ]
                         }
-                      ]
-                    }
-                  }
-                },
-                ''
+                      }
+                    },
+                    { $ifNull: [{ $toString: '$customerObjId' }, ''] }
+                  ]
+                }
               ]
             }
-          ]
+          }
         }
       }},
 
@@ -2083,7 +2110,7 @@ exports.apiGetDebtors = async (req, res) => {
       // project fields useful for frontend
         { $project: {
             orderId: 1,
-            customer: 1,
+            customer: '$customerObjId',
             jobNote: 1,
             total: 1,
             paidSoFar: 1,
