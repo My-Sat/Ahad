@@ -5,6 +5,15 @@ const ServiceCostSubUnit = require('../models/service_cost_subunit');
 const ServicePrice = require('../models/service_price');
 const Printer = require('../models/printer');
 
+function detectRuleTone(text) {
+  const s = String(text || '').toLowerCase();
+  const isBw = /(b\/w|black\s*and\s*white|monochrome|\bmono\b|\bbw\b)/i.test(s);
+  const isColor = /(colour|color|c\/l|\bcol\b)/i.test(s);
+  if (isBw) return 'bw';
+  if (isColor) return 'color';
+  return 'other';
+}
+
 exports.list = async (req, res) => {
   try {
     const services = await Service.find().sort({ orderIndex: 1, name: 1 }).lean();
@@ -64,6 +73,11 @@ exports.apiGetPricesForService = async (req, res) => {
     const printers = await Printer.find().select('_id name').sort('name').lean();
 
     const out = prices.map(p => ({
+      ruleTone: detectRuleTone((p.selections || []).map(s => {
+        const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
+        const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
+        return `${u}: ${su}`;
+      }).join(' + ')),
       _id: p._id,
       key: p.key, // ✅ add this
 

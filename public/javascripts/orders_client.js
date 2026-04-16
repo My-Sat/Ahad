@@ -237,11 +237,23 @@ let materialsFetchedAt = 0;  // ms timestamp when materials were last fetched
 
   function serviceToneFromText(text) {
     const s = String(text || '').toLowerCase();
-    const isBw = /(b\/w|black\s*and\s*white|monochrome|\bbw\b)/i.test(s);
+    const isBw = /(b\/w|black\s*and\s*white|monochrome|\bmono\b|\bbw\b)/i.test(s);
     const isColor = /(colour|color|c\/l|\bcol\b)/i.test(s);
     if (isBw) return 'bw';
     if (isColor) return 'color';
     return 'other';
+  }
+
+  function resolvePriceRuleTone(rule, fallbackServiceTone) {
+    const fallback = (fallbackServiceTone && fallbackServiceTone !== 'other') ? fallbackServiceTone : 'other';
+    const explicit = serviceToneFromText((rule && rule.ruleTone) || '');
+    if (explicit !== 'other') return explicit;
+
+    const ruleText = `${(rule && rule.selectionLabel) || ''} ${(rule && rule.customLabel) || ''}`.trim();
+    const fromRuleText = serviceToneFromText(ruleText);
+    if (fromRuleText !== 'other') return fromRuleText;
+
+    return fallback;
   }
 
   function canonicalServiceName(name) {
@@ -803,13 +815,16 @@ function renderPrices(bookMode = false) {
     const row = document.createElement('div');
     row.className = 'list-group-item d-flex align-items-center gap-3 flex-nowrap';
     const isColorRule = (p && p.__tone === 'color');
+    const isBwRule = (p && p.__tone === 'bw');
+    const toneClass = isColorRule ? 'text-danger' : (isBwRule ? 'text-dark' : '');
+    const tonePriceClass = isColorRule ? 'text-danger' : (isBwRule ? 'text-dark' : 'text-white');
 
     // left: label (only subunits)
     const left = document.createElement('div');
     left.className = 'flex-grow-1 text-truncate';
     const subOnly = subUnitsOnlyFromLabel(p.selectionLabel || '');
     const label = document.createElement('div');
-    label.innerHTML = `<strong class="d-inline-block text-truncate ${isColorRule ? 'text-danger' : ''}" style="max-width:420px;">${escapeHtml(subOnly)}</strong>`;
+    label.innerHTML = `<strong class="d-inline-block text-truncate ${toneClass}" style="max-width:420px;">${escapeHtml(subOnly)}</strong>`;
     left.appendChild(label);
 
     const hasBackPrice = (p.price2 !== null && p.price2 !== undefined && !isNaN(Number(p.price2)));
@@ -818,9 +833,9 @@ function renderPrices(bookMode = false) {
     const priceLine = document.createElement('div');
     priceLine.className = 'small text-muted-light mt-1';
     if (hasBackPrice) {
-      priceLine.innerHTML = `Front: <strong class="${isColorRule ? 'text-danger' : 'text-white'}">GH₵ ${formatMoney(frontPrice)}</strong> <span class="mx-1">|</span> F/B: <strong class="${isColorRule ? 'text-danger' : 'text-white'}">GH₵ ${formatMoney(backPrice)}</strong>`;
+      priceLine.innerHTML = `Front: <strong class="${tonePriceClass}">GH₵ ${formatMoney(frontPrice)}</strong> <span class="mx-1">|</span> F/B: <strong class="${tonePriceClass}">GH₵ ${formatMoney(backPrice)}</strong>`;
     } else {
-      priceLine.innerHTML = `Price: <strong class="${isColorRule ? 'text-danger' : 'text-white'}">GH₵ ${formatMoney(frontPrice)}</strong>`;
+      priceLine.innerHTML = `Price: <strong class="${tonePriceClass}">GH₵ ${formatMoney(frontPrice)}</strong>`;
     }
     left.appendChild(priceLine);
 
@@ -965,12 +980,12 @@ function renderPrices(bookMode = false) {
         key: x.key || null,
         selections: Array.isArray(x.selections) ? x.selections : [],
         selectionLabel: x.selectionLabel,
+        customLabel: x.customLabel || '',
+        ruleTone: x.ruleTone || 'other',
         unitPrice: Number(x.unitPrice),
         price2: (x.price2 !== null && x.price2 !== undefined) ? Number(x.price2) : null,
         serviceId: String(serviceId),
-        __tone: (serviceToneIndex[String(serviceId)] && serviceToneIndex[String(serviceId)] !== 'other')
-          ? serviceToneIndex[String(serviceId)]
-          : serviceToneFromText(x.selectionLabel || '')
+        __tone: resolvePriceRuleTone(x, serviceToneIndex[String(serviceId)] || 'other')
       }));
       serviceRequiresPrinter = !!j.serviceRequiresPrinter;
       printers = (j.printers || []).map(p => ({ _id: p._id, name: p.name }));
@@ -1025,17 +1040,18 @@ function renderPrices(bookMode = false) {
         });
 
         item.prices.forEach(x => {
-          const label = String(x.selectionLabel || '');
           const toneFromService = serviceToneIndex[String(item.sid)] || 'other';
           mergedPrices.push({
             _id: x._id,
             key: x.key || null,
             selections: Array.isArray(x.selections) ? x.selections : [],
             selectionLabel: x.selectionLabel,
+            customLabel: x.customLabel || '',
+            ruleTone: x.ruleTone || 'other',
             unitPrice: Number(x.unitPrice),
             price2: (x.price2 !== null && x.price2 !== undefined) ? Number(x.price2) : null,
             serviceId: String(item.sid),
-            __tone: toneFromService !== 'other' ? toneFromService : serviceToneFromText(label)
+            __tone: resolvePriceRuleTone(x, toneFromService)
           });
         });
       });
