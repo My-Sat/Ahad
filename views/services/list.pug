@@ -63,6 +63,7 @@ block content
               thead
                 tr
                   th Name
+                  th.text-center Arrange
                   th.text-end Actions
               tbody#services-tbody
                 each svc in services
@@ -70,6 +71,12 @@ block content
                   tr(data-id=svc._id data-category=(svc.category ? svc.category : ''))
                     td
                       a.service-link(href=`/admin/services/${svc._id}`)= svc.name
+                    td.text-center
+                      .btn-group.btn-group-sm(role='group', aria-label='Arrange service')
+                        button.btn.btn-outline-light-custom.move-service-btn(type='button', data-service-id=svc._id, data-direction='up', title='Move up')
+                          i.bi.bi-chevron-up
+                        button.btn.btn-outline-light-custom.move-service-btn(type='button', data-service-id=svc._id, data-direction='down', title='Move down')
+                          i.bi.bi-chevron-down
                     td.text-end
                       // Bootstrap dropdown (using bootstrap icon)
                       .dropdown.d-inline-block
@@ -151,6 +158,11 @@ block content
                             | Add
 
                       .d-flex.justify-content-end.align-items-center.mt-3
+                        .btn-group.btn-group-sm.me-2(role='group', aria-label='Arrange unit')
+                          button.btn.btn-outline-light-custom.move-unit-btn(type='button', data-unit-id=u._id, data-direction='up', title='Move unit up')
+                            i.bi.bi-chevron-up
+                          button.btn.btn-outline-light-custom.move-unit-btn(type='button', data-unit-id=u._id, data-direction='down', title='Move unit down')
+                            i.bi.bi-chevron-down
                         .dropdown
                           button.btn.btn-sm.btn-outline-light-custom.dropdown-toggle(type='button', id=`unitMenuBtn-${u._id}`, data-bs-toggle='dropdown', aria-expanded='false', aria-haspopup='true', title='Unit actions')
                             span.visually-hidden Actions
@@ -301,6 +313,7 @@ block content
         const saveCategoryBtn = document.getElementById('saveCategoryBtn');
         const bootstrapCategoryModal = (window.bootstrap && categoryModalEl) ? new bootstrap.Modal(categoryModalEl) : null;
         const servicesTbody = document.getElementById('services-tbody');
+        const unitsAccordion = document.getElementById('unitsAccordion');
         const addServiceCategoryIdEl = document.getElementById('addServiceCategoryId');
         const addServiceForm = document.getElementById('add-service-form');
 
@@ -354,6 +367,12 @@ block content
                   if (svc.category) tr.dataset.category = svc.category;
                   tr.innerHTML = `
                     <td><a class="service-link" href="/admin/services/${encodeURIComponent(svc._id)}">${escapeHtml(svc.name)}</a></td>
+                    <td class="text-center">
+                      <div class="btn-group btn-group-sm" role="group" aria-label="Arrange service">
+                        <button class="btn btn-outline-light-custom move-service-btn" type="button" data-service-id="${escapeHtml(svc._id)}" data-direction="up" title="Move up"><i class="bi bi-chevron-up"></i></button>
+                        <button class="btn btn-outline-light-custom move-service-btn" type="button" data-service-id="${escapeHtml(svc._id)}" data-direction="down" title="Move down"><i class="bi bi-chevron-down"></i></button>
+                      </div>
+                    </td>
                     <td class="text-end">
                       <div class="dropdown d-inline-block">
                         <button class="btn btn-sm btn-outline-light-custom dropdown-toggle" type="button" data-bs-toggle="dropdown">Actions</button>
@@ -511,6 +530,98 @@ block content
           if (!s && s !== 0) return '';
           return String(s).replace(/[&<>"'`=\/]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
         }
+
+        function moveSiblingRow(tr, direction) {
+          if (!tr || !tr.parentElement) return;
+          if (direction === 'up') {
+            const prev = tr.previousElementSibling;
+            if (prev) tr.parentElement.insertBefore(tr, prev);
+            return;
+          }
+          const next = tr.nextElementSibling;
+          if (next) tr.parentElement.insertBefore(next, tr);
+        }
+
+        function moveSiblingAccordion(item, direction) {
+          if (!item || !item.parentElement) return;
+          if (direction === 'up') {
+            const prev = item.previousElementSibling;
+            if (prev) item.parentElement.insertBefore(item, prev);
+            return;
+          }
+          const next = item.nextElementSibling;
+          if (next) item.parentElement.insertBefore(next, item);
+        }
+
+        if (servicesTbody && servicesTbody.dataset.moveBound !== '1') {
+          servicesTbody.dataset.moveBound = '1';
+          servicesTbody.addEventListener('click', async function (e) {
+            const btn = e.target.closest('.move-service-btn');
+            if (!btn) return;
+            e.preventDefault();
+
+            const serviceId = btn.dataset.serviceId;
+            const direction = btn.dataset.direction;
+            if (!serviceId || !direction) return;
+
+            const tr = btn.closest('tr');
+            const categoryId = serviceCategorySelect ? (serviceCategorySelect.value || '') : '';
+            const prevHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+            try {
+              const res = await fetch(`/admin/services/${encodeURIComponent(serviceId)}/move`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+                body: new URLSearchParams({ direction, categoryId }).toString()
+              });
+              const j = await res.json().catch(() => null);
+              if (!res.ok || !j || !j.ok) throw new Error((j && j.error) ? j.error : 'Failed to reorder service');
+              if (j.moved !== false) moveSiblingRow(tr, direction);
+            } catch (err) {
+              console.warn('move service failed', err);
+              alert((err && err.message) ? err.message : 'Failed to reorder service');
+            } finally {
+              btn.disabled = false;
+              btn.innerHTML = prevHtml;
+            }
+          });
+        }
+
+        if (unitsAccordion && unitsAccordion.dataset.moveBound !== '1') {
+          unitsAccordion.dataset.moveBound = '1';
+          unitsAccordion.addEventListener('click', async function (e) {
+            const btn = e.target.closest('.move-unit-btn');
+            if (!btn) return;
+            e.preventDefault();
+
+            const unitId = btn.dataset.unitId;
+            const direction = btn.dataset.direction;
+            if (!unitId || !direction) return;
+
+            const item = btn.closest('.accordion-item');
+            const prevHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+            try {
+              const res = await fetch(`/admin/units/${encodeURIComponent(unitId)}/move`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+                body: new URLSearchParams({ direction }).toString()
+              });
+              const j = await res.json().catch(() => null);
+              if (!res.ok || !j || !j.ok) throw new Error((j && j.error) ? j.error : 'Failed to reorder unit');
+              if (j.moved !== false) moveSiblingAccordion(item, direction);
+            } catch (err) {
+              console.warn('move unit failed', err);
+              alert((err && err.message) ? err.message : 'Failed to reorder unit');
+            } finally {
+              btn.disabled = false;
+              btn.innerHTML = prevHtml;
+            }
+          });
+        }
+
         // initial load + restore selection
         if (preferredCategoryId || (serviceCategorySelect && serviceCategorySelect.value)) {
           const immediateId = preferredCategoryId || (serviceCategorySelect ? serviceCategorySelect.value : '');

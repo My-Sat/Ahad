@@ -7,10 +7,10 @@ const Printer = require('../models/printer');
 
 exports.list = async (req, res) => {
   try {
-    const services = await Service.find().sort('name').lean();
+    const services = await Service.find().sort({ orderIndex: 1, name: 1 }).lean();
 
     // load units and subunits so the services list page can show/manage them side-by-side
-    const units = await ServiceCostUnit.find().sort('name').lean();
+    const units = await ServiceCostUnit.find().sort({ orderIndex: 1, name: 1 }).lean();
     const subunits = await ServiceCostSubUnit.find().sort('name').lean();
 
     res.render('services/list', { services, units, subunits });
@@ -105,7 +105,7 @@ exports.get = async (req, res) => {
     if (!service) return res.status(404).send('Service not found');
 
     // Load all units and subunits
-    const units = await ServiceCostUnit.find().sort('name').lean();
+    const units = await ServiceCostUnit.find().sort({ orderIndex: 1, name: 1 }).lean();
     const subunits = await ServiceCostSubUnit.find().sort('name').lean();
 
     // Build components (unit + its subUnit docs)
@@ -157,7 +157,10 @@ exports.create = async (req, res) => {
       category = new mongoose.Types.ObjectId(req.body.categoryId);
     }
 
-    const service = new Service({ name: name.trim(), components: [], requiresPrinter, category });
+    const top = await Service.findOne().sort({ orderIndex: -1, createdAt: -1 }).select('orderIndex').lean();
+    const nextOrderIndex = Number(top && Number.isFinite(Number(top.orderIndex)) ? top.orderIndex : 0) + 1;
+
+    const service = new Service({ name: name.trim(), components: [], requiresPrinter, category, orderIndex: nextOrderIndex });
     await service.save();
 
     // If AJAX request, return JSON of created service for client-side handling
@@ -175,6 +178,62 @@ exports.create = async (req, res) => {
     const isAjax = req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest';
     if (isAjax) return res.status(400).json({ ok: false, error: err.message || 'Error creating service' });
     res.status(500).send('Error creating service');
+  }
+};
+
+exports.move = async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ ok: false, error: 'Invalid service id' });
+    }
+
+    const direction = String(req.body.direction || '').toLowerCase();
+    if (direction !== 'up' && direction !== 'down') {
+      return res.status(400).json({ ok: false, error: 'Invalid direction' });
+    }
+
+    const categoryId = (req.body.categoryId || '').toString().trim();
+    const filter = {};
+    if (categoryId) {
+      if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+        return res.status(400).json({ ok: false, error: 'Invalid category id' });
+      }
+      filter.category = new mongoose.Types.ObjectId(categoryId);
+    }
+
+    const rows = await Service.find(filter)
+      .select('_id orderIndex name')
+      .sort({ orderIndex: 1, name: 1, _id: 1 })
+      .lean();
+
+    const idx = rows.findIndex(r => String(r._id) === String(id));
+    if (idx < 0) return res.status(404).json({ ok: false, error: 'Service not found in current view' });
+
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= rows.length) {
+      return res.json({ ok: true, moved: false });
+    }
+
+    const [moved] = rows.splice(idx, 1);
+    rows.splice(targetIdx, 0, moved);
+
+    const ops = rows.map((row, i) => ({
+      updateOne: {
+        filter: { _id: row._id },
+        update: { $set: { orderIndex: i + 1 } }
+      }
+    }));
+    if (ops.length) await Service.bulkWrite(ops);
+
+    return res.json({
+      ok: true,
+      moved: true,
+      order: rows.map(r => String(r._id))
+    });
+  } catch (err) {
+    console.error('service.move error:', err);
+    return res.status(500).json({ ok: false, error: 'Error reordering services' });
   }
 };
 

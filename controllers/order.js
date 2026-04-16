@@ -340,7 +340,7 @@ function materialMatchesItem(matSelections, itemSelections) {
 // Render order creation page
 exports.newOrderPage = async (req, res) => {
   try {
-    const services = await Service.find().select('_id name').sort('name').lean();
+    const services = await Service.find().select('_id name').sort({ orderIndex: 1, name: 1 }).lean();
 
     // optional preselected customer
     let customer = null;

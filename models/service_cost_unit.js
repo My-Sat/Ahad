@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const ServiceCostUnitSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   nameNormalized: { type: String, required: true, trim: true, lowercase: true },
+  orderIndex: { type: Number, default: 0, index: true },
 }, { timestamps: true });
 
 ServiceCostUnitSchema.pre('validate', function(next) {

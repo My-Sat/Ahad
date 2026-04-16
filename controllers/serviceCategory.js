@@ -93,7 +93,10 @@ exports.servicesForCategory = async (req, res) => {
     const id = req.params.id;
     if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid category id' });
 
-    const services = await Service.find({ category: id }).select('_id name requiresPrinter').sort('name').lean();
+    const services = await Service.find({ category: id })
+      .select('_id name requiresPrinter orderIndex')
+      .sort({ orderIndex: 1, name: 1, _id: 1 })
+      .lean();
     return res.json({ ok: true, services });
   } catch (err) {
     console.error('serviceCategory.servicesForCategory error', err);

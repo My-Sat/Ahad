@@ -21,6 +21,7 @@ const reportsController = require('../controllers/reports');
 
 // Units
 router.post('/units', ensureAdmin, unitController.create);
+router.post('/units/:id/move', ensureAdmin, unitController.move);
 router.put('/units/:id', ensureAdmin, unitController.update);
 router.delete('/units/:id', ensureAdmin, unitController.remove);
 
@@ -37,6 +38,7 @@ router.post('/services/:id/price-for-selection', ensureAdmin, serviceController.
 // return price rules for a chosen service
 router.get('/services/:serviceId/prices', serviceController.apiGetPricesForService);
 router.get('/services', ensureAdmin, serviceController.list);
+router.post('/services/:id/move', ensureAdmin, serviceController.move);
 router.get('/services/:id', ensureAdmin, serviceController.get);
 router.post('/services', ensureAdmin, serviceController.create);
 router.put('/services/:id', ensureAdmin, serviceController.update);
