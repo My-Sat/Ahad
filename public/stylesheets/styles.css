@@ -634,6 +634,21 @@ header .dropdown-menu,
   background: rgba(255,249,238,.62) !important;
 }
 
+/* Debtors modal: force visible blue title row when expanded */
+#debtorsTable tr.debtor-group-toggle.debtor-group-expanded > td{
+  background: rgba(13,110,253,.30) !important;
+  color: #ffffff !important;
+}
+#debtorsTable tr.debtor-group-toggle.debtor-group-expanded > td .text-muted{
+  color: #ffffff !important;
+}
+#debtorsTable tr.debtor-group-toggle.debtor-group-expanded > td strong,
+#debtorsTable tr.debtor-group-toggle.debtor-group-expanded > td .debtor-toggle-icon,
+#debtorsTable tr.debtor-group-toggle.debtor-group-expanded > td .debtor-toggle-icon i,
+#debtorsTable tr.debtor-group-toggle.debtor-group-expanded > td span{
+  color: #ffffff !important;
+}
+
 .table td.text-end{ vertical-align: middle; white-space: nowrap; }
 
 /* small helper text inside tables */

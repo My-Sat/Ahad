@@ -14,6 +14,7 @@ const DiscountConfig = require('../models/discount');
 const Store = require('../models/store');
 const StoreStock = require('../models/store_stock');
 const RegistrationSubmission = require('../models/registration_submission');
+const User = require('../models/user');
 
 
 async function getUsableCustomerCredit(customerId, session = null) {
@@ -1970,11 +1971,23 @@ exports.apiGetDebtors = async (req, res) => {
     // Build base match for date/other filters if needed (currently none)
     // We'll inject a handledBy filter for non-admins.
 
-    // Determine if we should restrict to current user
+    // Determine visibility by role:
+    // - admin: all debtors
+    // - cashier: only debts from clerk-handled orders (exclude admin-handled debts)
+    // - others (e.g. clerk): own handled orders only
     let userMatch = null;
     try {
-      const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
-      if (!isAdmin && req.user && req.user._id) {
+      const role = req.user && req.user.role ? String(req.user.role).toLowerCase() : '';
+      const isAdmin = role === 'admin';
+      const isCashier = role === 'cashier';
+
+      if (!isAdmin && isCashier) {
+        const clerkRows = await User.find({ role: 'clerk' }).select('_id').lean();
+        const clerkIds = (clerkRows || []).map(u => u && u._id).filter(Boolean);
+        userMatch = clerkIds.length
+          ? { handledBy: { $in: clerkIds } }
+          : { handledBy: { $in: [] } };
+      } else if (!isAdmin && req.user && req.user._id) {
         userMatch = { handledBy: new mongoose.Types.ObjectId(req.user._id) };
       }
     } catch (e) {

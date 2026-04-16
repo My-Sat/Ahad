@@ -1803,6 +1803,7 @@ if (debtorsTable) {
     });
 
     toggleRow.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+    toggleRow.classList.toggle('debtor-group-expanded', !expanded);
 
     const icon = toggleRow.querySelector('.debtor-toggle-icon');
     if (icon) {
