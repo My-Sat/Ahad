@@ -54,29 +54,11 @@ html(lang="en")
             nav#topTabs.nav.d-none.d-md-block
               ul.nav.nav-pills.mb-0.rounded-pill.shadow-sm(style='overflow:visible')
                 if role === 'admin'
-                  li.nav-item.dropdown
-                    a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-configs', role='button', data-bs-toggle='dropdown', aria-expanded='false')
-                      i.bi.bi-gear.me-2(aria-hidden='true')
-                      | Configs
-                    ul.dropdown-menu
-                      li
-                        a.dropdown-item(href='/admin/services', data-ajax='true', id='tab-services') Services
-                      li
-                        a.dropdown-item(href='/admin/users', data-ajax='true', id='tab-users') Users
-                      li
-                        a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging') Messaging
-                      li
-                        a.dropdown-item(href='/admin/discounts', data-ajax='true', id='tab-orders-discounts') Discounts
-
-                  li.nav-item.dropdown
-                    a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-assets', role='button', data-bs-toggle='dropdown', aria-expanded='false')
-                      i.bi.bi-tools.me-2(aria-hidden='true')
-                      | Assets
-                    ul.dropdown-menu
-                      li
-                        a.dropdown-item(href='/admin/printers', data-ajax='true', id='tab-printers') Printers
-                      li
-                        a.dropdown-item(href='/admin/stock', data-ajax='true', id='tab-stock') Stock
+                  if canSeeRegisterations
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/registrations', data-ajax='true', role='tab', id='tab-registerations')
+                        i.bi.bi-person-vcard.me-2(aria-hidden='true')
+                        | Registerations
 
                   li.nav-item
                     a.nav-link.d-flex.align-items-center(href='/orders/new', data-ajax='true', role='tab', id='tab-operations')
@@ -93,11 +75,30 @@ html(lang="en")
                       a.nav-link.d-flex.align-items-center(href='/customers', data-ajax='true', role='tab', id='tab-customers')
                         i.bi.bi-people.me-2(aria-hidden='true')
                         | Customers
-                  if canSeeRegisterations
-                    li.nav-item
-                      a.nav-link.d-flex.align-items-center(href='/registrations', data-ajax='true', role='tab', id='tab-registerations')
-                        i.bi.bi-person-vcard.me-2(aria-hidden='true')
-                        | Registerations
+
+                  li.nav-item.dropdown
+                    a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-assets', role='button', data-bs-toggle='dropdown', aria-expanded='false')
+                      i.bi.bi-tools.me-2(aria-hidden='true')
+                      | Assets
+                    ul.dropdown-menu
+                      li
+                        a.dropdown-item(href='/admin/printers', data-ajax='true', id='tab-printers') Printers
+                      li
+                        a.dropdown-item(href='/admin/stock', data-ajax='true', id='tab-stock') Stock
+
+                  li.nav-item.dropdown
+                    a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-configs', role='button', data-bs-toggle='dropdown', aria-expanded='false')
+                      i.bi.bi-gear.me-2(aria-hidden='true')
+                      | Configs
+                    ul.dropdown-menu
+                      li
+                        a.dropdown-item(href='/admin/services', data-ajax='true', id='tab-services') Services
+                      li
+                        a.dropdown-item(href='/admin/users', data-ajax='true', id='tab-users') Users
+                      li
+                        a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging') Messaging
+                      li
+                        a.dropdown-item(href='/admin/discounts', data-ajax='true', id='tab-orders-discounts') Discounts
 
                   li.nav-item
                     a.nav-link.d-flex.align-items-center(href='/admin/reports', data-ajax='true', role='tab', id='tab-reports')
@@ -106,6 +107,11 @@ html(lang="en")
 
                 else if role === 'cashier'
                   // Cashier: quick access tabs
+                  if canSeeRegisterations
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/registrations', data-ajax='true', role='tab', id='tab-registerations')
+                        i.bi.bi-person-vcard.me-2(aria-hidden='true')
+                        | Registerations
                   if canSeeOrdersNew
                     li.nav-item
                       a.nav-link.d-flex.align-items-center(href='/orders/new', data-ajax='true', role='tab', id='tab-operations')
@@ -121,13 +127,13 @@ html(lang="en")
                       a.nav-link.d-flex.align-items-center(href='/customers', data-ajax='true', role='tab', id='tab-customers')
                         i.bi.bi-people.me-2(aria-hidden='true')
                         | Customers
-                  if canSeeRegisterations
-                    li.nav-item
-                      a.nav-link.d-flex.align-items-center(href='/registrations', data-ajax='true', role='tab', id='tab-registerations')
-                        i.bi.bi-person-vcard.me-2(aria-hidden='true')
-                        | Registerations
                 else if role === 'clerk'
                   // Clerk: quick access tabs
+                  if canSeeRegisterations
+                    li.nav-item
+                      a.nav-link.d-flex.align-items-center(href='/registrations', data-ajax='true', role='tab', id='tab-registerations')
+                        i.bi.bi-person-vcard.me-2(aria-hidden='true')
+                        | Registerations
                   if canSeeOrdersNew
                     li.nav-item
                       a.nav-link.d-flex.align-items-center(href='/orders/new', data-ajax='true', role='tab', id='tab-operations')
@@ -143,11 +149,6 @@ html(lang="en")
                       a.nav-link.d-flex.align-items-center(href='/customers', data-ajax='true', role='tab', id='tab-customers')
                         i.bi.bi-people.me-2(aria-hidden='true')
                         | Customers
-                  if canSeeRegisterations
-                    li.nav-item
-                      a.nav-link.d-flex.align-items-center(href='/registrations', data-ajax='true', role='tab', id='tab-registerations')
-                        i.bi.bi-person-vcard.me-2(aria-hidden='true')
-                        | Registerations
                 else if role === 'secretary'
                   if canSeeRegisterations
                     li.nav-item
