@@ -142,7 +142,13 @@ block content
                                   span.visually-hidden Actions
                                 ul.dropdown-menu.dropdown-menu-end(aria-labelledby=`subMenuBtn-${su._id}`)
                                   li
-                                    button.dropdown-item.edit-subunit-btn(type='button', data-unit-id=u._id, data-subunit-id=su._id, data-subunit-name=su.name)
+                                    button.dropdown-item.edit-subunit-btn(
+                                      type='button',
+                                      data-unit-id=u._id,
+                                      data-subunit-id=su._id,
+                                      data-subunit-name=su.name,
+                                      data-subunit-factor=(typeof su.factor !== 'undefined' && su.factor !== null) ? su.factor : 1
+                                    )
                                       i(class='bi bi-pencil me-2', aria-hidden='true')
                                       | Edit
                                   li

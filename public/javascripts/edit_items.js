@@ -104,15 +104,18 @@ document.addEventListener('DOMContentLoaded', function () {
         const unitId = subBtn.dataset.unitId;
         const subunitId = subBtn.dataset.subunitId;
         const subunitName = subBtn.dataset.subunitName || '';
+        const subunitFactor = subBtn.dataset.subunitFactor || (subBtn.closest('li.list-group-item')?.dataset.factor) || '1';
         const unitIdInput = document.getElementById('editSubunitUnitId');
         const idInput = document.getElementById('editSubunitId');
         const nameInput = document.getElementById('editSubunitName');
+        const factorInput = document.getElementById('editSubunitFactor');
         if (unitIdInput) unitIdInput.value = unitId;
         if (idInput) idInput.value = subunitId;
         if (nameInput) {
           nameInput.value = subunitName;
           try { nameInput.focus(); nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length); } catch (err) {}
         }
+        if (factorInput) factorInput.value = String(subunitFactor || '1');
       });
       return;
     }
@@ -237,13 +240,16 @@ document.addEventListener('DOMContentLoaded', function () {
       const unitId = document.getElementById('editSubunitUnitId').value;
       const id = document.getElementById('editSubunitId').value;
       const name = document.getElementById('editSubunitName').value.trim();
+      const factorRaw = (document.getElementById('editSubunitFactor')?.value || '').trim();
+      const factorNum = Number(factorRaw || '1');
       if (!unitId || !id || !name) return alert('Name is required');
+      if (!isFinite(factorNum) || factorNum <= 0) return alert('Print factor must be greater than 0');
       saveSubunitBtn.disabled = true;
       try {
         const res = await fetch(`/admin/units/${unitId}/subunits/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-          body: JSON.stringify({ name })
+          body: JSON.stringify({ name, factor: factorNum })
         });
         const parsed = await handleResponseMaybeJson(res);
         if (parsed === null || (parsed && parsed.reload)) {
@@ -253,13 +259,16 @@ document.addEventListener('DOMContentLoaded', function () {
           return;
         }
         if (parsed && parsed.ok) {
+          const savedFactor = (parsed.sub && parsed.sub.factor !== undefined && parsed.sub.factor !== null) ? Number(parsed.sub.factor) : factorNum;
           const editBtns = document.querySelectorAll(`.edit-subunit-btn[data-subunit-id="${id}"]`);
           editBtns.forEach(btn => {
             btn.dataset.subunitName = name;
+            btn.dataset.subunitFactor = String(savedFactor);
             const li = btn.closest('li.list-group-item');
             if (li) {
               const nameSpan = li.querySelector('.subunit-name');
               if (nameSpan) nameSpan.textContent = name;
+              li.dataset.factor = String(savedFactor);
             }
           });
           const modalEl = document.getElementById('editSubunitModal');
