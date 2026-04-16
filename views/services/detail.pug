@@ -90,16 +90,24 @@ block content
                 th.text-center Actions
             tbody
               each p in prices
-                tr(data-price-id=p._id)
+                - const ruleSelectionText = (p.selectionLabel || (Array.isArray(p.selections) ? p.selections.map(s => `${(s && s.unit && s.unit.name) ? s.unit.name : ''} ${(s && s.subUnit && s.subUnit.name) ? s.subUnit.name : ''}`).join(' ') : '') || '')
+                - const ruleHintText = `${ruleSelectionText} ${p.customLabel || ''}`.trim()
+                - const isColorRule = /(?:\bcolour\b|\bcolor\b|\bc\/l\b|\bcol\b)/i.test(ruleHintText)
+                - const isBwRule = /(?:\bb\/w\b|black\s*and\s*white|monochrome|\bbw\b)/i.test(ruleHintText)
+                tr(data-price-id=p._id, class=isColorRule ? 'table-danger' : '')
                   td
+                    if isColorRule
+                      span.badge.text-bg-danger.me-2 Color
+                    else if isBwRule
+                      span.badge.text-bg-secondary.me-2 B/W
                     if p.selectionLabel
-                      = p.selectionLabel
+                      span(class=isColorRule ? 'text-danger fw-semibold' : '')= p.selectionLabel
                     else if p.selections && p.selections.length
                       - var len = p.selections.length
                       each s, i in p.selections
                         - var unitName = s.unit && s.unit.name ? s.unit.name : (s.unit ? String(s.unit) : '');
                         - var subName = s.subUnit && s.subUnit.name ? s.subUnit.name : (s.subUnit ? String(s.subUnit) : '');
-                        span.me-1 #{unitName}: #{subName}
+                        span.me-1(class=isColorRule ? 'text-danger fw-semibold' : '') #{unitName}: #{subName}
                         if i != len - 1
                           |  + 
                     else

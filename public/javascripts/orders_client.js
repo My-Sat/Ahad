@@ -224,6 +224,7 @@
   let serviceRequiresPrinter = false;
   let printers = []; // list of printers for the currently loaded service
   let books = [];    // list of available books (basic metadata)
+  let serviceToneIndex = Object.create(null);
 
     // ---- materials stock cache (for Apply-time validation) ----
 let materials = [];          // [{ _id, name, stocked, used, remaining, selections:[{unit,subUnit},...] }, ...]
@@ -233,6 +234,23 @@ let materialsFetchedAt = 0;  // ms timestamp when materials were last fetched
 
     // ---------- Service categories (populate category select + filter services) ----------
   const serviceCategorySelect = document.getElementById('serviceCategorySelect');
+
+  function serviceToneFromText(text) {
+    const s = String(text || '').toLowerCase();
+    const isBw = /(b\/w|black\s*and\s*white|monochrome|\bbw\b)/i.test(s);
+    const isColor = /(colour|color|c\/l|\bcol\b)/i.test(s);
+    if (isBw) return 'bw';
+    if (isColor) return 'color';
+    return 'other';
+  }
+
+  function canonicalServiceName(name) {
+    let s = String(name || '');
+    s = s.replace(/\b(color|colour|b\/w|black\s*and\s*white|monochrome)\b/ig, '');
+    s = s.replace(/[\(\)\-\_\/]+/g, ' ');
+    s = s.replace(/\s+/g, ' ').trim();
+    return s || String(name || '').trim();
+  }
 
 async function loadServiceCategories() {
   if (!serviceCategorySelect) return;
@@ -341,13 +359,38 @@ async function loadServicesForCategory(catId) {
     );
     const svcJson = svcRes.ok ? await svcRes.json() : null;
     const services = (svcJson && Array.isArray(svcJson.services)) ? svcJson.services : [];
+    serviceToneIndex = Object.create(null);
+    services.forEach(s => { serviceToneIndex[String(s._id)] = serviceToneFromText(s.name); });
 
+    // Merge color/B-W sibling services into one selectable service label.
+    const byBase = new Map();
     services.forEach(s => {
-      const opt = document.createElement('option');
-      opt.value = s._id;
-      opt.textContent = s.name;
-      opt.dataset.type = 'service';
-      serviceSelect.appendChild(opt);
+      const base = canonicalServiceName(s.name);
+      if (!byBase.has(base)) byBase.set(base, []);
+      byBase.get(base).push(s);
+    });
+
+    byBase.forEach((group, base) => {
+      const tones = new Set(group.map(g => serviceToneFromText(g.name)));
+      const mergeAsSingle = group.length > 1 && tones.has('color') && tones.has('bw');
+
+      if (mergeAsSingle) {
+        const opt = document.createElement('option');
+        opt.value = group.map(g => String(g._id)).join(',');
+        opt.textContent = base;
+        opt.dataset.type = 'service-group';
+        opt.dataset.serviceIds = group.map(g => String(g._id)).join(',');
+        serviceSelect.appendChild(opt);
+        return;
+      }
+
+      group.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s._id;
+        opt.textContent = s.name;
+        opt.dataset.type = 'service';
+        serviceSelect.appendChild(opt);
+      });
     });
 
     // Load books for orders (category-aware)
@@ -368,7 +411,7 @@ async function loadServicesForCategory(catId) {
       booksInCategory.forEach(b => {
         const opt = document.createElement('option');
         opt.value = b._id;
-        opt.textContent = `${b.name} — GH₵ ${formatMoney(b.unitPrice)}`;
+        opt.textContent = `${b.name} â€” GH₵ ${formatMoney(b.unitPrice)}`;
         opt.dataset.type = 'book';
         group.appendChild(opt);
       });
@@ -451,7 +494,7 @@ async function loadServicesForCategory(catId) {
       materialsLoaded = true;
       materialsFetchedAt = Date.now();
     } catch (e) {
-      // Don’t break ordering if materials can’t load; just skip checks.
+      // Donâ€™t break ordering if materials canâ€™t load; just skip checks.
       console.warn('loadMaterialsForStockChecks failed', e);
       materials = [];
       materialsLoaded = false;
@@ -670,7 +713,7 @@ async function loadServicesForCategory(catId) {
       ta.style.left = '-9999px';
       document.body.appendChild(ta);
       ta.select();
-      try { document.execCommand('copy'); try { window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch (_) {} } catch (e) { alert('Copy failed — select and copy: ' + text); }
+      try { document.execCommand('copy'); try { window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch (_) {} } catch (e) { alert('Copy failed â€” select and copy: ' + text); }
       document.body.removeChild(ta);
     }
 
@@ -727,7 +770,7 @@ async function loadServicesForCategory(catId) {
       doc.close();
       w.focus();
       const onLoadPrint = () => {
-        try { w.print(); } catch (e) { alert('Print failed — try copying the order ID.'); }
+        try { w.print(); } catch (e) { alert('Print failed â€” try copying the order ID.'); }
         setTimeout(()=>{ try { w.close(); } catch (e){} }, 700);
       };
       if (w.document.readyState === 'complete') onLoadPrint(); else { w.onload = onLoadPrint; setTimeout(onLoadPrint, 800); }
@@ -759,13 +802,14 @@ function renderPrices(bookMode = false) {
   prices.forEach(p => {
     const row = document.createElement('div');
     row.className = 'list-group-item d-flex align-items-center gap-3 flex-nowrap';
+    const isColorRule = (p && p.__tone === 'color');
 
     // left: label (only subunits)
     const left = document.createElement('div');
     left.className = 'flex-grow-1 text-truncate';
     const subOnly = subUnitsOnlyFromLabel(p.selectionLabel || '');
     const label = document.createElement('div');
-    label.innerHTML = `<strong class="d-inline-block text-truncate" style="max-width:420px;">${escapeHtml(subOnly)}</strong>`;
+    label.innerHTML = `<strong class="d-inline-block text-truncate ${isColorRule ? 'text-danger' : ''}" style="max-width:420px;">${escapeHtml(subOnly)}</strong>`;
     left.appendChild(label);
 
     const hasBackPrice = (p.price2 !== null && p.price2 !== undefined && !isNaN(Number(p.price2)));
@@ -774,9 +818,9 @@ function renderPrices(bookMode = false) {
     const priceLine = document.createElement('div');
     priceLine.className = 'small text-muted-light mt-1';
     if (hasBackPrice) {
-      priceLine.innerHTML = `Front: <strong class="text-white">GH₵ ${formatMoney(frontPrice)}</strong> <span class="mx-1">|</span> F/B: <strong class="text-white">GH₵ ${formatMoney(backPrice)}</strong>`;
+      priceLine.innerHTML = `Front: <strong class="${isColorRule ? 'text-danger' : 'text-white'}">GH₵ ${formatMoney(frontPrice)}</strong> <span class="mx-1">|</span> F/B: <strong class="${isColorRule ? 'text-danger' : 'text-white'}">GH₵ ${formatMoney(backPrice)}</strong>`;
     } else {
-      priceLine.innerHTML = `Price: <strong class="text-white">GH₵ ${formatMoney(frontPrice)}</strong>`;
+      priceLine.innerHTML = `Price: <strong class="${isColorRule ? 'text-danger' : 'text-white'}">GH₵ ${formatMoney(frontPrice)}</strong>`;
     }
     left.appendChild(priceLine);
 
@@ -905,7 +949,7 @@ function renderPrices(bookMode = false) {
       renderPrices();
       return;
     }
-    pricesList.innerHTML = '<div class="text-muted">Loading price rules…</div>';
+    pricesList.innerHTML = '<div class="text-muted">Loading price rulesâ€¦</div>';
     try {
       const res = await fetch(`/admin/services/${encodeURIComponent(serviceId)}/prices`, {
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -918,11 +962,15 @@ function renderPrices(bookMode = false) {
       if (!j.ok) throw new Error(j.error || 'No data returned');
       prices = (j.prices || []).map(x => ({
         _id: x._id,
-        key: x.key || null,                  // ✅ new
-        selections: Array.isArray(x.selections) ? x.selections : [], // ✅ new
+        key: x.key || null,
+        selections: Array.isArray(x.selections) ? x.selections : [],
         selectionLabel: x.selectionLabel,
         unitPrice: Number(x.unitPrice),
-        price2: (x.price2 !== null && x.price2 !== undefined) ? Number(x.price2) : null
+        price2: (x.price2 !== null && x.price2 !== undefined) ? Number(x.price2) : null,
+        serviceId: String(serviceId),
+        __tone: (serviceToneIndex[String(serviceId)] && serviceToneIndex[String(serviceId)] !== 'other')
+          ? serviceToneIndex[String(serviceId)]
+          : serviceToneFromText(x.selectionLabel || '')
       }));
       serviceRequiresPrinter = !!j.serviceRequiresPrinter;
       printers = (j.printers || []).map(p => ({ _id: p._id, name: p.name }));
@@ -930,6 +978,74 @@ function renderPrices(bookMode = false) {
     } catch (err) {
       console.error('loadPricesForService err', err);
       pricesList.innerHTML = `<p class="text-danger small">Error loading price rules.</p>`;
+    }
+  }
+  async function loadPricesForServiceGroup(serviceIdsCsv) {
+    const ids = String(serviceIdsCsv || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (!ids.length) {
+      prices = [];
+      serviceRequiresPrinter = false;
+      printers = [];
+      renderPrices();
+      return;
+    }
+
+    pricesList.innerHTML = '<div class="text-muted">Loading price rules…</div>';
+    try {
+      const all = await Promise.all(ids.map(async (sid) => {
+        const res = await fetch(`/admin/services/${encodeURIComponent(sid)}/prices`, {
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => null);
+          throw new Error((j && j.error) ? j.error : 'Failed to load price rules');
+        }
+        const j = await res.json();
+        if (!j.ok) throw new Error(j.error || 'No data returned');
+        return {
+          sid,
+          prices: Array.isArray(j.prices) ? j.prices : [],
+          serviceRequiresPrinter: !!j.serviceRequiresPrinter,
+          printers: Array.isArray(j.printers) ? j.printers : []
+        };
+      }));
+
+      const mergedPrices = [];
+      const printerMap = new Map();
+      serviceRequiresPrinter = false;
+
+      all.forEach(item => {
+        if (item.serviceRequiresPrinter) serviceRequiresPrinter = true;
+        item.printers.forEach(p => {
+          const key = String(p._id);
+          if (!printerMap.has(key)) printerMap.set(key, { _id: p._id, name: p.name });
+        });
+
+        item.prices.forEach(x => {
+          const label = String(x.selectionLabel || '');
+          const toneFromService = serviceToneIndex[String(item.sid)] || 'other';
+          mergedPrices.push({
+            _id: x._id,
+            key: x.key || null,
+            selections: Array.isArray(x.selections) ? x.selections : [],
+            selectionLabel: x.selectionLabel,
+            unitPrice: Number(x.unitPrice),
+            price2: (x.price2 !== null && x.price2 !== undefined) ? Number(x.price2) : null,
+            serviceId: String(item.sid),
+            __tone: toneFromService !== 'other' ? toneFromService : serviceToneFromText(label)
+          });
+        });
+      });
+
+      prices = mergedPrices;
+      printers = Array.from(printerMap.values());
+      renderPrices();
+    } catch (err) {
+      console.error('loadPricesForServiceGroup err', err);
+      pricesList.innerHTML = '<p class="text-danger small">Error loading merged service price rules.</p>';
     }
   }
 
@@ -1030,7 +1146,8 @@ function addToCart({
   factor,          // NEW (optional)
   fb,
   printerId,
-  spoiled
+  spoiled,
+  tone
 }) {
   const origPages = Number(pages) || 1;
   const factorVal = Number(factor) && Number(factor) > 0 ? Number(factor) : 1;
@@ -1041,8 +1158,8 @@ function addToCart({
   const effectiveQty = fb ? Math.ceil(origPages / 2) : origPages;
 
   // subtotal logic:
-  // - printing service → unitPrice × effectiveQty × factor
-  // - non-printing service → unitPrice × effectiveQty
+  // - printing service â†’ unitPrice Ã— effectiveQty Ã— factor
+  // - non-printing service â†’ unitPrice Ã— effectiveQty
   const subtotal = Number(
     (
       Number(unitPrice) *
@@ -1071,7 +1188,8 @@ function addToCart({
     subtotal,
     fb: !!fb,
     printerId: printerId || null,
-    spoiled
+    spoiled,
+    tone: tone || 'other'
   });
 
   renderCart();
@@ -1088,7 +1206,7 @@ function addToCart({
     orderNowBtn.disabled = true;
     updateSaveDraftBtn();
 
-    // ✅ ensure breakdown under totals is hidden when cart empties
+    // âœ… ensure breakdown under totals is hidden when cart empties
     if (manualDiscountSummary) manualDiscountSummary.style.display = 'none';
     if (clearManualDiscountBtn) clearManualDiscountBtn.style.display = 'none';
 
@@ -1104,7 +1222,8 @@ function addToCart({
       if (it.isBook) {
         displayLabel = `<div class="small text-muted">Book</div><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.bookName)}</div>`;
       } else {
-        displayLabel = `<div class="small text-muted">${escapeHtml(it.serviceName || '')}</div><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.selectionLabel || '')}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}</div>`;
+        const toneClass = (it.tone === 'color') ? 'text-danger' : '';
+        displayLabel = `<div class="small text-muted">${escapeHtml(it.serviceName || '')}</div><div class="${toneClass}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.selectionLabel || '')}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}</div>`;
       }
 
       let qtyCell = '';
@@ -1125,7 +1244,7 @@ function addToCart({
   const sheets = Math.max(0, Math.floor(effectiveQty * (isNaN(f) ? 1 : f)));
 
   qtyCell = String(isNaN(f) ? 1 : f);
-  factorCell = String(sheets);                          // ✅ Sheets
+  factorCell = String(sheets);                          // âœ… Sheets
   pagesCell = String(it.pagesOriginal);                 // raw pages
 } else {
         // normal service
@@ -1277,10 +1396,10 @@ function addToCart({
       // factor only meaningful for printing services
       const factorMul = serviceRequiresPrinter ? Math.max(1, Math.floor(Number(factor) || 1)) : 1;
 
-      // ✅ match server: (baseCount + spoiled) × factor
+      // âœ… match server: (baseCount + spoiled) Ã— factor
       const countNeeded = (Math.max(0, baseCount) + spoiledCount) * factorMul;
 
-      // If materials cache isn't loaded, skip checks (don’t block order flow)
+      // If materials cache isn't loaded, skip checks (donâ€™t block order flow)
       if (materialsLoaded && Array.isArray(materials) && materials.length) {
         const ruleSelections = Array.isArray(priceObj.selections) ? priceObj.selections : [];
 
@@ -1316,12 +1435,12 @@ function addToCart({
 
           if (blocks.length) {
             showAlertModal(blocks.join('\n'), 'Stock unavailable');
-            return; // ✅ block adding to cart
+            return; // âœ… block adding to cart
           }
 
           if (warns.length) {
             showAlertModal(warns.join('\n'), 'Low stock');
-            // ✅ allow add to cart after warning
+            // âœ… allow add to cart after warning
           }
         }
       }
@@ -1341,7 +1460,8 @@ function addToCart({
         factor,
         fb: fbChecked,
         printerId: selectedPrinterId || priceObj.__bookItem.printer,
-        spoiled
+        spoiled,
+        tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || '')
       });
     } else {
       // Normal service price add
@@ -1351,7 +1471,8 @@ function addToCart({
       if (fbChecked && priceObj.price2 !== null && priceObj.price2 !== undefined) {
         chosenPrice = Number(priceObj.price2);
       }
-      addToCart({ serviceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), unitPrice: chosenPrice, pages, factor, fb: fbChecked, printerId: selectedPrinterId, spoiled });
+      const effectiveServiceId = priceObj.serviceId || serviceId;
+      addToCart({ serviceId: effectiveServiceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), unitPrice: chosenPrice, pages, factor, fb: fbChecked, printerId: selectedPrinterId, spoiled, tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || '') });
     }
 
     // clear inputs
@@ -1619,7 +1740,7 @@ async function placeOrderFlow() {
     if (submittedCustomerSelect) submittedCustomerSelect.value = '';
     await loadSecretarySubmissions();
 
-    // Stock just changed on the server — force refresh so next Apply uses updated remaining
+    // Stock just changed on the server â€” force refresh so next Apply uses updated remaining
     await refreshMaterialsIfStale(true);
 
       // Reset cart and discount (discount must be re-applied per order)
@@ -1934,7 +2055,7 @@ function renderOrdersList(orders) {
       const o = j.order;
       const jobNote = String(o.jobNote || '').trim();
 
-      const metaText = `Order ID: ${o.orderId} — Total: GH₵ ${formatMoney(o.total)} — Status: ${o.status} — Created: ${formatDateTimeForDisplay(o.createdAt)}${jobNote ? ` — Note / Job Type: ${jobNote}` : ''}`;
+      const metaText = `Order ID: ${o.orderId} â€” Total: GH₵ ${formatMoney(o.total)} â€” Status: ${o.status} â€” Created: ${formatDateTimeForDisplay(o.createdAt)}${jobNote ? ` â€” Note / Job Type: ${jobNote}` : ''}`;
       if (orderDetailsMeta) orderDetailsMeta.textContent = metaText;
 
       let html = '';
@@ -1949,7 +2070,7 @@ function renderOrdersList(orders) {
           const isFb = (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
           const cleanLabel = isFb ? selLabel.replace(/\s*\(F\/B\)\s*$/i, '').trim() : selLabel;
 
-          // IMPORTANT: display the stored subtotal and pages — do not recompute based on pages only.
+          // IMPORTANT: display the stored subtotal and pages â€” do not recompute based on pages only.
           const qty = (typeof it.pages !== 'undefined' && it.pages !== null) ? String(it.pages) : '1';
           const unitPrice = (typeof it.unitPrice === 'number' || !isNaN(Number(it.unitPrice))) ? formatMoney(it.unitPrice) : (it.unitPrice || '');
           const subtotal = (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))) ? formatMoney(it.subtotal) : (it.subtotal || '');
@@ -2020,7 +2141,7 @@ function renderOrdersList(orders) {
   // copy / print from detail modal
   if (copyDetailOrderIdBtn) {
     copyDetailOrderIdBtn.addEventListener('click', function () {
-      const text = (orderDetailsMeta && orderDetailsMeta.textContent) ? orderDetailsMeta.textContent.split('—')[0].replace('Order ID:', '').trim() : '';
+      const text = (orderDetailsMeta && orderDetailsMeta.textContent) ? orderDetailsMeta.textContent.split('â€”')[0].replace('Order ID:', '').trim() : '';
       if (!text) return alert('No order ID available');
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(()=> { try { window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch(_){}; }).catch(()=> { alert('Copy failed'); });
       else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch(e){ alert('Copy failed'); } document.body.removeChild(ta); }
@@ -2072,6 +2193,13 @@ if (serviceSelect) {
 
       // reset select so user can re-open it later
       this.selectedIndex = 0;
+      return;
+    }
+
+    // ---------- Merged Service Group ----------
+    if (type === 'service-group') {
+      const idsCsv = selectedOption.dataset.serviceIds || value || '';
+      loadPricesForServiceGroup(idsCsv);
       return;
     }
 
@@ -2132,6 +2260,8 @@ if (serviceSelect) {
     initOrdersClient();
   });
 })();
+
+
 
 
 
