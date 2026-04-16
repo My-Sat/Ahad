@@ -152,6 +152,60 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
   let dailyTotalsLoading = false;
   let dailyTotalsLoaded = false;
   let dailyTotalsLastDate = '';
+  const suppressedTodayOrderIds = new Set();
+  let suppressedTodayOrderDate = '';
+  const SUPPRESSED_DAILY_ORDERS_KEY = 'orders_pay_suppressed_today_ids';
+
+  function readSuppressedDailyState() {
+    try {
+      const raw = localStorage.getItem(SUPPRESSED_DAILY_ORDERS_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      const date = String(parsed.date || '').trim();
+      const ids = Array.isArray(parsed.ids) ? parsed.ids.map(v => String(v || '').trim()).filter(Boolean) : [];
+      return { date, ids };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeSuppressedDailyState(date, idsSet) {
+    try {
+      const ids = Array.from(idsSet || []).map(v => String(v || '').trim()).filter(Boolean);
+      localStorage.setItem(SUPPRESSED_DAILY_ORDERS_KEY, JSON.stringify({ date, ids }));
+    } catch (e) {}
+  }
+
+  function syncSuppressedDailyFromStorage(today) {
+    const state = readSuppressedDailyState();
+    if (!state || !state.date || state.date !== today) {
+      suppressedTodayOrderIds.clear();
+      suppressedTodayOrderDate = today;
+      writeSuppressedDailyState(today, suppressedTodayOrderIds);
+      return;
+    }
+    suppressedTodayOrderIds.clear();
+    state.ids.forEach(id => suppressedTodayOrderIds.add(id));
+    suppressedTodayOrderDate = today;
+  }
+
+  function suppressOrderInDailyDropdown(orderId) {
+    const id = String(orderId || '').trim();
+    if (!id) return;
+    suppressedTodayOrderIds.add(id);
+    writeSuppressedDailyState(suppressedTodayOrderDate || isoDate(new Date()), suppressedTodayOrderIds);
+
+    if (!dailyOrdersSelect) return;
+    let removedSelected = false;
+    for (const o of Array.from(dailyOrdersSelect.options || [])) {
+      if (String(o.value || '').trim() === id) {
+        if (dailyOrdersSelect.value === id) removedSelected = true;
+        o.remove();
+      }
+    }
+    if (removedSelected) dailyOrdersSelect.value = '';
+  }
 
   function setDailyTotalsAmounts(totalOrders, totalPaid) {
     if (!dailyOrdersTotalAmountEl || !dailyPaidOrdersTotalAmountEl) return;
@@ -219,6 +273,7 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
     if (dailyTotalsLoading) return;
 
     const today = isoDate(new Date());
+    syncSuppressedDailyFromStorage(today);
     if (!opts.force && dailyTotalsLoaded && dailyTotalsLastDate === today) return;
 
     dailyTotalsLoading = true;
@@ -269,6 +324,7 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
       j.orders.forEach(o => {
         const id = String(o.orderId || '').trim();
         if (!id) return;
+        if (suppressedTodayOrderIds.has(id)) return;
         const name = String(o.name || '').trim();
         const showName = name && name.toLowerCase() !== 'walk-in';
         const label = showName ? `${name} ${id}` : id;
@@ -723,6 +779,34 @@ function discountAppliedLabel(order) {
     );
     const balType = netBal > 0 ? 'Credit Balance' : (netBal < 0 ? 'Debit Balance' : 'Settled');
     const balAbs = Math.abs(netBal);
+    const detailsTableHtml = `
+      <div class="table-responsive mb-2">
+        <table class="table table-sm table-borderless align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Handled By</th>
+              <th>Customer</th>
+              <th>Customer Phone</th>
+              <th>Order ID</th>
+              <th>Note / Job Type</th>
+              <th>Order Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${escapeHtml(handlerDisplay || '-')}</td>
+              <td>${escapeHtml(customerDisplay || '-')}</td>
+              <td>${escapeHtml(customerPhone || '-')}</td>
+              <td>${escapeHtml(order.orderId || '-')}</td>
+              <td>${escapeHtml(order.jobNote || '-')}</td>
+              <td>${escapeHtml(orderDateDisplay || '-')}</td>
+              <td>${escapeHtml(statusLabel || '-')}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    `;
     const accountHtml = currentHasCustomer ? `
       <div class="mt-3 p-2 rounded dark-surface" style="border:1px solid rgba(255,255,255,.12);">
         <div class="small text-muted-light">Customer Account</div>
@@ -735,13 +819,7 @@ function discountAppliedLabel(order) {
 
 
     orderInfo.innerHTML = `
-      ${ handlerDisplay ? `<p><strong>Handled by:</strong> ${escapeHtml(handlerDisplay)}</p>` : '' }
-      ${ customerDisplay ? `<p><strong>Customer:</strong> ${escapeHtml(customerDisplay)}</p>` : '' }
-      ${ customerPhone ? `<p><strong>Customer Phone:</strong> ${escapeHtml(customerPhone)}</p>` : '' }
-      <p><strong>Order ID:</strong> ${escapeHtml(order.orderId)}</p>
-      ${ order.jobNote ? `<p><strong>Note / Job Type:</strong> ${escapeHtml(order.jobNote)}</p>` : '' }
-      ${ orderDateDisplay ? `<p><strong>Order Date:</strong> ${escapeHtml(orderDateDisplay)}</p>` : '' }
-      <p><strong>Status:</strong> ${statusLabel}</p>
+      ${detailsTableHtml}
       ${itemsHtml}
       ${discountHtml}
       <p class="text-end"><strong>Total to pay: GH₵ ${fmt(order.total)}</strong></p>
@@ -978,6 +1056,7 @@ function discountAppliedLabel(order) {
 
         // re-fetch order to display updated status and data
         await fetchOrderById(currentOrderId);
+        suppressOrderInDailyDropdown(currentOrderId);
         try { await loadDailyOrdersDropdown({ force: true }); } catch (e) {}
 
         // clear input & hide pay button if now paid
