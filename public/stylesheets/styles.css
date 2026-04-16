@@ -80,10 +80,16 @@ body.app-bg .text-muted{ color: var(--muted) !important; }
 /* ---------------------------
    Header / Navbar
    --------------------------- */
+:root{
+  --app-header-height: 92px;
+}
+
 header{
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 1030;
+  left: 0;
+  right: 0;
+  z-index: 3000;
 }
 
 /* the header element in layout.pug has header.bg-white.shadow-sm */
@@ -92,6 +98,14 @@ header.bg-white.shadow-sm{
   border-bottom: 1px solid rgba(11,15,26,.10);
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(10px);
+}
+
+body.app-bg{
+  padding-top: var(--app-header-height);
+}
+
+@media (max-width: 767.98px){
+  :root{ --app-header-height: 74px; }
 }
 
 /* brand / logo */

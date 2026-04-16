@@ -11,7 +11,6 @@
     const lookupInput = document.getElementById('secretaryLookupInput');
     const lookupBtn = document.getElementById('secretaryLookupBtn');
     const registerBtn = document.getElementById('secretaryRegisterBtn');
-    const walkInBtn = document.getElementById('secretaryWalkInBtn');
     const submitBtn = document.getElementById('secretarySubmitBtn');
     const refreshBtn = document.getElementById('refreshRegistrationsBtn');
     const categoriesBox = document.getElementById('secretaryCategoriesBox');
@@ -273,7 +272,7 @@
 
     async function submitRegistration() {
       const categoryIds = selectedCategoryIds();
-      if (!selected) return showAlert('Select a customer or click Walk-in first');
+      if (!selected) return showAlert('Select a customer or click Lookup with empty field for walk-in');
       if (!categoryIds.length) return showAlert('Select at least one service category');
 
       const payload = {
@@ -333,7 +332,22 @@
       lookupForm.addEventListener('submit', async function (e) {
         e.preventDefault();
         const term = String(lookupInput ? lookupInput.value : '').trim();
-        if (!term) return showAlert('Enter phone or name');
+        if (!term) {
+          setSelectedWalkIn();
+          hideSuggestions();
+          showAlert('Walk-in selected. Choose categories and submit.');
+          if (lookupBtn) {
+            lookupBtn.disabled = false;
+            lookupBtn.textContent = 'Lookup';
+          }
+          if (window.__FormSpinner && typeof window.__FormSpinner.hide === 'function' && lookupBtn) {
+            try { window.__FormSpinner.hide(lookupBtn); } catch (e) {}
+          } else if (lookupBtn) {
+            lookupBtn.classList.remove('loading');
+            lookupBtn.removeAttribute('data-spinner-active');
+          }
+          return;
+        }
         lookupBtn.disabled = true;
         lookupBtn.textContent = 'Searching...';
         try {
@@ -349,6 +363,12 @@
         } finally {
           lookupBtn.disabled = false;
           lookupBtn.textContent = 'Lookup';
+          if (window.__FormSpinner && typeof window.__FormSpinner.hide === 'function' && lookupBtn) {
+            try { window.__FormSpinner.hide(lookupBtn); } catch (e) {}
+          } else if (lookupBtn) {
+            lookupBtn.classList.remove('loading');
+            lookupBtn.removeAttribute('data-spinner-active');
+          }
         }
       });
     }
@@ -362,13 +382,6 @@
         if (regNotes) regNotes.value = '';
         updateRegFields();
         if (regModal) regModal.show();
-      });
-    }
-
-    if (walkInBtn) {
-      walkInBtn.addEventListener('click', function () {
-        setSelectedWalkIn();
-        showAlert('Walk-in selected. Choose categories and submit.');
       });
     }
 
