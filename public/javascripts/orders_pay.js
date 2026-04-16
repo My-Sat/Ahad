@@ -1547,7 +1547,7 @@ Object.entries(grouped).forEach(([debtorName, items]) => {
         <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
         <td class="text-end"><span class="fw-semibold">${'GH₵ ' + out}</span></td>
         <td class="text-center">
-          <div class="dropdown d-inline-block">
+          <div class="dropup d-inline-block">
             <button class="btn btn-sm btn-outline-light-custom debtor-actions-menu"
               type="button"
               data-bs-toggle="dropdown"
@@ -1600,7 +1600,7 @@ html += `
     <td class="text-end">GH₵ ${totalPaid.toFixed(2)}</td>
     <td class="text-end fw-semibold">GH₵ ${totalOutstanding.toFixed(2)}</td>
     <td class="text-center">
-      <div class="dropdown d-inline-block">
+      <div class="dropup d-inline-block">
         <button class="btn btn-sm btn-outline-light-custom debtor-actions-menu"
           type="button"
           data-bs-toggle="dropdown"

@@ -649,6 +649,11 @@ header .dropdown-menu,
   color: #ffffff !important;
 }
 
+/* Debtors actions menu should not be clipped by table-responsive wrapper */
+#debtorsTableWrap{
+  overflow: visible !important;
+}
+
 .table td.text-end{ vertical-align: middle; white-space: nowrap; }
 
 /* small helper text inside tables */
