@@ -251,6 +251,57 @@ function initServiceDetailPage() {
     if (assignSpinner) assignSpinner.style.display = loading ? 'inline-block' : 'none';
   }
 
+  function moveAccordionItem(item, direction) {
+    if (!item || !item.parentElement) return;
+    if (direction === 'up') {
+      const prev = item.previousElementSibling;
+      if (prev) item.parentElement.insertBefore(item, prev);
+      return;
+    }
+    const next = item.nextElementSibling;
+    if (next) item.parentElement.insertBefore(next, item);
+  }
+
+  if (!document.body.dataset.serviceDetailMoveUnitBound) {
+    document.body.dataset.serviceDetailMoveUnitBound = '1';
+    document.addEventListener('click', async function (e) {
+      const btn = e.target && e.target.closest ? e.target.closest('.move-unit-btn-detail') : null;
+      if (!btn) return;
+      e.preventDefault();
+
+      const unitId = btn.dataset.unitId;
+      const direction = btn.dataset.direction;
+      if (!unitId || !direction) return;
+
+      const item = btn.closest('.accordion-item');
+      const prevHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+      try {
+        const res = await fetch(`/admin/units/${encodeURIComponent(unitId)}/move`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+          body: new URLSearchParams({ direction }).toString()
+        });
+        const j = await res.json().catch(() => null);
+        if (!res.ok || !j || !j.ok) {
+          showError((j && j.error) ? j.error : 'Failed to reorder unit');
+          return;
+        }
+        if (j.moved !== false) {
+          moveAccordionItem(item, direction);
+          showToast('Unit order updated', 1600);
+        }
+      } catch (err) {
+        console.error('move unit failed', err);
+        showError('Failed to reorder unit');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = prevHtml;
+      }
+    }, true);
+  }
+
   async function refreshPricesSection() {
     if (!serviceId) { window.location.reload(); return; }
     try {

@@ -32,10 +32,26 @@ block content
             - const panelId = `unitPanel-${idx}`
             .accordion-item
               h2.accordion-header(id=`heading-${panelId}`)
-                button.accordion-button.collapsed(type='button', data-bs-toggle='collapse', data-bs-target=`#collapse-${panelId}`, aria-expanded='false', aria-controls=`collapse-${panelId}`)
-                  .d-flex.justify-content-between.w-100
-                    span.unit-name #{unit && unit.name ? unit.name : 'Unit'}
-                    small.text-muted.ms-2 #{ (comp.subUnits && comp.subUnits.length) ? comp.subUnits.length + ' sub-units' : '0 sub-units' }
+                .d-flex.align-items-center
+                  button.accordion-button.collapsed.flex-grow-1(type='button', data-bs-toggle='collapse', data-bs-target=`#collapse-${panelId}`, aria-expanded='false', aria-controls=`collapse-${panelId}`)
+                    .d-flex.justify-content-between.w-100
+                      span.unit-name #{unit && unit.name ? unit.name : 'Unit'}
+                      small.text-muted.ms-2 #{ (comp.subUnits && comp.subUnits.length) ? comp.subUnits.length + ' sub-units' : '0 sub-units' }
+                  .btn-group.btn-group-sm.ms-2(role='group', aria-label='Arrange unit')
+                    button.btn.btn-outline-light-custom.move-unit-btn-detail(
+                      type='button',
+                      data-unit-id=unit._id,
+                      data-direction='up',
+                      title='Move unit up'
+                    )
+                      i.bi.bi-chevron-up
+                    button.btn.btn-outline-light-custom.move-unit-btn-detail(
+                      type='button',
+                      data-unit-id=unit._id,
+                      data-direction='down',
+                      title='Move unit down'
+                    )
+                      i.bi.bi-chevron-down
 
               .accordion-collapse.collapse(id=`collapse-${panelId}`)
                 .accordion-body

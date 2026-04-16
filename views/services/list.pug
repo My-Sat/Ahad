@@ -118,10 +118,16 @@ block content
                 - const panelId = `unitPanel-${idx}`
                 .accordion-item
                   h2.accordion-header(id=`heading-${panelId}`)
-                    button.accordion-button.collapsed(type='button', data-bs-toggle='collapse', data-bs-target=`#collapse-${panelId}`, aria-expanded='false', aria-controls=`collapse-${panelId}`)
-                      .d-flex.justify-content-between.w-100
-                        span.unit-name= u.name
-                        small.text-muted.ms-2 #{ subunits ? subunits.filter(s => String(s.unit) === String(u._id)).length : 0 } sub-units
+                    .d-flex.align-items-center
+                      button.accordion-button.collapsed.flex-grow-1(type='button', data-bs-toggle='collapse', data-bs-target=`#collapse-${panelId}`, aria-expanded='false', aria-controls=`collapse-${panelId}`)
+                        .d-flex.justify-content-between.w-100
+                          span.unit-name= u.name
+                          small.text-muted.ms-2 #{ subunits ? subunits.filter(s => String(s.unit) === String(u._id)).length : 0 } sub-units
+                      .btn-group.btn-group-sm.ms-2(role='group', aria-label='Arrange unit')
+                        button.btn.btn-outline-light-custom.move-unit-btn(type='button', data-unit-id=u._id, data-direction='up', title='Move unit up')
+                          i.bi.bi-chevron-up
+                        button.btn.btn-outline-light-custom.move-unit-btn(type='button', data-unit-id=u._id, data-direction='down', title='Move unit down')
+                          i.bi.bi-chevron-down
 
                   .accordion-collapse.collapse(id=`collapse-${panelId}`, aria-labelledby=`heading-${panelId}`)
                     .accordion-body
@@ -158,11 +164,6 @@ block content
                             | Add
 
                       .d-flex.justify-content-end.align-items-center.mt-3
-                        .btn-group.btn-group-sm.me-2(role='group', aria-label='Arrange unit')
-                          button.btn.btn-outline-light-custom.move-unit-btn(type='button', data-unit-id=u._id, data-direction='up', title='Move unit up')
-                            i.bi.bi-chevron-up
-                          button.btn.btn-outline-light-custom.move-unit-btn(type='button', data-unit-id=u._id, data-direction='down', title='Move unit down')
-                            i.bi.bi-chevron-down
                         .dropdown
                           button.btn.btn-sm.btn-outline-light-custom.dropdown-toggle(type='button', id=`unitMenuBtn-${u._id}`, data-bs-toggle='dropdown', aria-expanded='false', aria-haspopup='true', title='Unit actions')
                             span.visually-hidden Actions
