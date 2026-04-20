@@ -30,6 +30,14 @@ function initServiceDetailPage() {
           <form id="editPriceForm">
             <input type="hidden" id="editPriceId" name="priceId" />
             <div class="mb-3">
+              <label class="form-label" for="editPriceTarget">Price Target</label>
+              <select class="form-select form-select-dark" id="editPriceTarget" name="priceTarget">
+                <option value="customer" selected>Customers</option>
+                <option value="artist">Artist</option>
+                <option value="organisation">Organisation</option>
+              </select>
+            </div>
+            <div class="mb-3">
               <label class="form-label" for="editPriceInput">Price (GH₵)</label>
               <input class="form-control form-control-dark" type="number" step="0.01" id="editPriceInput" name="price" required />
               <div class="invalid-feedback">Please provide a valid price.</div>
@@ -72,6 +80,7 @@ function initServiceDetailPage() {
         const assignForm = document.getElementById('assign-price');
         const serviceId = assignForm ? (assignForm.getAttribute('action') || '').match(/\/admin\/services\/([^\/]+)\/prices/)?.[1] : null;
         const priceId = document.getElementById('editPriceId')?.value;
+        const target = (document.getElementById('editPriceTarget')?.value || 'customer').toLowerCase();
         const newVal = document.getElementById('editPriceInput')?.value;
         const newP2 = document.getElementById('editPrice2Input')?.value;
         const newCustomLabel = document.getElementById('editCustomLabelInput')?.value || '';
@@ -85,6 +94,7 @@ function initServiceDetailPage() {
           if (newP2 !== undefined && newP2 !== null && String(newP2).trim() !== '') body.append('price2', String(Number(newP2)));
           else body.append('price2', '');
           body.append('customLabel', String(newCustomLabel).trim());
+          body.append('priceTarget', target);
 
           const res = await fetch(`/admin/services/${serviceId}/prices/${priceId}`, {
             method: 'PUT',
@@ -132,8 +142,28 @@ function initServiceDetailPage() {
       const modalEl = createModalIfMissing();
       // populate modal inputs
       const idEl = document.getElementById('editPriceId'); if (idEl) idEl.value = ds.priceId || '';
-      const pEl = document.getElementById('editPriceInput'); if (pEl) pEl.value = ds.price || '';
-      const p2El = document.getElementById('editPrice2Input'); if (p2El) p2El.value = ds.price2 || '';
+      const targetEl = document.getElementById('editPriceTarget');
+      const pEl = document.getElementById('editPriceInput');
+      const p2El = document.getElementById('editPrice2Input');
+      function valuesForTarget(t) {
+        const target = String(t || 'customer').toLowerCase();
+        if (target === 'artist') return { p: ds.artistPrice || '', p2: ds.artistPrice2 || '' };
+        if (target === 'organisation') return { p: ds.organisationPrice || '', p2: ds.organisationPrice2 || '' };
+        return { p: ds.customerPrice || '', p2: ds.customerPrice2 || '' };
+      }
+      const initTarget = 'customer';
+      const initial = valuesForTarget(initTarget);
+      if (pEl) pEl.value = initial.p || '';
+      if (p2El) p2El.value = initial.p2 || '';
+      if (targetEl && targetEl.dataset.bound !== '1') {
+        targetEl.dataset.bound = '1';
+        targetEl.addEventListener('change', function () {
+          const nextVals = valuesForTarget(this.value);
+          if (pEl) pEl.value = nextVals.p || '';
+          if (p2El) p2El.value = nextVals.p2 || '';
+        });
+      }
+      if (targetEl) targetEl.value = initTarget;
       const cEl = document.getElementById('editCustomLabelInput'); if (cEl) cEl.value = ds.customLabel || '';
       const labelEl = document.getElementById('editSelectionLabel'); if (labelEl) labelEl.textContent = ds.selectionLabel || '';
       wireSaveHandlerOnce();
@@ -152,8 +182,15 @@ function initServiceDetailPage() {
   const assignSpinner = document.getElementById('assignSpinner');
   const priceInput = document.getElementById('priceInput');
   const price2Input = document.getElementById('price2Input');
+  const priceTargetInput = document.getElementById('priceTargetInput');
   const customLabelInput = document.getElementById('customLabelInput');
   const pricesSectionSelector = '#pricesSection';
+  const stagedPricesByTarget = {
+    customer: { price: '', price2: '' },
+    artist: { price: '', price2: '' },
+    organisation: { price: '', price2: '' }
+  };
+  let activeStageTarget = 'customer';
 
   const serviceId = (function () {
     if (!assignForm) return null;
@@ -251,6 +288,69 @@ function initServiceDetailPage() {
     if (assignSpinner) assignSpinner.style.display = loading ? 'inline-block' : 'none';
   }
 
+  function normalizeTarget(v) {
+    const t = String(v || 'customer').toLowerCase();
+    if (t === 'artist' || t === 'organisation') return t;
+    return 'customer';
+  }
+
+  function targetHasStagedValue(targetRaw) {
+    const t = normalizeTarget(targetRaw);
+    const row = stagedPricesByTarget[t] || { price: '', price2: '' };
+    const p = String(row.price || '').trim();
+    const p2 = String(row.price2 || '').trim();
+    return p !== '' || p2 !== '';
+  }
+
+  function refreshPriceTargetOptionBadges() {
+    if (!priceTargetInput) return;
+    const labels = {
+      customer: 'Customers',
+      artist: 'Artist',
+      organisation: 'Organisation'
+    };
+    Array.from(priceTargetInput.options || []).forEach(opt => {
+      const t = normalizeTarget(opt.value);
+      const base = labels[t] || opt.textContent || '';
+      opt.textContent = targetHasStagedValue(t) ? `${base} (Set)` : base;
+    });
+  }
+
+  function stageCurrentTargetInputs() {
+    const target = normalizeTarget(activeStageTarget);
+    stagedPricesByTarget[target] = stagedPricesByTarget[target] || { price: '', price2: '' };
+    stagedPricesByTarget[target].price = priceInput ? String(priceInput.value || '').trim() : '';
+    stagedPricesByTarget[target].price2 = price2Input ? String(price2Input.value || '').trim() : '';
+    refreshPriceTargetOptionBadges();
+  }
+
+  function loadInputsFromTarget(targetRaw) {
+    const target = normalizeTarget(targetRaw);
+    const vals = stagedPricesByTarget[target] || { price: '', price2: '' };
+    if (priceInput) priceInput.value = vals.price || '';
+    if (price2Input) price2Input.value = vals.price2 || '';
+    activeStageTarget = target;
+    if (priceTargetInput) priceTargetInput.value = target;
+    refreshPriceTargetOptionBadges();
+  }
+
+  if (priceTargetInput && priceTargetInput.dataset.boundStage !== '1') {
+    priceTargetInput.dataset.boundStage = '1';
+    priceTargetInput.addEventListener('change', function () {
+      stageCurrentTargetInputs();
+      loadInputsFromTarget(this.value);
+    });
+  }
+  if (priceInput && priceInput.dataset.boundStage !== '1') {
+    priceInput.dataset.boundStage = '1';
+    priceInput.addEventListener('input', stageCurrentTargetInputs);
+  }
+  if (price2Input && price2Input.dataset.boundStage !== '1') {
+    price2Input.dataset.boundStage = '1';
+    price2Input.addEventListener('input', stageCurrentTargetInputs);
+  }
+  loadInputsFromTarget('customer');
+
   function moveAccordionItem(item, direction) {
     if (!item || !item.parentElement) return;
     if (direction === 'up') {
@@ -303,7 +403,7 @@ function initServiceDetailPage() {
   }
 
   async function refreshPricesSection() {
-    if (!serviceId) { window.location.reload(); return; }
+    if (!serviceId) return false;
     try {
       const res = await fetch(`/admin/services/${serviceId}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
       if (!res.ok) throw new Error('Failed to reload prices');
@@ -312,11 +412,14 @@ function initServiceDetailPage() {
       const doc = parser.parseFromString(text, 'text/html');
       const newSection = doc.querySelector(pricesSectionSelector);
       const oldSection = document.querySelector(pricesSectionSelector);
-      if (newSection && oldSection && oldSection.parentNode) oldSection.parentNode.replaceChild(newSection, oldSection);
-      else window.location.reload();
+      if (newSection && oldSection && oldSection.parentNode) {
+        oldSection.parentNode.replaceChild(newSection, oldSection);
+        return true;
+      }
+      return false;
     } catch (err) {
       console.error('refreshPricesSection error', err);
-      window.location.reload();
+      return false;
     }
   }
 
@@ -400,23 +503,39 @@ function initServiceDetailPage() {
     });
   })();
 
-  // Assign price handler
-  if (assignForm) {
-    assignForm.addEventListener('submit', async function (e) {
-      e.preventDefault();
+  async function handleAssignPriceSubmit(e) {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
       const selections = gatherSelections();
       if (!selections.length) {
         if (priceInput) priceInput.classList.add('is-invalid');
         return;
       }
-      const val = priceInput ? priceInput.value : '';
-      if (!val || isNaN(val) || Number(val) < 0) { if (priceInput) priceInput.classList.add('is-invalid'); return; }
-      const price2Val = price2Input && price2Input.value ? price2Input.value : '';
+      stageCurrentTargetInputs();
+      const customerPriceVal = String(stagedPricesByTarget.customer && stagedPricesByTarget.customer.price ? stagedPricesByTarget.customer.price : '').trim();
+      if (!customerPriceVal || isNaN(customerPriceVal) || Number(customerPriceVal) < 0) {
+        if (priceTargetInput) priceTargetInput.value = 'customer';
+        loadInputsFromTarget('customer');
+        if (priceInput) priceInput.classList.add('is-invalid');
+        showError('Set a valid Customers price before assigning.');
+        return;
+      }
       const customLabelVal = customLabelInput && customLabelInput.value ? customLabelInput.value : '';
       const payload = new URLSearchParams();
       payload.append('selections', JSON.stringify(selections));
-      payload.append('price', String(Number(val)));
-      if (price2Val !== '') payload.append('price2', String(Number(price2Val)));
+      payload.append('customerPrice', String(Number(customerPriceVal)));
+      const customerPrice2Val = String(stagedPricesByTarget.customer && stagedPricesByTarget.customer.price2 ? stagedPricesByTarget.customer.price2 : '').trim();
+      if (customerPrice2Val !== '' && !isNaN(customerPrice2Val) && Number(customerPrice2Val) >= 0) payload.append('customerPrice2', String(Number(customerPrice2Val)));
+
+      const artistPriceVal = String(stagedPricesByTarget.artist && stagedPricesByTarget.artist.price ? stagedPricesByTarget.artist.price : '').trim();
+      const artistPrice2Val = String(stagedPricesByTarget.artist && stagedPricesByTarget.artist.price2 ? stagedPricesByTarget.artist.price2 : '').trim();
+      if (artistPriceVal !== '' && !isNaN(artistPriceVal) && Number(artistPriceVal) >= 0) payload.append('artistPrice', String(Number(artistPriceVal)));
+      if (artistPrice2Val !== '' && !isNaN(artistPrice2Val) && Number(artistPrice2Val) >= 0) payload.append('artistPrice2', String(Number(artistPrice2Val)));
+
+      const organisationPriceVal = String(stagedPricesByTarget.organisation && stagedPricesByTarget.organisation.price ? stagedPricesByTarget.organisation.price : '').trim();
+      const organisationPrice2Val = String(stagedPricesByTarget.organisation && stagedPricesByTarget.organisation.price2 ? stagedPricesByTarget.organisation.price2 : '').trim();
+      if (organisationPriceVal !== '' && !isNaN(organisationPriceVal) && Number(organisationPriceVal) >= 0) payload.append('organisationPrice', String(Number(organisationPriceVal)));
+      if (organisationPrice2Val !== '' && !isNaN(organisationPrice2Val) && Number(organisationPrice2Val) >= 0) payload.append('organisationPrice2', String(Number(organisationPrice2Val)));
+
       payload.append('customLabel', String(customLabelVal).trim());
       try {
         setAssignLoading(true);
@@ -427,25 +546,36 @@ function initServiceDetailPage() {
         });
         if (res.ok) {
           await refreshPricesSection();
-          document.querySelectorAll('.unit-sub-checkbox:checked').forEach(cb => cb.checked = false);
-          if (priceInput) priceInput.value = '';
-          if (price2Input) price2Input.value = '';
+          // Keep selected sub-units intact so admins can quickly assign
+          // Artist/Organisation prices for the same rule without reselecting.
+          stagedPricesByTarget.customer = { price: '', price2: '' };
+          stagedPricesByTarget.artist = { price: '', price2: '' };
+          stagedPricesByTarget.organisation = { price: '', price2: '' };
+          loadInputsFromTarget('customer');
+          refreshPriceTargetOptionBadges();
           if (customLabelInput) customLabelInput.value = '';
           showToast('Price rule assigned', 2500);
         } else {
           const ct = res.headers.get('content-type') || '';
           if (ct.includes('application/json')) {
             const j = await res.json().catch(() => null);
-            alert((j && j.error) ? j.error : 'Assign failed');
-          } else window.location.reload();
+            showError((j && j.error) ? j.error : 'Assign failed');
+          } else {
+            const t = await res.text().catch(() => '');
+            showError(t || 'Assign failed');
+          }
         }
       } catch (err) {
         console.error('assign error', err);
-        window.location.reload();
+        showError('Failed to assign price');
       } finally {
         setAssignLoading(false);
       }
-    });
+  }
+
+  // Assign price handler
+  if (assignForm) {
+    assignForm.addEventListener('submit', handleAssignPriceSubmit);
   }
 
   // Delete handling only (edit handled by capturing handler)

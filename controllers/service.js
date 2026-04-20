@@ -14,6 +14,35 @@ function detectRuleTone(text) {
   return 'other';
 }
 
+function normalizePriceTarget(v) {
+  const x = String(v || 'customer').toLowerCase().trim();
+  if (x === 'artist' || x === 'organisation') return x;
+  return 'customer';
+}
+
+function normalizeCustomerCategory(v) {
+  const x = String(v || '').toLowerCase().trim();
+  if (x === 'artist' || x === 'organisation') return x;
+  return 'customer';
+}
+
+function pickEffectivePriceForCategory(priceDoc, customerCategory) {
+  const cat = normalizeCustomerCategory(customerCategory);
+  const basePrice = Number(priceDoc && priceDoc.price != null ? priceDoc.price : 0);
+  const basePrice2 = (priceDoc && priceDoc.price2 != null) ? Number(priceDoc.price2) : null;
+  if (cat === 'customer') {
+    return { unitPrice: basePrice, price2: basePrice2 };
+  }
+
+  const cp = (priceDoc && priceDoc.categoryPrices && priceDoc.categoryPrices[cat]) ? priceDoc.categoryPrices[cat] : null;
+  const hasOverride = cp && cp.price != null && !isNaN(Number(cp.price));
+  const hasOverride2 = cp && cp.price2 != null && !isNaN(Number(cp.price2));
+  return {
+    unitPrice: hasOverride ? Number(cp.price) : basePrice,
+    price2: hasOverride2 ? Number(cp.price2) : basePrice2
+  };
+}
+
 exports.list = async (req, res) => {
   try {
     const services = await Service.find().sort({ orderIndex: 1, name: 1 }).lean();
@@ -59,6 +88,7 @@ exports.getPriceForSelection = async (req, res) => {
 exports.apiGetPricesForService = async (req, res) => {
   try {
     const { serviceId } = req.params;
+    const customerCategory = normalizeCustomerCategory(req.query.customerCategory);
     if (!mongoose.Types.ObjectId.isValid(serviceId)) return res.status(400).json({ error: 'Invalid service id' });
 
     // Determine if service requires a printer
@@ -72,7 +102,9 @@ exports.apiGetPricesForService = async (req, res) => {
     // fetch printers list for client to show if needed
     const printers = await Printer.find().select('_id name').sort('name').lean();
 
-    const out = prices.map(p => ({
+    const out = prices.map(p => {
+      const eff = pickEffectivePriceForCategory(p, customerCategory);
+      return ({
       ruleTone: detectRuleTone((p.selections || []).map(s => {
         const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
         const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
@@ -94,9 +126,16 @@ exports.apiGetPricesForService = async (req, res) => {
       }).join(' + ')),
       customLabel: p.customLabel || '',
 
-      unitPrice: p.price,
-      price2: (p.price2 !== undefined && p.price2 !== null) ? p.price2 : null
-    }));
+      unitPrice: eff.unitPrice,
+      price2: eff.price2,
+      customerPrice: p.price,
+      customerPrice2: (p.price2 !== undefined && p.price2 !== null) ? p.price2 : null,
+      artistPrice: (p.categoryPrices && p.categoryPrices.artist && p.categoryPrices.artist.price != null) ? p.categoryPrices.artist.price : null,
+      artistPrice2: (p.categoryPrices && p.categoryPrices.artist && p.categoryPrices.artist.price2 != null) ? p.categoryPrices.artist.price2 : null,
+      organisationPrice: (p.categoryPrices && p.categoryPrices.organisation && p.categoryPrices.organisation.price != null) ? p.categoryPrices.organisation.price : null,
+      organisationPrice2: (p.categoryPrices && p.categoryPrices.organisation && p.categoryPrices.organisation.price2 != null) ? p.categoryPrices.organisation.price2 : null
+      });
+    });
 
         return res.json({ ok: true, prices: out, serviceRequiresPrinter, printers });
       } catch (err) {
@@ -377,7 +416,18 @@ exports.addComponent = async (req, res) => {
 exports.assignPrice = async (req, res) => {
   try {
     const serviceId = req.params.id;
-    let { selections, price, price2, customLabel } = req.body;
+    let {
+      selections,
+      price, price2, customLabel, priceTarget,
+      customerPrice, customerPrice2,
+      artistPrice, artistPrice2,
+      organisationPrice, organisationPrice2
+    } = req.body;
+    const target = normalizePriceTarget(priceTarget);
+    const hasBatchPayload =
+      typeof customerPrice !== 'undefined' ||
+      typeof artistPrice !== 'undefined' ||
+      typeof organisationPrice !== 'undefined';
 
     if (!mongoose.Types.ObjectId.isValid(serviceId)) return res.status(400).send('Invalid service id');
     if (!selections) return res.status(400).send('No selections provided');
@@ -387,15 +437,49 @@ exports.assignPrice = async (req, res) => {
       return res.status(400).send('Selections must be a non-empty array');
     }
 
-    price = parseFloat(price);
-    if (isNaN(price) || price < 0) return res.status(400).send('Invalid price');
+    function parseRequiredAmount(raw, label) {
+      const v = parseFloat(raw);
+      if (isNaN(v) || v < 0) {
+        const err = new Error(`Invalid ${label}`);
+        err.statusCode = 400;
+        throw err;
+      }
+      return v;
+    }
+    function parseOptionalAmount(raw, label) {
+      if (raw === undefined || raw === null || String(raw).trim() === '') return null;
+      const v = parseFloat(raw);
+      if (isNaN(v) || v < 0) {
+        const err = new Error(`Invalid ${label}`);
+        err.statusCode = 400;
+        throw err;
+      }
+      return v;
+    }
 
-    // optional price2
-    if (price2 !== undefined && price2 !== null && String(price2).trim() !== '') {
-      price2 = parseFloat(price2);
-      if (isNaN(price2) || price2 < 0) return res.status(400).send('Invalid price2');
+    let resolvedCustomerPrice = null;
+    let resolvedCustomerPrice2 = null;
+    let resolvedArtistPrice = null;
+    let resolvedArtistPrice2 = null;
+    let resolvedOrganisationPrice = null;
+    let resolvedOrganisationPrice2 = null;
+
+    if (hasBatchPayload) {
+      resolvedCustomerPrice = parseRequiredAmount(
+        (customerPrice !== undefined ? customerPrice : price),
+        'customer price'
+      );
+      resolvedCustomerPrice2 = parseOptionalAmount(
+        (customerPrice2 !== undefined ? customerPrice2 : price2),
+        'customer F/B price'
+      );
+      resolvedArtistPrice = parseOptionalAmount(artistPrice, 'artist price');
+      resolvedArtistPrice2 = parseOptionalAmount(artistPrice2, 'artist F/B price');
+      resolvedOrganisationPrice = parseOptionalAmount(organisationPrice, 'organisation price');
+      resolvedOrganisationPrice2 = parseOptionalAmount(organisationPrice2, 'organisation F/B price');
     } else {
-      price2 = null;
+      price = parseRequiredAmount(price, 'price');
+      price2 = parseOptionalAmount(price2, 'price2');
     }
     customLabel = (customLabel || '').toString().trim();
 
@@ -425,13 +509,28 @@ exports.assignPrice = async (req, res) => {
         service: serviceId,
         selections: normalized,
         key,
-        price,
-        price2,
         customLabel,
         updatedAt: new Date()
       },
       $setOnInsert: { createdAt: new Date() }
     };
+    if (hasBatchPayload) {
+      update.$set.price = resolvedCustomerPrice;
+      update.$set.price2 = resolvedCustomerPrice2;
+      update.$set['categoryPrices.artist.price'] = resolvedArtistPrice;
+      update.$set['categoryPrices.artist.price2'] = resolvedArtistPrice2;
+      update.$set['categoryPrices.organisation.price'] = resolvedOrganisationPrice;
+      update.$set['categoryPrices.organisation.price2'] = resolvedOrganisationPrice2;
+    } else if (target === 'customer') {
+      update.$set.price = price;
+      update.$set.price2 = price2;
+    } else {
+      update.$set[`categoryPrices.${target}.price`] = price;
+      update.$set[`categoryPrices.${target}.price2`] = price2;
+      // Ensure legacy/default customer price is initialized on first insert.
+      update.$setOnInsert.price = price;
+      update.$setOnInsert.price2 = price2;
+    }
     const opts = { new: true, upsert: true, setDefaultsOnInsert: true };
 
     const saved = await ServicePrice.findOneAndUpdate(filter, update, opts).lean();
@@ -447,12 +546,34 @@ exports.assignPrice = async (req, res) => {
     }
     const label = customLabel || hydratedParts.join(' + ');
 
+    if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
+      return res.json({
+        ok: true,
+        price: {
+          _id: saved._id,
+          service: saved.service,
+          key: saved.key,
+          selections: saved.selections,
+          customLabel: saved.customLabel || '',
+          price: saved.price,
+          price2: (saved.price2 !== undefined ? saved.price2 : null),
+          categoryPrices: saved.categoryPrices || {}
+        },
+        label
+      });
+    }
+
     // Redirect back with success query params (URL-encode label and price)
-    const redirectUrl = `/admin/services/${serviceId}?assigned=1&price=${encodeURIComponent(String(price))}&label=${encodeURIComponent(label)}`;
+    const redirectUrl = `/admin/services/${serviceId}?assigned=1&price=${encodeURIComponent(String(hasBatchPayload ? resolvedCustomerPrice : price))}&label=${encodeURIComponent(label)}`;
     return res.redirect(redirectUrl);
   } catch (err) {
     console.error(err);
+    const status = err.statusCode || 500;
+    if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
+      if (err.code === 11000) return res.status(409).json({ ok: false, error: 'A price rule for this exact selection already exists' });
+      return res.status(status).json({ ok: false, error: err.message || 'Error assigning price' });
+    }
     if (err.code === 11000) return res.status(409).send('A price rule for this exact selection already exists');
-    res.status(500).send('Error assigning price');
+    res.status(status).send(err.message || 'Error assigning price');
   }
 };

@@ -295,6 +295,22 @@ function setSelectedCustomerFromSubmission(sub) {
   const phoneEl = document.getElementById('selectedCustomerPhone');
   const categoryEl = document.getElementById('selectedCustomerCategory');
   const card = document.getElementById('selectedCustomerCard');
+  const prevSubmissionId = activeSubmission ? String(activeSubmission.id || '') : '';
+  const nextSubmissionId = sub ? String(sub.id || '') : '';
+  const submissionChanged = prevSubmissionId !== nextSubmissionId;
+
+  if (submissionChanged && Array.isArray(cart) && cart.length) {
+    cart = [];
+    manualDiscount = null;
+    if (typeof renderCart === 'function') renderCart();
+    if (serviceCategorySelect) serviceCategorySelect.value = '';
+    if (serviceSelect) serviceSelect.innerHTML = '<option value="">-- Select a service --</option>';
+    prices = [];
+    if (typeof renderPrices === 'function') renderPrices();
+    if (typeof showGlobalToast === 'function') {
+      try { showGlobalToast('Switched customer: previous cart cleared', 1800); } catch (e) {}
+    }
+  }
 
   activeSubmission = sub || null;
   if (orderSubmissionIdEl) orderSubmissionIdEl.value = sub ? String(sub.id || '') : '';
@@ -317,6 +333,13 @@ function setSelectedCustomerFromSubmission(sub) {
   if (card) card.style.display = '';
   loadServiceCategories();
   updateSaveDraftBtn();
+}
+
+function getActiveCustomerCategory() {
+  if (!activeSubmission) return '';
+  const raw = String(activeSubmission.customerCategory || '').toLowerCase().trim();
+  if (raw === 'artist' || raw === 'organisation') return raw;
+  return 'customer';
 }
 
 async function loadSecretarySubmissions() {
@@ -966,7 +989,9 @@ function renderPrices(bookMode = false) {
     }
     pricesList.innerHTML = '<div class="text-muted">Loading price rulesâ€¦</div>';
     try {
-      const res = await fetch(`/admin/services/${encodeURIComponent(serviceId)}/prices`, {
+      const cat = getActiveCustomerCategory();
+      const url = `/admin/services/${encodeURIComponent(serviceId)}/prices${cat ? `?customerCategory=${encodeURIComponent(cat)}` : ''}`;
+      const res = await fetch(url, {
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
       });
       if (!res.ok) {
@@ -1011,7 +1036,9 @@ function renderPrices(bookMode = false) {
     pricesList.innerHTML = '<div class="text-muted">Loading price rules…</div>';
     try {
       const all = await Promise.all(ids.map(async (sid) => {
-        const res = await fetch(`/admin/services/${encodeURIComponent(sid)}/prices`, {
+        const cat = getActiveCustomerCategory();
+        const url = `/admin/services/${encodeURIComponent(sid)}/prices${cat ? `?customerCategory=${encodeURIComponent(cat)}` : ''}`;
+        const res = await fetch(url, {
           headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         if (!res.ok) {

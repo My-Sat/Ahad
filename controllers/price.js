@@ -5,6 +5,12 @@ const Service = require('../models/service');
 const ServiceCostUnit = require('../models/service_cost_unit');
 const ServiceCostSubUnit = require('../models/service_cost_subunit');
 
+function normalizePriceTarget(v) {
+  const x = String(v || 'customer').toLowerCase().trim();
+  if (x === 'artist' || x === 'organisation') return x;
+  return 'customer';
+}
+
 /**
  * Return an HTML fragment or JSON list of prices for a service.
  * (Your code used to render a view; keep it if you need server-rendered fragment)
@@ -48,7 +54,8 @@ exports.listForService = async (req, res) => {
 exports.createPrice = async (req, res) => {
   try {
     const serviceId = req.params.id;
-    let { selections, price, price2, customLabel } = req.body;
+    let { selections, price, price2, customLabel, priceTarget } = req.body;
+    const target = normalizePriceTarget(priceTarget);
 
     // if selections sent as JSON string, parse it
     if (typeof selections === 'string') {
@@ -104,7 +111,12 @@ exports.createPrice = async (req, res) => {
     }
 
     // Create the ServicePrice doc (include price2)
-    const sp = new ServicePrice({ service: serviceId, selections, price, price2, customLabel });
+    const createDoc = { service: serviceId, selections, price, price2, customLabel };
+    if (target === 'artist' || target === 'organisation') {
+      createDoc.categoryPrices = createDoc.categoryPrices || {};
+      createDoc.categoryPrices[target] = { price, price2 };
+    }
+    const sp = new ServicePrice(createDoc);
     await sp.save();
 
     // populate selections for client convenience
@@ -163,7 +175,8 @@ exports.removePrice = async (req, res) => {
 exports.updatePrice = async (req, res) => {
   try {
     const { id: serviceId, priceId } = req.params;
-    let { price, price2, customLabel } = req.body;
+    let { price, price2, customLabel, priceTarget } = req.body;
+    const target = normalizePriceTarget(priceTarget);
 
     if (!mongoose.Types.ObjectId.isValid(serviceId) || !mongoose.Types.ObjectId.isValid(priceId)) {
       if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
@@ -194,9 +207,18 @@ exports.updatePrice = async (req, res) => {
     }
     customLabel = (customLabel || '').toString().trim();
 
+    const setObj = { customLabel, updatedAt: new Date() };
+    if (target === 'customer') {
+      setObj.price = price;
+      setObj.price2 = price2;
+    } else {
+      setObj[`categoryPrices.${target}.price`] = price;
+      setObj[`categoryPrices.${target}.price2`] = price2;
+    }
+
     const doc = await ServicePrice.findOneAndUpdate(
       { _id: priceId, service: serviceId },
-      { $set: { price, price2, customLabel, updatedAt: new Date() } },
+      { $set: setObj },
       { new: true }
     ).lean();
 

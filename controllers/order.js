@@ -2169,6 +2169,7 @@ exports.apiListSecretarySubmissions = async (req, res) => {
       status: 'pending',
       dayKey: currentUtcDayKey()
     })
+      .populate('customer', '_id category')
       .populate('categories', '_id name')
       .sort({ createdAt: 1 })
       .lean();
@@ -2177,7 +2178,8 @@ exports.apiListSecretarySubmissions = async (req, res) => {
       id: String(r._id),
       displayName: String(r.displayName || '').trim(),
       phone: String(r.phone || '').trim(),
-      customerId: r.customer ? String(r.customer) : '',
+      customerId: (r.customer && r.customer._id) ? String(r.customer._id) : '',
+      customerCategory: (r.customer && r.customer.category) ? String(r.customer.category) : '',
       walkInNumber: (r.walkInNumber == null ? null : Number(r.walkInNumber)),
       categories: Array.isArray(r.categories)
         ? r.categories.map(c => ({ id: String(c._id), name: c.name }))

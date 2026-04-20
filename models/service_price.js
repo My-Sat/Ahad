@@ -5,6 +5,11 @@ const SelectionSchema = new mongoose.Schema({
   subUnit: { type: mongoose.Schema.Types.ObjectId, ref: 'ServiceCostSubUnit', required: true }
 }, { _id: false });
 
+const CategoryPriceSchema = new mongoose.Schema({
+  price: { type: Number, required: false, min: 0, default: null },
+  price2: { type: Number, required: false, min: 0, default: null }
+}, { _id: false });
+
 const ServicePriceSchema = new mongoose.Schema({
   service: { type: mongoose.Schema.Types.ObjectId, ref: 'service', required: true, index: true },
   selections: { type: [SelectionSchema], required: true },
@@ -16,6 +21,10 @@ const ServicePriceSchema = new mongoose.Schema({
   // Optional second price — used for "Front + Back" reduced pricing.
   // If null/undefined the client will fall back to `price`.
   price2: { type: Number, required: false, min: 0, default: null },
+  categoryPrices: {
+    artist: { type: CategoryPriceSchema, default: () => ({}) },
+    organisation: { type: CategoryPriceSchema, default: () => ({}) }
+  },
 
   createdBy: { type: String },
   updatedBy: { type: String }
