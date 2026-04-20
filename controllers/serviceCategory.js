@@ -2,6 +2,7 @@
 const mongoose = require('mongoose');
 const ServiceCategory = require('../models/service_category');
 const Service = require('../models/service');
+const Book = require('../models/book');
 
 exports.list = async (req, res) => {
   try {
@@ -97,7 +98,13 @@ exports.servicesForCategory = async (req, res) => {
       .select('_id name requiresPrinter orderIndex')
       .sort({ orderIndex: 1, name: 1, _id: 1 })
       .lean();
-    return res.json({ ok: true, services });
+
+    const compoundServices = await Book.find({ category: id })
+      .select('_id name unitPrice')
+      .sort({ name: 1, _id: 1 })
+      .lean();
+
+    return res.json({ ok: true, services, compoundServices });
   } catch (err) {
     console.error('serviceCategory.servicesForCategory error', err);
     return res.status(500).json({ error: 'Error fetching services for category' });

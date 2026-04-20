@@ -368,7 +368,10 @@ block content
                 // replace services table body with returned services (minimally)
                 if (!servicesTbody) return;
                 servicesTbody.innerHTML = '';
-                j.services.forEach(svc => {
+                const normalServices = j.services || [];
+                const compoundServices = Array.isArray(j.compoundServices) ? j.compoundServices : [];
+
+                normalServices.forEach(svc => {
                   const tr = document.createElement('tr');
                   tr.dataset.id = svc._id;
                   if (svc.category) tr.dataset.category = svc.category;
@@ -386,6 +389,28 @@ block content
                         <ul class="dropdown-menu dropdown-menu-end">
                           <li><button class="dropdown-item edit-service-btn" data-service-id="${escapeHtml(svc._id)}" data-service-name="${escapeHtml(svc.name)}">Edit</button></li>
                           <li><button class="dropdown-item open-delete-modal" data-action="/admin/services/${escapeHtml(svc._id)}?_method=DELETE" data-item-type="Service" data-item-name="${escapeHtml(svc.name)}">Delete</button></li>
+                        </ul>
+                      </div>
+                    </td>`;
+                  servicesTbody.appendChild(tr);
+                });
+
+                compoundServices.forEach(book => {
+                  const tr = document.createElement('tr');
+                  tr.dataset.id = book._id;
+                  tr.dataset.category = catId;
+                  tr.innerHTML = `
+                    <td>
+                      <a class="service-link" href="/books/new?id=${encodeURIComponent(book._id)}">${escapeHtml(book.name)}</a>
+                      <span class="badge text-bg-info ms-2">Compound</span>
+                    </td>
+                    <td class="text-center text-muted">-</td>
+                    <td class="text-end">
+                      <div class="dropdown d-inline-block">
+                        <button class="btn btn-sm btn-outline-light-custom dropdown-toggle" type="button" data-bs-toggle="dropdown">Actions</button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li><a class="dropdown-item" href="/books/new?id=${encodeURIComponent(book._id)}">Edit</a></li>
+                          <li><button class="dropdown-item open-delete-modal" data-action="/books/${encodeURIComponent(book._id)}?_method=DELETE" data-item-type="Compound Service" data-item-name="${escapeHtml(book.name)}">Delete</button></li>
                         </ul>
                       </div>
                     </td>`;

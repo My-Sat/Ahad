@@ -15,6 +15,7 @@ const Store = require('../models/store');
 const StoreStock = require('../models/store_stock');
 const RegistrationSubmission = require('../models/registration_submission');
 const User = require('../models/user');
+const Book = require('../models/book');
 
 
 async function getUsableCustomerCredit(customerId, session = null) {
@@ -532,9 +533,31 @@ return {
 };
     });
 
+    const submissionId = String(req.body && req.body.submissionId ? req.body.submissionId : '').trim();
+    if (!submissionId || !mongoose.Types.ObjectId.isValid(submissionId)) {
+      return res.status(400).json({ error: 'Select a submitted customer first.' });
+    }
+
+    const submission = await RegistrationSubmission.findOne({
+      _id: new mongoose.Types.ObjectId(submissionId),
+      status: 'pending',
+      dayKey: currentUtcDayKey()
+    }).select('_id customer displayName categories').lean();
+
+    if (!submission) {
+      return res.status(409).json({ error: 'Selected submission is no longer available. Refresh and try again.' });
+    }
+
+    const allowedCategoryIds = new Set((submission.categories || []).map(id => String(id)));
+    if (!allowedCategoryIds.size) {
+      return res.status(400).json({ error: 'Submitted customer has no allowed categories.' });
+    }
+    const allowedCategoryObjectIds = Array.from(allowedCategoryIds)
+      .filter(id => mongoose.Types.ObjectId.isValid(id))
+      .map(id => new mongoose.Types.ObjectId(id));
+
     const builtItems = [];
     let total = 0;
-    const usedServiceCategoryIds = new Set();
 
 for (const it of items) {
   if (!mongoose.Types.ObjectId.isValid(it.serviceId) || !mongoose.Types.ObjectId.isValid(it.priceRuleId)) {
@@ -554,7 +577,30 @@ if (!svc) {
 if (!svc.category) {
   return res.status(400).json({ error: `Service "${svc.name || it.serviceId}" is not assigned to a category` });
 }
-usedServiceCategoryIds.add(String(svc.category));
+
+const svcCategoryId = String(svc.category);
+let isAuthorizedByCategory = allowedCategoryIds.has(svcCategoryId);
+
+// Compound-service fallback:
+// when a book is placed, its underlying services may belong to other categories.
+// In that case, allow the item if it belongs to a Book that is in an allowed category.
+if (!isAuthorizedByCategory && allowedCategoryObjectIds.length) {
+  const compoundMatch = await Book.findOne({
+    category: { $in: allowedCategoryObjectIds },
+    items: {
+      $elemMatch: {
+        service: new mongoose.Types.ObjectId(it.serviceId),
+        priceRule: new mongoose.Types.ObjectId(it.priceRuleId)
+      }
+    }
+  }).select('_id').lean();
+
+  if (compoundMatch) isAuthorizedByCategory = true;
+}
+
+if (!isAuthorizedByCategory) {
+  return res.status(400).json({ error: 'One or more selected services are outside secretary-assigned categories.' });
+}
 const svcRequiresPrinter = !!(svc && svc.requiresPrinter);
 
 // normalize factor (pricing factor comes from client)
@@ -663,32 +709,6 @@ const selectionsForOrder = (pr.selections || []).map(s => ({
   total += subtotal;
 }
     total = Number(total.toFixed(2));
-
-    const submissionId = String(req.body && req.body.submissionId ? req.body.submissionId : '').trim();
-    if (!submissionId || !mongoose.Types.ObjectId.isValid(submissionId)) {
-      return res.status(400).json({ error: 'Select a submitted customer first.' });
-    }
-
-    const submission = await RegistrationSubmission.findOne({
-      _id: new mongoose.Types.ObjectId(submissionId),
-      status: 'pending',
-      dayKey: currentUtcDayKey()
-    }).select('_id customer displayName categories').lean();
-
-    if (!submission) {
-      return res.status(409).json({ error: 'Selected submission is no longer available. Refresh and try again.' });
-    }
-
-    const allowedCategoryIds = new Set((submission.categories || []).map(id => String(id)));
-    if (!allowedCategoryIds.size) {
-      return res.status(400).json({ error: 'Submitted customer has no allowed categories.' });
-    }
-
-    for (const usedCatId of usedServiceCategoryIds) {
-      if (!allowedCategoryIds.has(String(usedCatId))) {
-        return res.status(400).json({ error: 'One or more selected services are outside secretary-assigned categories.' });
-      }
-    }
 
     const bodyCustomerId = String(req.body && req.body.customerId ? req.body.customerId : '').trim();
     if (submission.customer && bodyCustomerId && String(submission.customer) !== bodyCustomerId) {

@@ -394,6 +394,7 @@ async function loadServicesForCategory(catId) {
     );
     const svcJson = svcRes.ok ? await svcRes.json() : null;
     const services = (svcJson && Array.isArray(svcJson.services)) ? svcJson.services : [];
+    const compoundFromCategory = (svcJson && Array.isArray(svcJson.compoundServices)) ? svcJson.compoundServices : [];
     serviceToneIndex = Object.create(null);
     services.forEach(s => { serviceToneIndex[String(s._id)] = serviceToneFromText(s.name); });
 
@@ -428,16 +429,19 @@ async function loadServicesForCategory(catId) {
       });
     });
 
-    // Load books for orders (category-aware)
-    const bookRes = await fetch('/books/for-orders', {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
-    const bookJson = bookRes.ok ? await bookRes.json() : null;
-    const allBooks = (bookJson && Array.isArray(bookJson.books)) ? bookJson.books : [];
-
-    const booksInCategory = allBooks.filter(b =>
-      String(b.category) === String(catId)
-    );
+    // Prefer compound services returned by category endpoint.
+    // Fallback to /books/for-orders for backward compatibility.
+    let booksInCategory = compoundFromCategory;
+    if (!booksInCategory.length) {
+      const bookRes = await fetch('/books/for-orders', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      const bookJson = bookRes.ok ? await bookRes.json() : null;
+      const allBooks = (bookJson && Array.isArray(bookJson.books)) ? bookJson.books : [];
+      booksInCategory = allBooks.filter(b =>
+        String(b.category) === String(catId)
+      );
+    }
 
     if (booksInCategory.length) {
       const group = document.createElement('optgroup');
