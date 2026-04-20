@@ -540,8 +540,7 @@ return {
 
     const submission = await RegistrationSubmission.findOne({
       _id: new mongoose.Types.ObjectId(submissionId),
-      status: 'pending',
-      dayKey: currentUtcDayKey()
+      status: 'pending'
     }).select('_id customer displayName categories').lean();
 
     if (!submission) {
@@ -2182,12 +2181,11 @@ exports.apiGetDebtors = async (req, res) => {
 };
 
 // GET /orders/submissions
-// Returns pending secretary submissions for today (for Jobs page dropdown)
+// Returns pending secretary submissions (for Jobs page dropdown)
 exports.apiListSecretarySubmissions = async (req, res) => {
   try {
     const rows = await RegistrationSubmission.find({
-      status: 'pending',
-      dayKey: currentUtcDayKey()
+      status: 'pending'
     })
       .populate('customer', '_id category')
       .populate('categories', '_id name')

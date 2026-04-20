@@ -134,7 +134,7 @@
         if (pendingCount) pendingCount.textContent = String(rows.length);
         if (!pendingTableBody) return;
         if (!rows.length) {
-          pendingTableBody.innerHTML = '<tr><td class="text-muted-light" colspan="5">No registerations for today.</td></tr>';
+          pendingTableBody.innerHTML = '<tr><td class="text-muted-light" colspan="6">No registerations found.</td></tr>';
           return;
         }
         pendingTableBody.innerHTML = '';
@@ -143,19 +143,23 @@
           const statusHtml = served
             ? '<span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Served</span>'
             : '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Not Served</span>';
+          const actionHtml = served
+            ? '<span class="text-muted-light">-</span>'
+            : `<button type="button" class="btn btn-sm btn-outline-danger clear-registration-btn" data-id="${escapeHtml(r.id)}">Clear</button>`;
           const tr = document.createElement('tr');
           tr.innerHTML = `
             <td>${escapeHtml(r.displayName || '')}</td>
             <td>${escapeHtml(r.phone || '-')}</td>
             <td>${escapeHtml((r.categories || []).map(c => c.name).join(', ') || '-')}</td>
             <td>${statusHtml}</td>
-            <td>${new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+            <td>${new Date(r.createdAt).toLocaleString([], { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+            <td class="text-end">${actionHtml}</td>
           `;
           pendingTableBody.appendChild(tr);
         });
       } catch (err) {
         if (pendingTableBody) {
-          pendingTableBody.innerHTML = '<tr><td class="text-danger" colspan="5">Failed to load registerations.</td></tr>';
+          pendingTableBody.innerHTML = '<tr><td class="text-danger" colspan="6">Failed to load registerations.</td></tr>';
         }
       }
     }
@@ -405,6 +409,40 @@
         } finally {
           refreshBtn.disabled = false;
           refreshBtn.textContent = text;
+        }
+      });
+    }
+
+    if (pendingTableBody && pendingTableBody.dataset.clearBound !== '1') {
+      pendingTableBody.dataset.clearBound = '1';
+      pendingTableBody.addEventListener('click', async function (ev) {
+        const btn = ev.target.closest('.clear-registration-btn');
+        if (!btn) return;
+
+        const id = String(btn.dataset.id || '').trim();
+        if (!id) return;
+        if (!confirm('Clear this not-served registration?')) return;
+
+        const old = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Clearing...';
+        try {
+          const res = await fetch(`/registrations/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+          const j = await res.json().catch(() => null);
+          if (!res.ok || !j || !j.ok) {
+            showAlert((j && j.error) ? j.error : 'Failed to clear registration');
+            return;
+          }
+          await loadPending();
+          showAlert('Registration cleared.');
+        } catch (err) {
+          showAlert('Network error while clearing registration');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = old;
         }
       });
     }

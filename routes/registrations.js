@@ -14,6 +14,7 @@ function ensureAdminOrSecretary(req, res, next) {
 router.get('/', ensureAdminOrSecretary, registrationsController.page);
 router.get('/categories', ensureAdminOrSecretary, registrationsController.apiCategories);
 router.get('/pending', ensureAdminOrSecretary, registrationsController.apiListPending);
+router.delete('/:id', ensureAdminOrSecretary, registrationsController.apiClearOne);
 router.post('/submit', ensureAdminOrSecretary, registrationsController.apiSubmit);
 
 module.exports = router;

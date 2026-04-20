@@ -114,10 +114,15 @@ exports.apiListPending = async function apiListPending(req, res) {
   try {
     const role = String(req.user?.role || '').toLowerCase();
     const isAdmin = role === 'admin';
-    const dayKey = utcDayKey();
-    const rows = await RegistrationSubmission.find({ dayKey, status: { $in: ['pending', 'consumed'] } })
+    const todayKey = utcDayKey();
+    const rows = await RegistrationSubmission.find({
+      $or: [
+        { status: 'pending' },
+        { status: 'consumed', dayKey: todayKey }
+      ]
+    })
       .populate('categories', '_id name showInOrders')
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .lean();
 
     const submissions = (rows || []).map(r => ({
@@ -140,5 +145,28 @@ exports.apiListPending = async function apiListPending(req, res) {
   } catch (err) {
     console.error('registrations.apiListPending error', err);
     return res.status(500).json({ ok: false, error: 'Failed to load pending registrations' });
+  }
+};
+
+exports.apiClearOne = async function apiClearOne(req, res) {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ ok: false, error: 'Invalid registration id' });
+    }
+
+    const deleted = await RegistrationSubmission.findOneAndDelete({
+      _id: new mongoose.Types.ObjectId(id),
+      status: 'pending'
+    }).lean();
+
+    if (!deleted) {
+      return res.status(404).json({ ok: false, error: 'Registration not found or already served' });
+    }
+
+    return res.json({ ok: true, id });
+  } catch (err) {
+    console.error('registrations.apiClearOne error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to clear registration' });
   }
 };
