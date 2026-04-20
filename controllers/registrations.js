@@ -112,19 +112,25 @@ exports.apiSubmit = async function apiSubmit(req, res) {
 
 exports.apiListPending = async function apiListPending(req, res) {
   try {
+    const role = String(req.user?.role || '').toLowerCase();
+    const isAdmin = role === 'admin';
     const dayKey = utcDayKey();
     const rows = await RegistrationSubmission.find({ dayKey, status: { $in: ['pending', 'consumed'] } })
-      .populate('categories', '_id name')
+      .populate('categories', '_id name showInOrders')
       .sort({ createdAt: -1 })
       .lean();
 
     const submissions = (rows || []).map(r => ({
+      categories: Array.isArray(r.categories)
+        ? r.categories
+            .filter(c => isAdmin || !!c.showInOrders)
+            .map(c => ({ id: String(c._id), name: c.name }))
+        : [],
       id: String(r._id),
       displayName: String(r.displayName || '').trim(),
       phone: String(r.phone || '').trim(),
       customerId: r.customer ? String(r.customer) : '',
       walkInNumber: (r.walkInNumber == null ? null : Number(r.walkInNumber)),
-      categories: Array.isArray(r.categories) ? r.categories.map(c => ({ id: String(c._id), name: c.name })) : [],
       createdAt: r.createdAt,
       status: String(r.status || 'pending'),
       served: String(r.status || '') === 'consumed'
