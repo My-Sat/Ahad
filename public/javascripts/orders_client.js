@@ -28,6 +28,8 @@
   const pricesList = document.getElementById('pricesList');
   const cartTbody = document.getElementById('cartTbody');
   const cartTotalEl = document.getElementById('cartTotal');
+  const outsourcedCartTotalEl = document.getElementById('outsourcedCartTotal');
+  const outsourcedCartWrapEl = document.getElementById('outsourcedCartWrap');
   const orderNowBtn = document.getElementById('orderNowBtn');
   const saveDraftBtn = document.getElementById('saveDraftBtn');
   const orderJobNoteEl = document.getElementById('orderJobNote');
@@ -202,6 +204,7 @@
   const ordersFromEl = document.getElementById('ordersFrom');
   const ordersToEl = document.getElementById('ordersTo');
   const fetchOrdersBtn = document.getElementById('fetchOrdersBtn');
+  const toggleOutsourcedOrdersBtn = document.getElementById('toggleOutsourcedOrdersBtn');
   const presetTodayBtn = document.getElementById('presetToday');
   const presetYesterdayBtn = document.getElementById('presetYesterday');
   const presetThisWeekBtn = document.getElementById('presetThisWeek');
@@ -216,10 +219,16 @@
   const copyDetailOrderIdBtn = document.getElementById('copyDetailOrderIdBtn');
   const printDetailOrderBtn = document.getElementById('printDetailOrderBtn');
 
+  function setOrderDetailsActionsVisible(visible) {
+    [copyDetailOrderIdBtn, printDetailOrderBtn].forEach(btn => {
+      if (btn) btn.style.display = visible ? '' : 'none';
+    });
+  }
+
   // ---------- internal state ----------
   let prices = []; // loaded price rules for selected service or book preview
   let cart = [];   // cart lines: either normal item or book line
-                   // normal: { isBook:false, serviceId, serviceName, priceRuleId, selectionLabel, unitPrice, pages, pagesOriginal, subtotal, fb, printerId, spoiled }
+                   // normal: { isBook:false, serviceId, serviceName, priceRuleId, selectionLabel, unitPrice, pages, pagesOriginal, subtotal, fb, printerId, spoiled, outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount, outsourcedTotal }
                    // book  : { isBook:true, bookId, bookName, unitPrice, qty, subtotal, bookItems: [ { serviceId, priceRuleId, pagesOriginal, fb, printerId, spoiled, unitPrice, subtotal, selectionLabel } ] }
   let serviceRequiresPrinter = false;
   let printers = []; // list of printers for the currently loaded service
@@ -230,6 +239,11 @@
 let materials = [];          // [{ _id, name, stocked, used, remaining, selections:[{unit,subUnit},...] }, ...]
 let materialsLoaded = false;
 let materialsFetchedAt = 0;  // ms timestamp when materials were last fetched
+let selectedServiceCategoryName = '';
+let selectedServiceCategoryIsOutsourced = false;
+let ordersExplorerMode = 'normal';
+let lastOrdersList = [];
+let outsourcedOrderDetailsByKey = Object.create(null);
 
 
     // ---------- Service categories (populate category select + filter services) ----------
@@ -264,6 +278,10 @@ let materialsFetchedAt = 0;  // ms timestamp when materials were last fetched
     return s || String(name || '').trim();
   }
 
+  function isOutSourcedCategoryName(name) {
+    return /out[\s-]*sourced/i.test(String(name || '').trim());
+  }
+
 async function loadServiceCategories() {
   if (!serviceCategorySelect) return;
   const cats = (activeSubmission && Array.isArray(activeSubmission.categories))
@@ -278,6 +296,7 @@ async function loadServiceCategories() {
       const o = document.createElement('option');
       o.value = c.id || c._id;
       o.textContent = c.name || 'Category';
+      o.dataset.name = c.name || '';
       serviceCategorySelect.appendChild(o);
     });
   }
@@ -321,6 +340,8 @@ function setSelectedCustomerFromSubmission(sub) {
     if (phoneEl) phoneEl.textContent = '';
     if (categoryEl) categoryEl.textContent = '';
     if (card) card.style.display = 'none';
+    selectedServiceCategoryName = '';
+    selectedServiceCategoryIsOutsourced = false;
     loadServiceCategories();
     updateSaveDraftBtn();
     return;
@@ -331,6 +352,8 @@ function setSelectedCustomerFromSubmission(sub) {
   if (phoneEl) phoneEl.textContent = sub.phone || '';
   if (categoryEl) categoryEl.textContent = sub.customerId ? '' : 'Walk-in';
   if (card) card.style.display = '';
+  selectedServiceCategoryName = '';
+  selectedServiceCategoryIsOutsourced = false;
   loadServiceCategories();
   updateSaveDraftBtn();
 }
@@ -466,6 +489,9 @@ async function loadServicesForCategory(catId) {
   if (serviceCategorySelect) {
     serviceCategorySelect.addEventListener('change', function () {
       const cid = this.value || '';
+      const opt = this.options && this.selectedIndex >= 0 ? this.options[this.selectedIndex] : null;
+      selectedServiceCategoryName = opt ? String(opt.dataset.name || opt.textContent || '') : '';
+      selectedServiceCategoryIsOutsourced = isOutSourcedCategoryName(selectedServiceCategoryName);
       // clear book preview when changing category
       loadServicesForCategory(cid);
     });
@@ -962,6 +988,43 @@ function renderPrices(bookMode = false) {
       mid.appendChild(spoiledWrap);
     }
 
+    if (selectedServiceCategoryIsOutsourced) {
+      const outQty = document.createElement('input');
+      outQty.type = 'number';
+      outQty.min = '1';
+      outQty.step = '1';
+      outQty.placeholder = 'Artist QTY';
+      outQty.className = 'form-control form-control-sm outsourced-qty-input';
+      outQty.style.width = '90px';
+      mid.appendChild(outQty);
+
+      const outAmt = document.createElement('input');
+      outAmt.type = 'number';
+      outAmt.min = '0.01';
+      outAmt.step = '0.01';
+      outAmt.placeholder = 'Artist Amount';
+      outAmt.className = 'form-control form-control-sm outsourced-amount-input';
+      outAmt.style.width = '112px';
+      mid.appendChild(outAmt);
+
+      const artistLookup = document.createElement('input');
+      artistLookup.type = 'text';
+      artistLookup.placeholder = 'Artist phone/name';
+      artistLookup.className = 'form-control form-control-sm outsourced-artist-lookup';
+      artistLookup.style.width = '140px';
+      mid.appendChild(artistLookup);
+
+      const artistMeta = document.createElement('input');
+      artistMeta.type = 'hidden';
+      artistMeta.className = 'outsourced-artist-id';
+      mid.appendChild(artistMeta);
+
+      const artistMetaName = document.createElement('input');
+      artistMetaName.type = 'hidden';
+      artistMetaName.className = 'outsourced-artist-name';
+      mid.appendChild(artistMetaName);
+    }
+
     // right: apply button
     const right = document.createElement('div');
     right.className = 'ms-auto';
@@ -1194,7 +1257,11 @@ function addToCart({
   fb,
   printerId,
   spoiled,
-  tone
+  tone,
+  outsourcedArtistId,
+  outsourcedArtistName,
+  outsourcedQty,
+  outsourcedAmount
 }) {
   const origPages = Number(pages) || 1;
   const factorVal = Number(factor) && Number(factor) > 0 ? Number(factor) : 1;
@@ -1214,6 +1281,9 @@ function addToCart({
       (printerId ? factorVal : 1)
     ).toFixed(2)
   );
+  const outQty = Math.max(0, Math.floor(Number(outsourcedQty || 0)));
+  const outAmount = Math.max(0, Number(outsourcedAmount || 0));
+  const outsourcedTotal = Number((outQty > 0 && outAmount > 0 ? outQty * outAmount : 0).toFixed(2));
 
   cart.push({
     isBook: false,
@@ -1236,7 +1306,12 @@ function addToCart({
     fb: !!fb,
     printerId: printerId || null,
     spoiled,
-    tone: tone || 'other'
+    tone: tone || 'other',
+    outsourcedArtistId: outsourcedArtistId ? String(outsourcedArtistId) : '',
+    outsourcedArtistName: outsourcedArtistName ? String(outsourcedArtistName) : '',
+    outsourcedQty: outQty,
+    outsourcedAmount: outAmount,
+    outsourcedTotal
   });
 
   renderCart();
@@ -1250,6 +1325,10 @@ function addToCart({
     tr.innerHTML = '<td class="text-muted" colspan="5">Cart is empty.</td>';
     cartTbody.appendChild(tr);
     cartTotalEl.textContent = 'GH₵ 0.00';
+    const outsourcedTotalNodeEmpty = document.getElementById('outsourcedCartTotal') || outsourcedCartTotalEl;
+    if (outsourcedTotalNodeEmpty) outsourcedTotalNodeEmpty.textContent = 'GH\u20b5 0.00';
+    const outsourcedWrapEmpty = document.getElementById('outsourcedCartWrap') || outsourcedCartWrapEl;
+    if (outsourcedWrapEmpty) outsourcedWrapEmpty.style.display = 'none';
     orderNowBtn.disabled = true;
     updateSaveDraftBtn();
 
@@ -1260,8 +1339,10 @@ function addToCart({
     return;
   }
     let total = 0;
+    let outsourcedCostTotal = 0;
     cart.forEach((it, idx) => {
       total += it.subtotal;
+      outsourcedCostTotal += Number(it.outsourcedTotal || 0);
       const tr = document.createElement('tr');
       tr.dataset.idx = idx;
 
@@ -1270,7 +1351,10 @@ function addToCart({
         displayLabel = `<div class="small text-muted">Book</div><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.bookName)}</div>`;
       } else {
         const toneClass = (it.tone === 'color') ? 'text-danger' : '';
-        displayLabel = `<div class="small text-muted">${escapeHtml(it.serviceName || '')}</div><div class="${toneClass}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.selectionLabel || '')}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}</div>`;
+        const outsourcedMeta = (Number(it.outsourcedTotal || 0) > 0)
+          ? `<br/><small class="text-info">Out-Sourced: ${escapeHtml(it.outsourcedArtistName || 'Artist')} | QTY ${escapeHtml(String(it.outsourcedQty || 0))} | GH₵ ${escapeHtml(formatMoney(it.outsourcedAmount || 0))} = GH₵ ${escapeHtml(formatMoney(it.outsourcedTotal || 0))}</small>`
+          : '';
+        displayLabel = `<div class="small text-muted">${escapeHtml(it.serviceName || '')}</div><div class="${toneClass}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.selectionLabel || '')}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
       }
 
       let qtyCell = '';
@@ -1322,6 +1406,10 @@ function addToCart({
 
     // show final in main total
     cartTotalEl.textContent = 'GH₵ ' + finalTotal.toFixed(2);
+    const outsourcedTotalNode = document.getElementById('outsourcedCartTotal') || outsourcedCartTotalEl;
+    if (outsourcedTotalNode) outsourcedTotalNode.textContent = 'GH\u20b5 ' + Number(outsourcedCostTotal.toFixed(2)).toFixed(2);
+    const outsourcedWrap = document.getElementById('outsourcedCartWrap') || outsourcedCartWrapEl;
+    if (outsourcedWrap) outsourcedWrap.style.display = outsourcedCostTotal > 0 ? '' : 'none';
 
     // update the manual discount summary box
     updateManualDiscountUI(baseTotal);
@@ -1379,8 +1467,236 @@ function addToCart({
 
   refreshManualAdjustmentButton();
 
+  async function lookupArtistByTerm(term) {
+    const q = String(term || '').trim();
+    if (!q) return null;
+
+    try {
+      const exactRes = await fetch(`/customers/lookup?phone=${encodeURIComponent(q)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const exact = await exactRes.json().catch(() => null);
+      if (exactRes.ok && exact && exact.found && exact.customer) {
+        const c = exact.customer;
+        if (String(c.category || '').toLowerCase() === 'artist') return c;
+      }
+    } catch (e) {}
+
+    try {
+      const res = await fetch(`/customers/search?q=${encodeURIComponent(q)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const j = await res.json().catch(() => null);
+      const rows = (res.ok && j && Array.isArray(j.results)) ? j.results : [];
+      const artist = rows.find(r => String(r.category || '').toLowerCase() === 'artist');
+      return artist || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function artistDisplayName(c) {
+    return String((c && (c.businessName || c.firstName || c.phone)) || 'Artist').trim();
+  }
+
+  async function searchArtistsByTerm(term) {
+    const q = String(term || '').trim();
+    if (!q) return [];
+
+    const byId = new Map();
+    function addArtist(c) {
+      if (!c || String(c.category || '').toLowerCase() !== 'artist') return;
+      const id = String(c._id || c.id || '').trim();
+      if (!id || byId.has(id)) return;
+      byId.set(id, c);
+    }
+
+    try {
+      const exactRes = await fetch(`/customers/lookup?phone=${encodeURIComponent(q)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const exact = await exactRes.json().catch(() => null);
+      if (exactRes.ok && exact && exact.found && exact.customer) addArtist(exact.customer);
+    } catch (e) {}
+
+    try {
+      const res = await fetch(`/customers/search?q=${encodeURIComponent(q)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const j = await res.json().catch(() => null);
+      const rows = (res.ok && j && Array.isArray(j.results)) ? j.results : [];
+      rows.forEach(addArtist);
+    } catch (e) {}
+
+    return Array.from(byId.values()).slice(0, 8);
+  }
+
+  let outsourcedArtistSuggestionsBox = null;
+  let outsourcedArtistLookupTimer = null;
+  let activeOutsourcedArtistInput = null;
+
+  function createOutsourcedArtistSuggestionsBox() {
+    if (outsourcedArtistSuggestionsBox) return outsourcedArtistSuggestionsBox;
+    outsourcedArtistSuggestionsBox = document.createElement('div');
+    outsourcedArtistSuggestionsBox.className = 'list-group position-absolute shadow-sm';
+    outsourcedArtistSuggestionsBox.style.zIndex = 1065;
+    outsourcedArtistSuggestionsBox.style.maxHeight = '260px';
+    outsourcedArtistSuggestionsBox.style.overflow = 'auto';
+    outsourcedArtistSuggestionsBox.style.minWidth = '280px';
+    outsourcedArtistSuggestionsBox.style.display = 'none';
+    document.body.appendChild(outsourcedArtistSuggestionsBox);
+    return outsourcedArtistSuggestionsBox;
+  }
+
+  function positionOutsourcedArtistSuggestionsBox(input) {
+    const target = input || activeOutsourcedArtistInput;
+    if (!outsourcedArtistSuggestionsBox || !target) return;
+    const rect = target.getBoundingClientRect();
+    outsourcedArtistSuggestionsBox.style.left = (rect.left + window.scrollX) + 'px';
+    outsourcedArtistSuggestionsBox.style.top = (rect.bottom + window.scrollY + 6) + 'px';
+    outsourcedArtistSuggestionsBox.style.width = Math.max(rect.width, 280) + 'px';
+  }
+
+  function hideOutsourcedArtistSuggestions() {
+    if (outsourcedArtistSuggestionsBox) outsourcedArtistSuggestionsBox.style.display = 'none';
+  }
+
+  function setOutsourcedArtistSelection(input, artist) {
+    if (!input || !artist) return;
+    const row = input.closest('.list-group-item');
+    const idEl = row ? row.querySelector('.outsourced-artist-id') : null;
+    const nameEl = row ? row.querySelector('.outsourced-artist-name') : null;
+    const id = String(artist._id || artist.id || '').trim();
+    const name = artistDisplayName(artist);
+
+    input.value = name;
+    input.dataset.selectedArtistId = id;
+    if (idEl) idEl.value = id;
+    if (nameEl) nameEl.value = name;
+    hideOutsourcedArtistSuggestions();
+  }
+
+  function clearOutsourcedArtistSelection(input) {
+    if (!input) return;
+    const row = input.closest('.list-group-item');
+    const idEl = row ? row.querySelector('.outsourced-artist-id') : null;
+    const nameEl = row ? row.querySelector('.outsourced-artist-name') : null;
+    delete input.dataset.selectedArtistId;
+    if (idEl) idEl.value = '';
+    if (nameEl) nameEl.value = '';
+  }
+
+  function renderOutsourcedArtistSuggestions(input, rows) {
+    createOutsourcedArtistSuggestionsBox();
+    activeOutsourcedArtistInput = input;
+    positionOutsourcedArtistSuggestionsBox(input);
+    if (!outsourcedArtistSuggestionsBox) return;
+
+    if (!rows || !rows.length) {
+      outsourcedArtistSuggestionsBox.style.display = 'none';
+      return;
+    }
+
+    outsourcedArtistSuggestionsBox.innerHTML = '';
+    rows.forEach(artist => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'list-group-item list-group-item-action';
+      const name = artistDisplayName(artist);
+      btn.innerHTML = `
+        <div class="d-flex w-100 justify-content-between align-items-center">
+          <strong>${escapeHtml(name)}</strong>
+          <span class="badge bg-info text-dark">Artist</span>
+        </div>
+        <div class="small text-muted">${escapeHtml(artist.phone || '')}</div>
+      `;
+      btn.addEventListener('click', function () {
+        setOutsourcedArtistSelection(input, artist);
+      });
+      outsourcedArtistSuggestionsBox.appendChild(btn);
+    });
+    outsourcedArtistSuggestionsBox.style.display = '';
+  }
+
+  async function runOutsourcedArtistLiveSearch(input) {
+    if (!input) return;
+    const q = String(input.value || '').trim();
+    if (!q) {
+      hideOutsourcedArtistSuggestions();
+      return;
+    }
+    const rows = await searchArtistsByTerm(q);
+    if (input !== activeOutsourcedArtistInput) return;
+    if (String(input.value || '').trim() !== q) return;
+    renderOutsourcedArtistSuggestions(input, rows);
+  }
+
+  async function registerArtistQuick(prefillTerm) {
+    const phone = String(prompt('Artist phone number:', String(prefillTerm || '').trim()) || '').trim();
+    if (!phone) return null;
+    const businessName = String(prompt('Artist name/business name:', '') || '').trim();
+    if (!businessName) return null;
+
+    const res = await fetch('/customers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({ category: 'artist', phone, businessName, firstName: '', notes: '' })
+    });
+    const j = await res.json().catch(() => null);
+    if (!res.ok || !j || !j.customer) {
+      throw new Error((j && j.error) ? j.error : 'Failed to register artist');
+    }
+    return j.customer;
+  }
+
 
   // ---------- Event delegation: Apply / Add buttons ----------
+  pricesList.addEventListener('input', function (e) {
+    const input = e.target.closest('.outsourced-artist-lookup');
+    if (!input) return;
+
+    activeOutsourcedArtistInput = input;
+    clearOutsourcedArtistSelection(input);
+    if (outsourcedArtistLookupTimer) clearTimeout(outsourcedArtistLookupTimer);
+
+    const q = String(input.value || '').trim();
+    if (!q) {
+      hideOutsourcedArtistSuggestions();
+      return;
+    }
+
+    outsourcedArtistLookupTimer = setTimeout(function () {
+      runOutsourcedArtistLiveSearch(input);
+    }, 220);
+  });
+
+  pricesList.addEventListener('focusin', function (e) {
+    const input = e.target.closest('.outsourced-artist-lookup');
+    if (!input) return;
+    activeOutsourcedArtistInput = input;
+    createOutsourcedArtistSuggestionsBox();
+    positionOutsourcedArtistSuggestionsBox(input);
+    if (String(input.value || '').trim() && !input.dataset.selectedArtistId) {
+      if (outsourcedArtistLookupTimer) clearTimeout(outsourcedArtistLookupTimer);
+      outsourcedArtistLookupTimer = setTimeout(function () {
+        runOutsourcedArtistLiveSearch(input);
+      }, 120);
+    }
+  });
+
+  pricesList.addEventListener('keydown', function (e) {
+    const input = e.target.closest('.outsourced-artist-lookup');
+    if (!input) return;
+    if (e.key === 'Escape') hideOutsourcedArtistSuggestions();
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!outsourcedArtistSuggestionsBox) return;
+    if (activeOutsourcedArtistInput && e.target === activeOutsourcedArtistInput) return;
+    if (outsourcedArtistSuggestionsBox.contains(e.target)) return;
+    hideOutsourcedArtistSuggestions();
+  });
+
+  window.addEventListener('resize', function () {
+    positionOutsourcedArtistSuggestionsBox();
+  });
+
+  window.addEventListener('scroll', function () {
+    positionOutsourcedArtistSuggestionsBox();
+  }, true);
+
   pricesList.addEventListener('click', async function (e) {
     const btn = e.target.closest('.apply-price-btn');
     if (!btn) return;
@@ -1425,6 +1741,52 @@ function addToCart({
     if (spoiledInput && spoiledInput.value !== undefined && spoiledInput.value !== null && String(spoiledInput.value).trim() !== '') {
       const n = Number(spoiledInput.value);
       spoiled = (isNaN(n) || n < 0) ? 0 : Math.floor(n);
+    }
+
+    let outsourcedArtistId = '';
+    let outsourcedArtistName = '';
+    let outsourcedQty = 0;
+    let outsourcedAmount = 0;
+
+    if (selectedServiceCategoryIsOutsourced) {
+      const outQtyInput = row ? row.querySelector('.outsourced-qty-input') : null;
+      const outAmtInput = row ? row.querySelector('.outsourced-amount-input') : null;
+      const outArtistLookup = row ? row.querySelector('.outsourced-artist-lookup') : null;
+      const outArtistId = row ? row.querySelector('.outsourced-artist-id') : null;
+      const outArtistName = row ? row.querySelector('.outsourced-artist-name') : null;
+
+      outsourcedQty = Math.max(0, Math.floor(Number(outQtyInput && outQtyInput.value ? outQtyInput.value : 0)));
+      outsourcedAmount = Math.max(0, Number(outAmtInput && outAmtInput.value ? outAmtInput.value : 0));
+      outsourcedArtistId = String(outArtistId && outArtistId.value ? outArtistId.value : '').trim();
+      outsourcedArtistName = String(outArtistName && outArtistName.value ? outArtistName.value : '').trim();
+
+      const hasOutData = outsourcedQty > 0 || outsourcedAmount > 0 || String((outArtistLookup && outArtistLookup.value) || '').trim();
+      if (hasOutData) {
+        if (outsourcedQty <= 0 || outsourcedAmount <= 0) {
+          showAlertModal('For Out-Sourced service, enter valid Artist QTY and Artist Amount.', 'Out-Sourced');
+          return;
+        }
+
+        if (!outsourcedArtistId) {
+          const term = String((outArtistLookup && outArtistLookup.value) || '').trim();
+          if (!term) {
+            showAlertModal('Lookup/select an Artist for this out-sourced service.', 'Out-Sourced');
+            return;
+          }
+          const foundArtist = await lookupArtistByTerm(term);
+          let artist = foundArtist;
+          if (!artist) {
+            const shouldRegister = confirm('Artist not found. Register this artist now?');
+            if (!shouldRegister) return;
+            artist = await registerArtistQuick(term);
+          }
+          outsourcedArtistId = String(artist._id || '').trim();
+          outsourcedArtistName = String(artist.businessName || artist.firstName || artist.phone || term).trim();
+          if (outArtistId) outArtistId.value = outsourcedArtistId;
+          if (outArtistName) outArtistName.value = outsourcedArtistName;
+          if (outArtistLookup) outArtistLookup.value = outsourcedArtistName;
+        }
+      }
     }
 
         // ---------- MATERIAL STOCK CHECKS (Apply-time) ----------
@@ -1508,7 +1870,11 @@ function addToCart({
         fb: fbChecked,
         printerId: selectedPrinterId || priceObj.__bookItem.printer,
         spoiled,
-        tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || '')
+        tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || ''),
+        outsourcedArtistId,
+        outsourcedArtistName,
+        outsourcedQty,
+        outsourcedAmount
       });
     } else {
       // Normal service price add
@@ -1519,7 +1885,7 @@ function addToCart({
         chosenPrice = Number(priceObj.price2);
       }
       const effectiveServiceId = priceObj.serviceId || serviceId;
-      addToCart({ serviceId: effectiveServiceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), unitPrice: chosenPrice, pages, factor, fb: fbChecked, printerId: selectedPrinterId, spoiled, tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || '') });
+      addToCart({ serviceId: effectiveServiceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), unitPrice: chosenPrice, pages, factor, fb: fbChecked, printerId: selectedPrinterId, spoiled, tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || ''), outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount });
     }
 
     // clear inputs
@@ -1531,6 +1897,16 @@ function addToCart({
       const printerSelect = row ? row.querySelector('.printer-select') : null;
       if (printerSelect) { printerSelect.selectedIndex = 0; }
       if (spoiledInput) spoiledInput.value = '';
+      const outQtyInput = row ? row.querySelector('.outsourced-qty-input') : null;
+      const outAmtInput = row ? row.querySelector('.outsourced-amount-input') : null;
+      const outArtistLookup = row ? row.querySelector('.outsourced-artist-lookup') : null;
+      const outArtistId = row ? row.querySelector('.outsourced-artist-id') : null;
+      const outArtistName = row ? row.querySelector('.outsourced-artist-name') : null;
+      if (outQtyInput) outQtyInput.value = '';
+      if (outAmtInput) outAmtInput.value = '';
+      if (outArtistLookup) outArtistLookup.value = '';
+      if (outArtistId) outArtistId.value = '';
+      if (outArtistName) outArtistName.value = '';
     } catch (err) {
       console.warn('Failed to clear inputs after Apply', err);
     }
@@ -1689,7 +2065,11 @@ async function placeOrderFlow() {
             factor: bi.printerId ? (bi.factor || 1) : undefined,
             fb: !!bi.fb,
             printerId: bi.printerId || null,
-            spoiled: bi.spoiled || 0
+            spoiled: bi.spoiled || 0,
+            outsourcedArtistId: line.outsourcedArtistId || '',
+            outsourcedArtistName: line.outsourcedArtistName || '',
+            outsourcedQty: line.outsourcedQty || 0,
+            outsourcedAmount: line.outsourcedAmount || 0
           });
         });
       } else {
@@ -1705,7 +2085,11 @@ async function placeOrderFlow() {
           factor: line.printerId ? (line.factor || 1) : undefined,
           fb: !!line.fb,
           printerId: line.printerId || null,
-          spoiled: line.spoiled || 0
+          spoiled: line.spoiled || 0,
+          outsourcedArtistId: line.outsourcedArtistId || '',
+          outsourcedArtistName: line.outsourcedArtistName || '',
+          outsourcedQty: line.outsourcedQty || 0,
+          outsourcedAmount: line.outsourcedAmount || 0
         });
       }
     });
@@ -1872,6 +2256,8 @@ async function placeOrderFlow() {
   // ---------- Orders explorer wiring (same behavior as before) ----------
   if (openOrdersExplorerBtn) {
     openOrdersExplorerBtn.addEventListener('click', function () {
+      ordersExplorerMode = 'normal';
+      updateOrdersExplorerModeButton();
       // set default today range
       const today = new Date();
       if (ordersFromEl && ordersToEl) {
@@ -1917,6 +2303,26 @@ async function placeOrderFlow() {
     });
   }
 
+  if (toggleOutsourcedOrdersBtn) {
+    toggleOutsourcedOrdersBtn.addEventListener('click', function () {
+      ordersExplorerMode = ordersExplorerMode === 'outsourced' ? 'normal' : 'outsourced';
+      updateOrdersExplorerModeButton();
+      renderOrdersList(lastOrdersList);
+    });
+  }
+
+  function updateOrdersExplorerModeButton() {
+    if (!toggleOutsourcedOrdersBtn) return;
+    const outsourced = ordersExplorerMode === 'outsourced';
+    toggleOutsourcedOrdersBtn.textContent = outsourced ? 'Orders' : 'Outsourced';
+    toggleOutsourcedOrdersBtn.classList.remove('btn-info');
+    toggleOutsourcedOrdersBtn.classList.add('btn-outline-info');
+    toggleOutsourcedOrdersBtn.style.display = '';
+    toggleOutsourcedOrdersBtn.style.width = '106px';
+    toggleOutsourcedOrdersBtn.style.whiteSpace = 'nowrap';
+    toggleOutsourcedOrdersBtn.setAttribute('aria-pressed', outsourced ? 'true' : 'false');
+  }
+
   // ---------- Fetch orders list used by explorer ----------
   async function fetchOrdersList(from, to) {
     try {
@@ -1937,7 +2343,8 @@ async function placeOrderFlow() {
         renderOrdersListError('Invalid response from server (expected array of orders).');
         return;
       }
-      renderOrdersList(j.orders);
+      lastOrdersList = j.orders;
+      renderOrdersList(lastOrdersList);
     } catch (err) {
       console.error('fetchOrdersList err', err);
       renderOrdersListError('Network error while fetching orders.');
@@ -1955,133 +2362,197 @@ function renderOrdersList(orders) {
   if (!ordersTable) return;
 
   const tbody = ordersTable.querySelector('tbody');
+  const sourceOrders = Array.isArray(orders) ? orders : [];
+  outsourcedOrderDetailsByKey = Object.create(null);
 
-  if (!orders || !orders.length) {
+  if (!sourceOrders.length) {
     tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No orders in this range.</td></tr>';
     if (ordersCountEl) ordersCountEl.textContent = '0 results';
     return;
   }
 
   tbody.innerHTML = '';
-
-  const grouped = {};
-  (orders || []).forEach(o => {
-    const key = String(o && o.name ? o.name : 'Walk-in');
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(o);
-  });
-
   let groupIndex = 0;
-  Object.entries(grouped).forEach(([nameRaw, items]) => {
-    if (!items || items.length <= 1) {
-      const o = items[0];
-      const orderId = o.orderId || o._id || '';
-      const safeOrderId = escapeHtml(orderId);
-      const name = escapeHtml(o.name || 'Walk-in');
-      const jobNote = escapeHtml(o.jobNote || '-');
-      const viewHref = '/orders/view/' + encodeURIComponent(orderId);
-      const created = o.createdAt
-        ? formatDateTimeForDisplay(o.createdAt)
-        : (o.createdAt || '');
 
-      const tr = document.createElement('tr');
-      tr.dataset.orderId = orderId;
-      tr.innerHTML = `
+  function hasOutsourcedSide(o) {
+    return !!(o && (o.isOutsourced || Number(o.outsourcedTotal || 0) > 0));
+  }
+
+  function appendOrderRow(o, opts) {
+    const options = opts || {};
+    const orderId = o.orderId || o._id || '';
+    const safeOrderId = escapeHtml(orderId);
+    const name = escapeHtml(options.name || o.name || 'Walk-in');
+    const jobNote = options.noteHtml !== undefined ? options.noteHtml : escapeHtml(o.jobNote || '-');
+    const rowTotal = Number(options.totalOverride !== undefined ? options.totalOverride : (o.total || 0));
+    const statusText = options.statusText !== undefined ? options.statusText : (o.status || '');
+    const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : (o.createdAt || '');
+    const isOutsourcedRow = !!options.outsourcedKey;
+    const viewHref = '/orders/view/' + encodeURIComponent(orderId);
+
+    const tr = document.createElement('tr');
+    if (options.groupId) {
+      tr.className = `orders-group-row ${options.groupId}`;
+      tr.style.display = 'none';
+    }
+    tr.dataset.orderId = orderId;
+    tr.innerHTML = `
+      <td>
+        ${isOutsourcedRow
+          ? `<span title="Order ID: ${safeOrderId}">${name}</span>`
+          : `<a href="${viewHref}" class="orders-explorer-open-order" title="Order ID: ${safeOrderId}">${name}</a>`}
+      </td>
+      <td>${jobNote}</td>
+      <td class="text-end">GH\u20b5 ${formatMoney(rowTotal)}</td>
+      <td>${escapeHtml(statusText)}</td>
+      <td>${escapeHtml(created)}</td>
+      <td class="text-center">
+        <button
+          class="btn btn-sm btn-outline-secondary ${isOutsourcedRow ? 'view-outsourced-order-btn' : 'view-order-btn'}"
+          data-order-id="${safeOrderId}"
+          ${isOutsourcedRow ? `data-outsourced-key="${escapeHtml(options.outsourcedKey)}"` : ''}>
+          View
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  function appendGroupedRows(rows, opts) {
+    const options = opts || {};
+    const grouped = {};
+    rows.forEach(o => {
+      const key = String(o && o.name ? o.name : 'Walk-in');
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(o);
+    });
+
+    Object.entries(grouped).forEach(([nameRaw, items]) => {
+      if (!items || items.length <= 1) {
+        const only = items[0];
+        appendOrderRow(only, {
+          noteHtml: only && only.noteHtml,
+          statusText: only && only.status,
+          totalOverride: only && only.total,
+          outsourcedKey: only && only.outsourcedKey
+        });
+        return;
+      }
+
+      const groupId = `orders-group-${groupIndex++}`;
+      const safeName = escapeHtml(nameRaw || 'Walk-in');
+      const groupTotal = items.reduce((s, it) => s + Number(it.total || 0), 0);
+      const latestCreated = items
+        .map(it => it && it.createdAt ? new Date(it.createdAt) : null)
+        .filter(d => d && !isNaN(d.getTime()))
+        .sort((a, b) => b - a)[0];
+
+      const groupTr = document.createElement('tr');
+      groupTr.className = 'table-active orders-group-toggle';
+      groupTr.setAttribute('data-target', groupId);
+      groupTr.setAttribute('aria-expanded', 'false');
+      groupTr.style.cursor = 'pointer';
+      groupTr.innerHTML = `
         <td>
-          <a href="${viewHref}"
-             class="orders-explorer-open-order"
-             title="Order ID: ${safeOrderId}">
-            ${name}
-          </a>
+          <span class="me-2 orders-group-toggle-icon"><i class="bi bi-chevron-right"></i></span>
+          <strong>${safeName}</strong>
+          <span class="text-muted ms-2">(${items.length} orders)</span>
         </td>
-        <td>${jobNote}</td>
-        <td class="text-end">GH₵ ${formatMoney(o.total)}</td>
-        <td>${escapeHtml(o.status || '')}</td>
-        <td>${escapeHtml(created)}</td>
-        <td class="text-center">
-          <button
-            class="btn btn-sm btn-outline-secondary view-order-btn"
-            data-order-id="${safeOrderId}">
-            View
-          </button>
-        </td>
+        <td><span class="text-muted">-</span></td>
+        <td class="text-end">GH\u20b5 ${formatMoney(groupTotal)}</td>
+        <td>${options.statusText || 'Grouped'}</td>
+        <td>${latestCreated ? escapeHtml(formatDateTimeForDisplay(latestCreated.toISOString())) : '-'}</td>
+        <td class="text-center"><span class="text-muted">Expand</span></td>
       `;
-      tbody.appendChild(tr);
+      tbody.appendChild(groupTr);
+
+      items.forEach(o => {
+        appendOrderRow(o, {
+          name: nameRaw || 'Walk-in',
+          groupId,
+          noteHtml: o.noteHtml,
+          statusText: o.status,
+          totalOverride: o.total,
+          outsourcedKey: o.outsourcedKey
+        });
+      });
+    });
+  }
+
+  function buildOutsourcedEntries(source) {
+    const entries = [];
+    source.filter(hasOutsourcedSide).forEach(order => {
+      const groupedByArtist = {};
+      const details = Array.isArray(order.outsourcedDetails) ? order.outsourcedDetails : [];
+
+      details.forEach(detail => {
+        const artistName = String(detail.artistName || 'Out-Sourced Artist').trim() || 'Out-Sourced Artist';
+        if (!groupedByArtist[artistName]) groupedByArtist[artistName] = [];
+        groupedByArtist[artistName].push(detail);
+      });
+
+      if (!Object.keys(groupedByArtist).length && Number(order.outsourcedTotal || 0) > 0) {
+        groupedByArtist['Out-Sourced Artist'] = [{
+          artistName: 'Out-Sourced Artist',
+          selectionLabel: 'Out-sourced work',
+          qty: 0,
+          amount: 0,
+          total: Number(order.outsourcedTotal || 0)
+        }];
+      }
+
+      Object.entries(groupedByArtist).forEach(([artistName, artistDetails], index) => {
+        const total = artistDetails.reduce((s, d) => s + Number(d.total || 0), 0);
+        const key = `${String(order.orderId || order._id || '')}::${index}::${artistName}`;
+        const cleanDetails = artistDetails.map(d => ({
+          artistName,
+          selectionLabel: String(d.selectionLabel || '').trim(),
+          qty: Number(d.qty || 0),
+          amount: Number(d.amount || 0),
+          total: Number(d.total || 0)
+        }));
+
+        const entry = {
+          _id: order._id,
+          orderId: order.orderId,
+          name: artistName,
+          originalCustomerName: order.name || 'Walk-in',
+          jobNote: String(order.jobNote || '').trim(),
+          total: Number(total.toFixed(2)),
+          status: 'Creditor',
+          createdAt: order.createdAt,
+          outsourcedKey: key,
+          outsourcedDetails: cleanDetails
+        };
+        outsourcedOrderDetailsByKey[key] = entry;
+        entries.push(entry);
+      });
+    });
+    return entries;
+  }
+
+  if (ordersExplorerMode === 'outsourced') {
+    const outsourcedRows = buildOutsourcedEntries(sourceOrders);
+    if (!outsourcedRows.length) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No outsourced orders in this range.</td></tr>';
+      if (ordersCountEl) ordersCountEl.textContent = '0 outsourced results';
       return;
     }
+    appendGroupedRows(outsourcedRows, { statusText: 'Creditor' });
+    if (ordersCountEl) ordersCountEl.textContent = `${outsourcedRows.length} outsourced result${outsourcedRows.length > 1 ? 's' : ''}`;
+    return;
+  }
 
-    const groupId = `orders-group-${groupIndex++}`;
-    const safeName = escapeHtml(nameRaw || 'Walk-in');
-    const groupTotal = items.reduce((s, it) => s + Number(it.total || 0), 0);
-    const latestCreated = items
-      .map(it => it && it.createdAt ? new Date(it.createdAt) : null)
-      .filter(d => d && !isNaN(d.getTime()))
-      .sort((a, b) => b - a)[0];
-
-    const groupTr = document.createElement('tr');
-    groupTr.className = 'table-active orders-group-toggle';
-    groupTr.setAttribute('data-target', groupId);
-    groupTr.setAttribute('aria-expanded', 'false');
-    groupTr.style.cursor = 'pointer';
-    groupTr.innerHTML = `
-      <td>
-        <span class="me-2 orders-group-toggle-icon"><i class="bi bi-chevron-right"></i></span>
-        <strong>${safeName}</strong>
-        <span class="text-muted ms-2">(${items.length} orders)</span>
-      </td>
-      <td><span class="text-muted">-</span></td>
-      <td class="text-end">GH₵ ${formatMoney(groupTotal)}</td>
-      <td>Grouped</td>
-      <td>${latestCreated ? escapeHtml(formatDateTimeForDisplay(latestCreated.toISOString())) : '-'}</td>
-      <td class="text-center"><span class="text-muted">Expand</span></td>
-    `;
-    tbody.appendChild(groupTr);
-
-    items.forEach(o => {
-      const orderId = o.orderId || o._id || '';
-      const safeOrderId = escapeHtml(orderId);
-      const jobNote = escapeHtml(o.jobNote || '-');
-      const viewHref = '/orders/view/' + encodeURIComponent(orderId);
-      const created = o.createdAt
-        ? formatDateTimeForDisplay(o.createdAt)
-        : (o.createdAt || '');
-
-      const tr = document.createElement('tr');
-      tr.className = `orders-group-row ${groupId}`;
-      tr.style.display = 'none';
-      tr.dataset.orderId = orderId;
-      tr.innerHTML = `
-        <td>
-          <a href="${viewHref}"
-             class="orders-explorer-open-order"
-             title="Order ID: ${safeOrderId}">
-            ${safeName}
-          </a>
-        </td>
-        <td>${jobNote}</td>
-        <td class="text-end">GH₵ ${formatMoney(o.total)}</td>
-        <td>${escapeHtml(o.status || '')}</td>
-        <td>${escapeHtml(created)}</td>
-        <td class="text-center">
-          <button
-            class="btn btn-sm btn-outline-secondary view-order-btn"
-            data-order-id="${safeOrderId}">
-            View
-          </button>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
-  });
-
+  appendGroupedRows(sourceOrders);
   if (ordersCountEl) {
-    ordersCountEl.textContent = `${orders.length} result${orders.length > 1 ? 's' : ''}`;
+    ordersCountEl.textContent = `${sourceOrders.length} result${sourceOrders.length > 1 ? 's' : ''}`;
   }
 }
-
   // ---------- view order details (orders explorer / detail modal) ----------
   async function viewOrderDetails(orderId) {
     if (!orderId) return;
+    setOrderDetailsActionsVisible(true);
+    if (orderDetailsMeta) orderDetailsMeta.style.display = '';
     try {
       const res = await fetch(`/orders/list/${encodeURIComponent(orderId)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
       if (!res.ok) {
@@ -2102,7 +2573,7 @@ function renderOrdersList(orders) {
       const o = j.order;
       const jobNote = String(o.jobNote || '').trim();
 
-      const metaText = `Order ID: ${o.orderId} â€” Total: GH₵ ${formatMoney(o.total)} â€” Status: ${o.status} â€” Created: ${formatDateTimeForDisplay(o.createdAt)}${jobNote ? ` â€” Note / Job Type: ${jobNote}` : ''}`;
+      const metaText = `Order ID: ${o.orderId} - Total: GH\u20b5 ${formatMoney(o.total)} - Status: ${o.status} - Created: ${formatDateTimeForDisplay(o.createdAt)}${jobNote ? ` - Note / Job Type: ${jobNote}` : ''}`;
       if (orderDetailsMeta) orderDetailsMeta.textContent = metaText;
 
       let html = '';
@@ -2157,6 +2628,57 @@ function renderOrdersList(orders) {
     }
   }
 
+  function viewOutsourcedOrderDetails(key) {
+    const entry = outsourcedOrderDetailsByKey && outsourcedOrderDetailsByKey[key];
+    if (!entry) return;
+    setOrderDetailsActionsVisible(false);
+
+    const total = Number(entry.total || 0);
+    const created = entry.createdAt ? formatDateTimeForDisplay(entry.createdAt) : '';
+    if (orderDetailsMeta) {
+      orderDetailsMeta.textContent = '';
+      orderDetailsMeta.style.display = 'none';
+    }
+
+    const rows = (entry.outsourcedDetails || []).map(detail => {
+      const label = subUnitsOnlyFromLabel(detail.selectionLabel || '') || detail.selectionLabel || 'Out-sourced work';
+      return `
+        <tr>
+          <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;">${escapeHtml(label)}</td>
+          <td class="text-center">${escapeHtml(String(detail.qty || 0))}</td>
+          <td class="text-end">GH₵ ${formatMoney(detail.amount || 0)}</td>
+          <td class="text-end">GH₵ ${formatMoney(detail.total || 0)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const html = `
+      <div class="table-responsive">
+        <table class="table table-sm table-borderless mb-0">
+          <thead>
+            <tr>
+              <th>Selection</th>
+              <th class="text-center">Artist QTY</th>
+              <th class="text-end">Artist Amount</th>
+              <th class="text-end">Total</th>
+            </tr>
+          </thead>
+          <tbody>${rows || '<tr><td class="text-muted" colspan="4">No outsourced details listed.</td></tr>'}</tbody>
+        </table>
+      </div>
+      <div class="mt-3" style="font-size:1rem;line-height:1.65;color:#111827;font-weight:500;">
+        <div>Order ID: ${escapeHtml(entry.orderId || '')}</div>
+        <div>Customer: ${escapeHtml(entry.name || 'Out-Sourced Artist')}</div>
+        <div>Out-Sourced Cost: GH₵ ${formatMoney(total)}</div>
+        ${entry.jobNote ? `<div>Note / Job Type: ${escapeHtml(entry.jobNote)}</div>` : ''}
+        <div>Created: ${escapeHtml(created)}</div>
+      </div>
+    `;
+
+    if (orderDetailsJson) orderDetailsJson.innerHTML = html;
+    if (orderDetailsModal) orderDetailsModal.show();
+  }
+
   // Orders table click delegation (view button)
   if (ordersTable) {
     ordersTable.addEventListener('click', function (ev) {
@@ -2177,6 +2699,11 @@ function renderOrdersList(orders) {
       }
       const a = ev.target.closest('.orders-explorer-open-order');
       if (a) return; // allow native navigation
+      const outBtn = ev.target.closest('.view-outsourced-order-btn');
+      if (outBtn) {
+        viewOutsourcedOrderDetails(outBtn.dataset.outsourcedKey || '');
+        return;
+      }
       const vbtn = ev.target.closest('.view-order-btn');
       if (vbtn) {
         const id = vbtn.dataset.orderId;
@@ -2188,7 +2715,8 @@ function renderOrdersList(orders) {
   // copy / print from detail modal
   if (copyDetailOrderIdBtn) {
     copyDetailOrderIdBtn.addEventListener('click', function () {
-      const text = (orderDetailsMeta && orderDetailsMeta.textContent) ? orderDetailsMeta.textContent.split('â€”')[0].replace('Order ID:', '').trim() : '';
+      const rawMeta = (orderDetailsMeta && orderDetailsMeta.textContent) ? orderDetailsMeta.textContent : '';
+      const text = rawMeta.replace(/^Order ID:\s*/i, '').split(/\s+(?:-|\u2014)\s+/)[0].trim();
       if (!text) return alert('No order ID available');
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(()=> { try { window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch(_){}; }).catch(()=> { alert('Copy failed'); });
       else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch(e){ alert('Copy failed'); } document.body.removeChild(ta); }
@@ -2307,8 +2835,6 @@ if (serviceSelect) {
     initOrdersClient();
   });
 })();
-
-
 
 
 

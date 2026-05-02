@@ -382,17 +382,19 @@ block content
         .modal-body.dark-card-body
           .row.g-2.mb-3.align-items-center
             .col-auto
-              label.form-label.mb-0 small.text-muted-light Small Date Range
+              label.form-label.mb-0
+                small.text-muted-light Date Range
             .col-auto
               input.form-control.form-control-dark(type='date', id='ordersFrom')
             .col-auto
               input.form-control.form-control-dark(type='date', id='ordersTo')
-            .col
-              .btn-group
+            .col-auto.d-flex.align-items-center.flex-nowrap
+              .btn-group.flex-shrink-0
                 button.btn.btn-outline-light-custom.btn-sm#ordersPresetToday(type='button') Today
                 button.btn.btn-outline-light-custom.btn-sm#ordersPresetYesterday(type='button') Yesterday
                 button.btn.btn-outline-light-custom.btn-sm#ordersPresetThisWeek(type='button') This Week
-              button.btn.btn-primary.btn-sm.ms-2#ordersFetchBtn(type='button') Refresh
+              button.btn.btn-primary.btn-sm.ms-2.flex-shrink-0#ordersFetchBtn(type='button') Refresh
+              button.btn.btn-outline-info.btn-sm.ms-2.flex-shrink-0#ordersToggleOutsourcedBtn(type='button', style='width: 106px; white-space: nowrap;') Outsourced
             .col-auto.text-end
               small.text-muted-light#ordersCount -- results
 
@@ -410,6 +412,18 @@ block content
               tbody
                 tr
                   td.text-muted(colspan='6') Use the date filters above and click Refresh to load orders.
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
+
+  .modal.fade(id='ordersExplorerDetailModal', tabindex='-1', aria-labelledby='ordersExplorerDetailModalLabel', aria-hidden='true')
+    .modal-dialog.modal-lg.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title#ordersExplorerDetailModalLabel Order Details
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          .small.text-muted-light.mb-3#ordersExplorerDetailMeta
+          #ordersExplorerDetailBody
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 

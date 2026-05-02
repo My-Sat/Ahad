@@ -2158,13 +2158,22 @@ if (dailyOrdersSelect) {
     const ordersFrom = document.getElementById('ordersFrom');
     const ordersTo = document.getElementById('ordersTo');
     const fetchBtn = document.getElementById('ordersFetchBtn');
+    const toggleOutsourcedBtn = document.getElementById('ordersToggleOutsourcedBtn');
     const presetToday = document.getElementById('ordersPresetToday');
     const presetYesterday = document.getElementById('ordersPresetYesterday');
     const presetThisWeek = document.getElementById('ordersPresetThisWeek');
     const table = document.getElementById('ordersModalTable');
     const countEl = document.getElementById('ordersCount');
+    const detailModalEl = document.getElementById('ordersExplorerDetailModal');
+    const detailModal = (window.bootstrap && detailModalEl) ? new bootstrap.Modal(detailModalEl) : null;
+    const detailMeta = document.getElementById('ordersExplorerDetailMeta');
+    const detailBody = document.getElementById('ordersExplorerDetailBody');
 
     if (!openBtn || !modalEl || !ordersFrom || !ordersTo || !table) return;
+
+    let ordersExplorerMode = 'normal';
+    let lastOrdersList = [];
+    let outsourcedOrderDetailsByKey = Object.create(null);
 
     function isoDate(d) {
       const dt = d ? new Date(d) : new Date();
@@ -2185,6 +2194,10 @@ if (dailyOrdersSelect) {
         const ss = String(d.getSeconds()).padStart(2,'0');
         return `${dd}/${mm}/${yyyy}, ${hh}:${min}:${ss}`;
       } catch (e) { return dtStr || ''; }
+    }
+
+    function money(n) {
+      return formatCedi(Number(n) || 0);
     }
 
     function setDefaultRangeToToday() {
@@ -2209,6 +2222,18 @@ if (dailyOrdersSelect) {
       });
     }
 
+    function updateExplorerModeButton() {
+      if (!toggleOutsourcedBtn) return;
+      const outsourced = ordersExplorerMode === 'outsourced';
+      toggleOutsourcedBtn.textContent = outsourced ? 'Orders' : 'Outsourced';
+      toggleOutsourcedBtn.classList.remove('btn-info');
+      toggleOutsourcedBtn.classList.add('btn-outline-info');
+      toggleOutsourcedBtn.style.display = '';
+      toggleOutsourcedBtn.style.width = '106px';
+      toggleOutsourcedBtn.style.whiteSpace = 'nowrap';
+      toggleOutsourcedBtn.setAttribute('aria-pressed', outsourced ? 'true' : 'false');
+    }
+
     async function fetchOrdersList(from, to) {
       if (!from || !to) return renderOrdersListError('Invalid date range');
       table.querySelector('tbody').innerHTML = `<tr><td class="text-muted" colspan="6">Loading...</td></tr>`;
@@ -2222,7 +2247,8 @@ if (dailyOrdersSelect) {
         }
         const j = await res.json().catch(()=>null);
         if (!j || !Array.isArray(j.orders)) return renderOrdersListError('Invalid response from server.');
-        renderOrdersList(j.orders);
+        lastOrdersList = j.orders;
+        renderOrdersList(lastOrdersList);
       } catch (err) {
         console.error('fetchOrdersList err', err);
         renderOrdersListError('Network error while fetching orders.');
@@ -2230,7 +2256,7 @@ if (dailyOrdersSelect) {
     }
 
     function renderOrdersListError(msg) {
-      table.querySelector('tbody').innerHTML = `<tr><td class="text-muted" colspan="6">${msg}</td></tr>`;
+      table.querySelector('tbody').innerHTML = `<tr><td class="text-muted" colspan="6">${escapeHtml(msg)}</td></tr>`;
       if (countEl) countEl.textContent = '0 results';
     }
 
@@ -2239,124 +2265,246 @@ if (dailyOrdersSelect) {
       return String(s).replace(/[&<>"'`=\/]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
     }
 
-function renderOrdersList(orders) {
-  const tbody = table.querySelector('tbody');
+    function hasOutsourcedSide(o) {
+      return !!(o && (o.isOutsourced || Number(o.outsourcedTotal || 0) > 0));
+    }
 
-  if (!orders || !orders.length) {
-    tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No orders in this range.</td></tr>';
-    if (countEl) countEl.textContent = '0 results';
-    return;
-  }
-
-  tbody.innerHTML = '';
-
-  const grouped = {};
-  (orders || []).forEach(o => {
-    const key = String(o && o.name ? o.name : 'Walk-in');
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(o);
-  });
-
-  let groupIndex = 0;
-  Object.entries(grouped).forEach(([nameRaw, items]) => {
-    // single order: keep normal row behavior
-    if (!items || items.length <= 1) {
-      const o = items[0];
-      const oid = escapeHtml(o.orderId || o._id || '');
-      const name = escapeHtml(o.name || 'Walk-in');
-      const jobNote = escapeHtml(o.jobNote || '-');
-      const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : '';
+    function appendOrderRow(tbody, o, opts) {
+      const options = opts || {};
+      const orderId = o.orderId || o._id || '';
+      const safeOrderId = escapeHtml(orderId);
+      const name = escapeHtml(options.name || o.name || 'Walk-in');
+      const jobNote = options.noteHtml !== undefined ? options.noteHtml : escapeHtml(o.jobNote || '-');
+      const rowTotal = Number(options.totalOverride !== undefined ? options.totalOverride : (o.total || 0));
+      const statusText = options.statusText !== undefined ? options.statusText : (o.status || '');
+      const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : (o.createdAt || '');
+      const isOutsourcedRow = !!options.outsourcedKey;
 
       const tr = document.createElement('tr');
+      if (options.groupId) {
+        tr.className = `orders-group-row ${options.groupId}`;
+        tr.style.display = 'none';
+      }
       tr.innerHTML = `
         <td>
-          <a href="/orders/view/${encodeURIComponent(o.orderId || o._id || '')}"
-             class="orders-explorer-link"
-             title="Order ID: ${oid}">
-            ${name}
-          </a>
+          ${isOutsourcedRow
+            ? `<span title="Order ID: ${safeOrderId}">${name}</span>`
+            : `<a href="/orders/view/${encodeURIComponent(orderId)}" class="orders-explorer-link" title="Order ID: ${safeOrderId}">${name}</a>`}
         </td>
         <td>${jobNote}</td>
-        <td class="text-end">GH₵ ${Number(o.total || 0).toFixed(2)}</td>
-        <td>${escapeHtml(o.status || '')}</td>
+        <td class="text-end">${money(rowTotal)}</td>
+        <td>${escapeHtml(statusText)}</td>
         <td>${escapeHtml(created)}</td>
         <td class="text-center">
           <button
-            class="btn btn-sm btn-primary orders-explorer-view-btn"
-            data-order-id="${oid}">
+            class="btn btn-sm ${isOutsourcedRow ? 'btn-outline-secondary orders-explorer-outsourced-view-btn' : 'btn-primary orders-explorer-view-btn'}"
+            data-order-id="${safeOrderId}"
+            ${isOutsourcedRow ? `data-outsourced-key="${escapeHtml(options.outsourcedKey)}"` : ''}>
             View
           </button>
         </td>
       `;
       tbody.appendChild(tr);
-      return;
     }
 
-    const groupId = `orders-group-${groupIndex++}`;
-    const safeName = escapeHtml(nameRaw || 'Walk-in');
-    const groupTotal = items.reduce((s, it) => s + Number(it.total || 0), 0);
-    const latestCreated = items
-      .map(it => it && it.createdAt ? new Date(it.createdAt) : null)
-      .filter(d => d && !isNaN(d.getTime()))
-      .sort((a, b) => b - a)[0];
+    function appendGroupedRows(tbody, rows, opts) {
+      const options = opts || {};
+      const grouped = {};
+      rows.forEach(o => {
+        const key = String(o && o.name ? o.name : 'Walk-in');
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(o);
+      });
 
-    const groupTr = document.createElement('tr');
-    groupTr.className = 'table-active orders-group-toggle';
-    groupTr.setAttribute('data-target', groupId);
-    groupTr.setAttribute('aria-expanded', 'false');
-    groupTr.style.cursor = 'pointer';
-    groupTr.innerHTML = `
-      <td>
-        <span class="me-2 orders-group-toggle-icon"><i class="bi bi-chevron-right"></i></span>
-        <strong>${safeName}</strong>
-        <span class="text-muted ms-2">(${items.length} orders)</span>
-      </td>
-      <td><span class="text-muted">-</span></td>
-      <td class="text-end">GH₵ ${groupTotal.toFixed(2)}</td>
-      <td>Grouped</td>
-      <td>${latestCreated ? escapeHtml(formatDateTimeForDisplay(latestCreated.toISOString())) : '-'}</td>
-      <td class="text-center"><span class="text-muted">Expand</span></td>
-    `;
-    tbody.appendChild(groupTr);
+      let groupIndex = 0;
+      Object.entries(grouped).forEach(([nameRaw, items]) => {
+        if (!items || items.length <= 1) {
+          const only = items[0];
+          appendOrderRow(tbody, only, {
+            noteHtml: only && only.noteHtml,
+            statusText: only && only.status,
+            totalOverride: only && only.total,
+            outsourcedKey: only && only.outsourcedKey
+          });
+          return;
+        }
 
-    items.forEach(o => {
-      const oid = escapeHtml(o.orderId || o._id || '');
-      const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : '';
-      const jobNote = escapeHtml(o.jobNote || '-');
-      const childTr = document.createElement('tr');
-      childTr.className = `orders-group-row ${groupId}`;
-      childTr.style.display = 'none';
-      childTr.innerHTML = `
-        <td>
-          <a href="/orders/view/${encodeURIComponent(o.orderId || o._id || '')}"
-             class="orders-explorer-link"
-             title="Order ID: ${oid}">
-            ${safeName}
-          </a>
-        </td>
-        <td>${jobNote}</td>
-        <td class="text-end">GH₵ ${Number(o.total || 0).toFixed(2)}</td>
-        <td>${escapeHtml(o.status || '')}</td>
-        <td>${escapeHtml(created)}</td>
-        <td class="text-center">
-          <button
-            class="btn btn-sm btn-primary orders-explorer-view-btn"
-            data-order-id="${oid}">
-            View
-          </button>
-        </td>
+        const groupId = `orders-group-${groupIndex++}`;
+        const safeName = escapeHtml(nameRaw || 'Walk-in');
+        const groupTotal = items.reduce((s, it) => s + Number(it.total || 0), 0);
+        const latestCreated = items
+          .map(it => it && it.createdAt ? new Date(it.createdAt) : null)
+          .filter(d => d && !isNaN(d.getTime()))
+          .sort((a, b) => b - a)[0];
+
+        const groupTr = document.createElement('tr');
+        groupTr.className = 'table-active orders-group-toggle';
+        groupTr.setAttribute('data-target', groupId);
+        groupTr.setAttribute('aria-expanded', 'false');
+        groupTr.style.cursor = 'pointer';
+        groupTr.innerHTML = `
+          <td>
+            <span class="me-2 orders-group-toggle-icon"><i class="bi bi-chevron-right"></i></span>
+            <strong>${safeName}</strong>
+            <span class="text-muted ms-2">(${items.length} orders)</span>
+          </td>
+          <td><span class="text-muted">-</span></td>
+          <td class="text-end">${money(groupTotal)}</td>
+          <td>${options.statusText || 'Grouped'}</td>
+          <td>${latestCreated ? escapeHtml(formatDateTimeForDisplay(latestCreated.toISOString())) : '-'}</td>
+          <td class="text-center"><span class="text-muted">Expand</span></td>
+        `;
+        tbody.appendChild(groupTr);
+
+        items.forEach(o => {
+          appendOrderRow(tbody, o, {
+            name: nameRaw || 'Walk-in',
+            groupId,
+            noteHtml: o.noteHtml,
+            statusText: o.status,
+            totalOverride: o.total,
+            outsourcedKey: o.outsourcedKey
+          });
+        });
+      });
+    }
+
+    function buildOutsourcedEntries(source) {
+      const entries = [];
+      source.filter(hasOutsourcedSide).forEach(order => {
+        const groupedByArtist = {};
+        const details = Array.isArray(order.outsourcedDetails) ? order.outsourcedDetails : [];
+
+        details.forEach(detail => {
+          const artistName = String(detail.artistName || 'Out-Sourced Artist').trim() || 'Out-Sourced Artist';
+          if (!groupedByArtist[artistName]) groupedByArtist[artistName] = [];
+          groupedByArtist[artistName].push(detail);
+        });
+
+        if (!Object.keys(groupedByArtist).length && Number(order.outsourcedTotal || 0) > 0) {
+          groupedByArtist['Out-Sourced Artist'] = [{
+            artistName: 'Out-Sourced Artist',
+            selectionLabel: 'Out-sourced work',
+            qty: 0,
+            amount: 0,
+            total: Number(order.outsourcedTotal || 0)
+          }];
+        }
+
+        Object.entries(groupedByArtist).forEach(([artistName, artistDetails], index) => {
+          const total = artistDetails.reduce((s, d) => s + Number(d.total || 0), 0);
+          const key = `${String(order.orderId || order._id || '')}::${index}::${artistName}`;
+          const cleanDetails = artistDetails.map(d => ({
+            artistName,
+            selectionLabel: String(d.selectionLabel || '').trim(),
+            qty: Number(d.qty || 0),
+            amount: Number(d.amount || 0),
+            total: Number(d.total || 0)
+          }));
+
+          const entry = {
+            _id: order._id,
+            orderId: order.orderId,
+            name: artistName,
+            jobNote: String(order.jobNote || '').trim(),
+            total: Number(total.toFixed(2)),
+            status: 'Creditor',
+            createdAt: order.createdAt,
+            outsourcedKey: key,
+            outsourcedDetails: cleanDetails
+          };
+          outsourcedOrderDetailsByKey[key] = entry;
+          entries.push(entry);
+        });
+      });
+      return entries;
+    }
+
+    function renderOrdersList(orders) {
+      const tbody = table.querySelector('tbody');
+      const sourceOrders = Array.isArray(orders) ? orders : [];
+      outsourcedOrderDetailsByKey = Object.create(null);
+
+      if (!sourceOrders.length) {
+        tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No orders in this range.</td></tr>';
+        if (countEl) countEl.textContent = '0 results';
+        return;
+      }
+
+      tbody.innerHTML = '';
+
+      if (ordersExplorerMode === 'outsourced') {
+        const outsourcedRows = buildOutsourcedEntries(sourceOrders);
+        if (!outsourcedRows.length) {
+          tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No outsourced orders in this range.</td></tr>';
+          if (countEl) countEl.textContent = '0 outsourced results';
+          return;
+        }
+        appendGroupedRows(tbody, outsourcedRows, { statusText: 'Creditor' });
+        if (countEl) countEl.textContent = `${outsourcedRows.length} outsourced result${outsourcedRows.length > 1 ? 's' : ''}`;
+        return;
+      }
+
+      appendGroupedRows(tbody, sourceOrders);
+      if (countEl) {
+        countEl.textContent = `${sourceOrders.length} result${sourceOrders.length > 1 ? 's' : ''}`;
+      }
+    }
+
+    function viewOutsourcedOrderDetails(key) {
+      const entry = outsourcedOrderDetailsByKey && outsourcedOrderDetailsByKey[key];
+      if (!entry) return;
+
+      const total = Number(entry.total || 0);
+      const created = entry.createdAt ? formatDateTimeForDisplay(entry.createdAt) : '';
+      if (detailMeta) {
+        detailMeta.textContent = '';
+        detailMeta.style.display = 'none';
+      }
+
+      const rows = (entry.outsourcedDetails || []).map(detail => {
+        const label = subUnitsOnlyFromLabel(detail.selectionLabel || '') || detail.selectionLabel || 'Out-sourced work';
+        return `
+          <tr>
+            <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;">${escapeHtml(label)}</td>
+            <td class="text-center">${escapeHtml(String(detail.qty || 0))}</td>
+            <td class="text-end">${money(detail.amount || 0)}</td>
+            <td class="text-end">${money(detail.total || 0)}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const html = `
+        <div class="table-responsive">
+          <table class="table table-sm table-borderless mb-0">
+            <thead>
+              <tr>
+                <th>Selection</th>
+                <th class="text-center">Artist QTY</th>
+                <th class="text-end">Artist Amount</th>
+                <th class="text-end">Total</th>
+              </tr>
+            </thead>
+            <tbody>${rows || '<tr><td class="text-muted" colspan="4">No outsourced details listed.</td></tr>'}</tbody>
+          </table>
+        </div>
+        <div class="mt-3" style="font-size:1rem;line-height:1.65;color:#111827;font-weight:500;">
+          <div>Order ID: ${escapeHtml(entry.orderId || '')}</div>
+          <div>Customer: ${escapeHtml(entry.name || 'Out-Sourced Artist')}</div>
+          <div>Out-Sourced Cost: ${money(total)}</div>
+          ${entry.jobNote ? `<div>Note / Job Type: ${escapeHtml(entry.jobNote)}</div>` : ''}
+          <div>Created: ${escapeHtml(created)}</div>
+        </div>
       `;
-      tbody.appendChild(childTr);
-    });
-  });
 
-  if (countEl) {
-    countEl.textContent = `${orders.length} result${orders.length > 1 ? 's' : ''}`;
-  }
-}
+      if (detailBody) detailBody.innerHTML = html;
+      if (detailModal) detailModal.show();
+    }
 
     // open modal and auto-fetch
     openBtn.addEventListener('click', function () {
+      ordersExplorerMode = 'normal';
+      updateExplorerModeButton();
       setDefaultRangeToToday();
       if (modal) modal.show();
       // immediate fetch for today
@@ -2364,6 +2512,14 @@ function renderOrdersList(orders) {
       const to = ordersTo.value || isoDate(new Date());
       fetchOrdersList(from, to);
     });
+
+    if (toggleOutsourcedBtn) {
+      toggleOutsourcedBtn.addEventListener('click', function () {
+        ordersExplorerMode = ordersExplorerMode === 'outsourced' ? 'normal' : 'outsourced';
+        updateExplorerModeButton();
+        renderOrdersList(lastOrdersList);
+      });
+    }
 
     // preset handlers
     presetToday && presetToday.addEventListener('click', function () {
@@ -2397,7 +2553,7 @@ function renderOrdersList(orders) {
       fetchOrdersList(from, to);
     });
 
-    // delegate clicks inside table: anchor -> native navigation; view button -> navigate programmatically
+    // delegate clicks inside table: anchor -> native navigation; view button -> navigate or show outsourced details
     table.addEventListener('click', function (ev) {
       const toggleRow = ev.target.closest('.orders-group-toggle');
       if (toggleRow) {
@@ -2415,10 +2571,14 @@ function renderOrdersList(orders) {
         return;
       }
       const a = ev.target.closest('.orders-explorer-link');
-      if (a) {
-        // let native navigation happen
+      if (a) return;
+
+      const outsourcedBtn = ev.target.closest('.orders-explorer-outsourced-view-btn');
+      if (outsourcedBtn) {
+        viewOutsourcedOrderDetails(outsourcedBtn.dataset.outsourcedKey || '');
         return;
       }
+
       const vb = ev.target.closest('.orders-explorer-view-btn');
       if (vb) {
         const id = vb.dataset.orderId;
@@ -2431,6 +2591,7 @@ function renderOrdersList(orders) {
 
     // set initial defaults (do not auto-fetch)
     setDefaultRangeToToday();
+    updateExplorerModeButton();
   })();
 }
 

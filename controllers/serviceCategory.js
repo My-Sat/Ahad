@@ -4,8 +4,24 @@ const ServiceCategory = require('../models/service_category');
 const Service = require('../models/service');
 const Book = require('../models/book');
 
+const OUTSOURCED_NAME = 'Out-Sourced';
+
+async function ensureOutSourcedCategory() {
+  const normalized = OUTSOURCED_NAME.trim().toLowerCase();
+  let cat = await ServiceCategory.findOne({ nameNormalized: normalized }).lean();
+  if (cat) return cat;
+  try {
+    const created = await ServiceCategory.create({ name: OUTSOURCED_NAME, showInOrders: true });
+    return created.toObject ? created.toObject() : created;
+  } catch (e) {
+    cat = await ServiceCategory.findOne({ nameNormalized: normalized }).lean();
+    return cat || null;
+  }
+}
+
 exports.list = async (req, res) => {
   try {
+    await ensureOutSourcedCategory();
     // For admin clients we return all categories. For non-admin UIs you can filter later.
     const cats = await ServiceCategory.find().sort('name').lean();
     // If request expects JSON (AJAX), return JSON array (used by client)

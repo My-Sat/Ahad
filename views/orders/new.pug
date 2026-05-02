@@ -162,7 +162,9 @@ block content
                         div.small.text-muted-light#manualDiscountAmountLabel Discount:
                         strong#manualDiscountAmount.text-white - GH₵ 0.00
                 .d-flex.justify-content-end.mt-2
-
+                  .text-end.me-3#outsourcedCartWrap(style='display:none;')
+                    div.small.text-muted-light Out-Sourced Cost Total:
+                    strong#outsourcedCartTotal.text-info GH₵ 0.00
                   span.me-3.fs-5.text-white Total:
                   strong.fs-5#cartTotal.text-white GH₵ 0.00        
 
@@ -185,17 +187,19 @@ block content
         .modal-body.dark-card-body
           .row.g-2.mb-3.align-items-center
             .col-auto
-              label.form-label.mb-0 small.text-muted-light Small Date Range
+              label.form-label.mb-0
+                small.text-muted-light Date Range
             .col-auto
               input.form-control.form-control-dark(type='date', id='ordersFrom')
             .col-auto
               input.form-control.form-control-dark(type='date', id='ordersTo')
-            .col
-              .btn-group
+            .col-auto.d-flex.align-items-center.flex-nowrap
+              .btn-group.flex-shrink-0
                 button.btn.btn-outline-light-custom.btn-sm#presetToday(type='button') Today
                 button.btn.btn-outline-light-custom.btn-sm#presetYesterday(type='button') Yesterday
                 button.btn.btn-outline-light-custom.btn-sm#presetThisWeek(type='button') This Week
-              button.btn.btn-primary.btn-sm.ms-2#fetchOrdersBtn(type='button') Refresh
+              button.btn.btn-primary.btn-sm.ms-2.flex-shrink-0#fetchOrdersBtn(type='button') Refresh
+              button.btn.btn-outline-info.btn-sm.ms-2.flex-shrink-0#toggleOutsourcedOrdersBtn(type='button', style='width: 106px; white-space: nowrap;') Outsourced
             .col-auto.text-end
               small.text-muted-light#ordersCount -- results
 
@@ -216,6 +220,21 @@ block content
 
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
+
+  .modal.fade(id='orderDetailsModal', tabindex='-1', aria-labelledby='orderDetailsModalLabel', aria-hidden='true')
+    .modal-dialog.modal-lg.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title#orderDetailsModalLabel Order Details
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          .small.text-muted-light.mb-3#orderDetailsMeta
+          #orderDetailsJson
+        .modal-footer
+          button.btn.btn-outline-light-custom.btn-sm#copyDetailOrderIdBtn(type='button') Copy ID
+          button.btn.btn-outline-light-custom.btn-sm#printDetailOrderBtn(type='button') Print
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
   // Keep Orders New scripts inside #main-content so dashboard_nav AJAX loads them
   script(defer src='/javascripts/customer_editor.js')
+
 

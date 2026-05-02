@@ -17,6 +17,10 @@ const RegistrationSubmission = require('../models/registration_submission');
 const User = require('../models/user');
 const Book = require('../models/book');
 
+function isOutSourcedCategoryName(name) {
+  return /out[\s-]*sourced/i.test(String(name || '').trim());
+}
+
 
 async function getUsableCustomerCredit(customerId, session = null) {
   if (!customerId || !mongoose.Types.ObjectId.isValid(customerId)) return 0;
@@ -529,7 +533,11 @@ return {
   factor,              // NEW
   fb,
   printerId: it.printerId || null,
-  spoiled
+  spoiled,
+  outsourcedArtistId: it.outsourcedArtistId || null,
+  outsourcedArtistName: it.outsourcedArtistName || '',
+  outsourcedQty: it.outsourcedQty,
+  outsourcedAmount: it.outsourcedAmount
 };
     });
 
@@ -569,7 +577,7 @@ for (const it of items) {
 
   // Determine which price to use: use price2 only when client requested FB and price2 exists
 // Check whether this service requires a printer
-const svc = await Service.findById(it.serviceId).lean();
+const svc = await Service.findById(it.serviceId).populate('category', '_id name nameNormalized').lean();
 if (!svc) {
   return res.status(404).json({ error: `Service ${it.serviceId} not found` });
 }
@@ -577,7 +585,9 @@ if (!svc.category) {
   return res.status(400).json({ error: `Service "${svc.name || it.serviceId}" is not assigned to a category` });
 }
 
-const svcCategoryId = String(svc.category);
+const svcCategoryId = String(
+  svc.category && svc.category._id ? svc.category._id : svc.category
+);
 let isAuthorizedByCategory = allowedCategoryIds.has(svcCategoryId);
 
 // Compound-service fallback:
@@ -601,6 +611,49 @@ if (!isAuthorizedByCategory) {
   return res.status(400).json({ error: 'One or more selected services are outside secretary-assigned categories.' });
 }
 const svcRequiresPrinter = !!(svc && svc.requiresPrinter);
+const outsourcedCategory = svc && svc.category ? (svc.category.nameNormalized || svc.category.name || '') : '';
+const isOutSourcedCategory = isOutSourcedCategoryName(outsourcedCategory);
+
+let outsourcedArtist = null;
+let outsourcedArtistName = '';
+let outsourcedQty = 0;
+let outsourcedAmount = 0;
+let outsourcedTotal = 0;
+if (isOutSourcedCategory) {
+  const rawQty = Number(it.outsourcedQty);
+  const rawAmount = Number(it.outsourcedAmount);
+  const hasOutsourcedInput =
+    (it.outsourcedArtistId && String(it.outsourcedArtistId).trim()) ||
+    (it.outsourcedArtistName && String(it.outsourcedArtistName).trim()) ||
+    (!isNaN(rawQty) && rawQty > 0) ||
+    (!isNaN(rawAmount) && rawAmount > 0);
+
+  if (hasOutsourcedInput) {
+    if (!it.outsourcedArtistId || !mongoose.Types.ObjectId.isValid(it.outsourcedArtistId)) {
+      return res.status(400).json({ error: 'Select a valid artist for outsourced service.' });
+    }
+
+    const artist = await Customer.findById(it.outsourcedArtistId)
+      .select('_id category businessName firstName phone')
+      .lean();
+    if (!artist || String(artist.category || '').toLowerCase() !== 'artist') {
+      return res.status(400).json({ error: 'Selected outsourced handler must be an Artist customer.' });
+    }
+
+    outsourcedArtist = artist._id;
+    outsourcedArtistName = String(
+      artist.businessName || artist.firstName || artist.phone || it.outsourcedArtistName || ''
+    ).trim();
+    outsourcedQty = Math.max(0, Math.floor(rawQty || 0));
+    outsourcedAmount = Math.max(0, Number(rawAmount || 0));
+
+    if (outsourcedQty <= 0 || outsourcedAmount <= 0) {
+      return res.status(400).json({ error: 'Enter valid outsourced QTY and Amount for outsourced service.' });
+    }
+
+    outsourcedTotal = Number((outsourcedQty * outsourcedAmount).toFixed(2));
+  }
+}
 
 // normalize factor (pricing factor comes from client)
 let pricingFactor = 1;
@@ -703,7 +756,12 @@ const selectionsForOrder = (pr.selections || []).map(s => ({
     spoiled: Number(it.spoiled) || 0,
     fb: !!(it.fb || usedFB),  // store original intent (client flag) OR our usedFB calc
     printerType, // NEW: 'monochrome' | 'colour' | null
-    printFactor // NEW: multiplier for printer counts (default 1)
+    printFactor, // NEW: multiplier for printer counts (default 1)
+    outsourcedArtist,
+    outsourcedArtistName,
+    outsourcedQty,
+    outsourcedAmount,
+    outsourcedTotal
   });
   total += subtotal;
 }
@@ -1036,6 +1094,34 @@ order.total = finalTotal;
     }
 
     await order.save();
+
+    // Credit outsourced artists for work rendered to us.
+    try {
+      const recBy = req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null;
+      const recByName = (req.user?.name || req.user?.username || '').toString();
+      const artistTotals = new Map();
+
+      for (const item of (order.items || [])) {
+        if (!item || !item.outsourcedArtist || !Number(item.outsourcedTotal || 0)) continue;
+        const aid = String(item.outsourcedArtist);
+        const sum = Number(artistTotals.get(aid) || 0) + Number(item.outsourcedTotal || 0);
+        artistTotals.set(aid, Number(sum.toFixed(2)));
+      }
+
+      for (const [artistId, amount] of artistTotals.entries()) {
+        if (amount <= 0) continue;
+        await CustomerAccountTxn.create([{
+          customer: new mongoose.Types.ObjectId(artistId),
+          type: 'credit',
+          amount: Number(amount.toFixed(2)),
+          note: `Out-sourced service credit from order ${order.orderId}`,
+          recordedBy: recBy,
+          recordedByName: recByName
+        }]);
+      }
+    } catch (outsourceCreditErr) {
+      console.error('Failed to credit outsourced artists', outsourceCreditErr);
+    }
 
     try {
       await RegistrationSubmission.updateOne(
@@ -2396,6 +2482,7 @@ exports.apiListOrders = async (req, res) => {
 
     const orders = await Order.find(q)
       .populate('customer', 'firstName businessName category phone')
+      .populate('items.outsourcedArtist', 'businessName firstName phone category')
       .sort({ createdAt: -1 })
       .limit(1000)
       .lean();
@@ -2427,6 +2514,29 @@ const out = orders.map(o => {
     if (ts < start || ts > end) return sum;
     return sum + amt;
   }, 0);
+  const outsourcedTotal = (o.items || []).reduce((sum, item) => {
+    return sum + Number(item && item.outsourcedTotal ? item.outsourcedTotal : 0);
+  }, 0);
+  const outsourcedDetails = (o.items || [])
+    .filter(item => Number(item && item.outsourcedTotal ? item.outsourcedTotal : 0) > 0)
+    .map(item => {
+      const artistDoc = item && item.outsourcedArtist && typeof item.outsourcedArtist === 'object'
+        ? item.outsourcedArtist
+        : null;
+      const artistName = String(
+        item.outsourcedArtistName ||
+        (artistDoc && (artistDoc.businessName || artistDoc.firstName || artistDoc.phone)) ||
+        'Artist'
+      ).trim();
+
+      return {
+        artistName,
+        selectionLabel: String(item.selectionLabel || '').trim(),
+        qty: Number(item.outsourcedQty || 0),
+        amount: Number(item.outsourcedAmount || 0),
+        total: Number(item.outsourcedTotal || 0)
+      };
+    });
 
     return {
       _id: o._id,
@@ -2434,7 +2544,10 @@ const out = orders.map(o => {
       jobNote: String(o.jobNote || '').trim(),
       orderId: o.orderId,     // keep for actions
       total: o.total,
+    outsourcedTotal: Number(outsourcedTotal.toFixed(2)),
+    isOutsourced: outsourcedTotal > 0,
     paidInRange: Number(paidInRange.toFixed(2)),
+    outsourcedDetails,
     status: o.status,
     createdAt: o.createdAt
   };

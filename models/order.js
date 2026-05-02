@@ -27,7 +27,12 @@ const OrderItemSchema = new mongoose.Schema({
   // optional flags stored per-item (backwards compat)
   fb: { type: Boolean, default: false },
   spoiled: { type: Number, default: 0 },
-  printerType: { type: String, enum: ['monochrome', 'colour', null], default: null }
+  printerType: { type: String, enum: ['monochrome', 'colour', null], default: null },
+  outsourcedArtist: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', default: null },
+  outsourcedArtistName: { type: String, default: '' },
+  outsourcedQty: { type: Number, default: 0 },
+  outsourcedAmount: { type: Number, default: 0 },
+  outsourcedTotal: { type: Number, default: 0 }
 }, { _id: false });
 
 const PaymentSchema = new mongoose.Schema({

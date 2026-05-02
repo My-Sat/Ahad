@@ -3,6 +3,8 @@ const Customer = require('../models/customer');
 const ServiceCategory = require('../models/service_category');
 const RegistrationSubmission = require('../models/registration_submission');
 
+const OUTSOURCED_NAME = 'Out-Sourced';
+
 function utcDayKey(date = new Date()) {
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, '0');
@@ -25,6 +27,17 @@ exports.page = async function page(req, res) {
 
 exports.apiCategories = async function apiCategories(req, res) {
   try {
+    const normalized = OUTSOURCED_NAME.trim().toLowerCase();
+    let outsourced = await ServiceCategory.findOne({ nameNormalized: normalized }).lean();
+    if (!outsourced) {
+      try {
+        const created = await ServiceCategory.create({ name: OUTSOURCED_NAME, showInOrders: true });
+        outsourced = created.toObject ? created.toObject() : created;
+      } catch (e) {
+        outsourced = await ServiceCategory.findOne({ nameNormalized: normalized }).lean();
+      }
+    }
+
     const role = String(req.user?.role || '').toLowerCase();
     const isAdmin = role === 'admin';
     const q = isAdmin ? {} : { showInOrders: true };
