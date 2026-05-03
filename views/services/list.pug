@@ -350,11 +350,34 @@ block content
           // set hidden input so new services are created under selected category
           if (addServiceCategoryIdEl) addServiceCategoryIdEl.value = catId;
 
+          function renderServiceRowsFromDocument(doc) {
+            if (!servicesTbody || !doc) return false;
+            const freshTbody = doc.querySelector('#services-tbody');
+            if (!freshTbody) return false;
+            servicesTbody.innerHTML = freshTbody.innerHTML;
+            return true;
+          }
+
+          function reloadAllServicesRows() {
+            if (!servicesTbody) return Promise.resolve();
+            return fetch('/admin/services', { headers: { 'X-Requested-With': 'XMLHttpRequest' }, cache: 'no-store' })
+              .then(r => {
+                if (!r.ok) throw new Error('Failed to reload all services');
+                return r.text();
+              })
+              .then(html => {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                if (!renderServiceRowsFromDocument(doc)) throw new Error('Unable to find refreshed services table');
+              });
+          }
+
           // If backend exposes endpoint to list services for a category, try it first.
           if (!catId) {
-            // show all rows
-            const rows = servicesTbody ? servicesTbody.querySelectorAll('tr') : [];
-            rows.forEach(r => r.style.display = '');
+            reloadAllServicesRows().catch(err => {
+              console.warn('Failed to reload all services; using visible-row fallback', err);
+              const rows = servicesTbody ? servicesTbody.querySelectorAll('tr') : [];
+              rows.forEach(r => r.style.display = '');
+            });
             return;
           }
           // Try AJAX: GET /admin/service-categories/:id/services (fallback to filtering by data-category attr)
@@ -433,12 +456,12 @@ block content
         function applyCategoryFilterLocal(id) {
           const catId = id || '';
           const rows = servicesTbody ? servicesTbody.querySelectorAll('tr') : [];
+          if (!catId) {
+            applyCategoryFilter('');
+            return;
+          }
           rows.forEach(r => {
             const cat = r.dataset.category || '';
-            if (!catId) {
-              r.style.display = '';
-              return;
-            }
             r.style.display = (cat && String(cat) === String(catId)) ? '' : 'none';
           });
         }

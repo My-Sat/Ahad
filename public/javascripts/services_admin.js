@@ -31,6 +31,33 @@ function ensureServiceCategoryActionHandlers() {
     return String(s).replace(/[&<>"'`=\/]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
   }
 
+  function renderServiceRowsFromDocument(doc) {
+    const e = els();
+    if (!e.servicesTbody || !doc) return false;
+    const freshTbody = doc.querySelector('#services-tbody');
+    if (!freshTbody) return false;
+    e.servicesTbody.innerHTML = freshTbody.innerHTML;
+    return true;
+  }
+
+  async function reloadAllServicesRows() {
+    const e = els();
+    if (e.hiddenServiceCategory) e.hiddenServiceCategory.value = '';
+    if (!e.servicesTbody) return;
+
+    const res = await fetch('/admin/services', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      cache: 'no-store'
+    });
+    if (!res.ok) throw new Error(`Failed to reload services: ${res.status}`);
+
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    if (!renderServiceRowsFromDocument(doc)) {
+      throw new Error('Unable to find refreshed services table');
+    }
+  }
+
   function cleanCategoryLabel(text) {
     return String(text || '').replace(/\s+\(hidden\)\s*$/i, '').trim();
   }
@@ -110,6 +137,14 @@ function ensureServiceCategoryActionHandlers() {
     const catId = String(categoryId || '');
     if (e.hiddenServiceCategory) e.hiddenServiceCategory.value = catId;
     if (!e.servicesTbody) return;
+
+    if (!catId) {
+      reloadAllServicesRows().catch(err => {
+        console.warn('Failed to reload all services; using visible-row fallback', err);
+        e.servicesTbody.querySelectorAll('tr').forEach(row => { row.style.display = ''; });
+      });
+      return;
+    }
 
     e.servicesTbody.querySelectorAll('tr').forEach(row => {
       const rowCat = row.dataset.category || '';
