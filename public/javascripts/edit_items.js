@@ -4,7 +4,7 @@
 // - hides containing dropdown, then shows modal
 // - performs AJAX PUT for edits and updates DOM or reloads as necessary
 
-document.addEventListener('DOMContentLoaded', function () {
+function initEditItems() {
   'use strict';
 
   function hideContainingDropdown(el) {
@@ -53,73 +53,76 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  document.addEventListener('click', function (e) {
-    // SERVICE edit
-    const svcBtn = e.target.closest('.dropdown-item.edit-service-btn');
-    if (svcBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      hideContainingDropdown(svcBtn);
-      showModalById('editServiceModal', () => {
-        const id = svcBtn.dataset.serviceId;
-        const name = svcBtn.dataset.serviceName || '';
-        const idInput = document.getElementById('editServiceId');
-        const nameInput = document.getElementById('editServiceName');
-        if (idInput) idInput.value = id;
-        if (nameInput) {
-          nameInput.value = name;
-          try { nameInput.focus(); nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length); } catch (err) {}
-        }
-      });
-      return;
-    }
+  if (!window.__editItemsOpenDelegated) {
+    window.__editItemsOpenDelegated = true;
+    document.addEventListener('click', function (e) {
+      // SERVICE edit
+      const svcBtn = e.target.closest('.dropdown-item.edit-service-btn');
+      if (svcBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        hideContainingDropdown(svcBtn);
+        showModalById('editServiceModal', () => {
+          const id = svcBtn.dataset.serviceId;
+          const name = svcBtn.dataset.serviceName || '';
+          const idInput = document.getElementById('editServiceId');
+          const nameInput = document.getElementById('editServiceName');
+          if (idInput) idInput.value = id;
+          if (nameInput) {
+            nameInput.value = name;
+            try { nameInput.focus(); nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length); } catch (err) {}
+          }
+        });
+        return;
+      }
 
-    // UNIT edit
-    const unitBtn = e.target.closest('.dropdown-item.edit-unit-btn');
-    if (unitBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      hideContainingDropdown(unitBtn);
-      showModalById('editUnitModal', () => {
-        const unitId = unitBtn.dataset.unitId;
-        const unitName = unitBtn.dataset.unitName || '';
-        const idInput = document.getElementById('editUnitId');
-        const nameInput = document.getElementById('editUnitName');
-        if (idInput) idInput.value = unitId;
-        if (nameInput) {
-          nameInput.value = unitName;
-          try { nameInput.focus(); nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length); } catch (err) {}
-        }
-      });
-      return;
-    }
+      // UNIT edit
+      const unitBtn = e.target.closest('.dropdown-item.edit-unit-btn');
+      if (unitBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        hideContainingDropdown(unitBtn);
+        showModalById('editUnitModal', () => {
+          const unitId = unitBtn.dataset.unitId;
+          const unitName = unitBtn.dataset.unitName || '';
+          const idInput = document.getElementById('editUnitId');
+          const nameInput = document.getElementById('editUnitName');
+          if (idInput) idInput.value = unitId;
+          if (nameInput) {
+            nameInput.value = unitName;
+            try { nameInput.focus(); nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length); } catch (err) {}
+          }
+        });
+        return;
+      }
 
-    // SUB-UNIT edit
-    const subBtn = e.target.closest('.dropdown-item.edit-subunit-btn');
-    if (subBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      hideContainingDropdown(subBtn);
-      showModalById('editSubunitModal', () => {
-        const unitId = subBtn.dataset.unitId;
-        const subunitId = subBtn.dataset.subunitId;
-        const subunitName = subBtn.dataset.subunitName || '';
-        const subunitFactor = subBtn.dataset.subunitFactor || (subBtn.closest('li.list-group-item')?.dataset.factor) || '1';
-        const unitIdInput = document.getElementById('editSubunitUnitId');
-        const idInput = document.getElementById('editSubunitId');
-        const nameInput = document.getElementById('editSubunitName');
-        const factorInput = document.getElementById('editSubunitFactor');
-        if (unitIdInput) unitIdInput.value = unitId;
-        if (idInput) idInput.value = subunitId;
-        if (nameInput) {
-          nameInput.value = subunitName;
-          try { nameInput.focus(); nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length); } catch (err) {}
-        }
-        if (factorInput) factorInput.value = String(subunitFactor || '1');
-      });
-      return;
-    }
-  });
+      // SUB-UNIT edit
+      const subBtn = e.target.closest('.dropdown-item.edit-subunit-btn');
+      if (subBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        hideContainingDropdown(subBtn);
+        showModalById('editSubunitModal', () => {
+          const unitId = subBtn.dataset.unitId;
+          const subunitId = subBtn.dataset.subunitId;
+          const subunitName = subBtn.dataset.subunitName || '';
+          const subunitFactor = subBtn.dataset.subunitFactor || (subBtn.closest('li.list-group-item')?.dataset.factor) || '1';
+          const unitIdInput = document.getElementById('editSubunitUnitId');
+          const idInput = document.getElementById('editSubunitId');
+          const nameInput = document.getElementById('editSubunitName');
+          const factorInput = document.getElementById('editSubunitFactor');
+          if (unitIdInput) unitIdInput.value = unitId;
+          if (idInput) idInput.value = subunitId;
+          if (nameInput) {
+            nameInput.value = subunitName;
+            try { nameInput.focus(); nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length); } catch (err) {}
+          }
+          if (factorInput) factorInput.value = String(subunitFactor || '1');
+        });
+        return;
+      }
+    });
+  }
 
   async function handleResponseMaybeJson(res) {
     const contentType = res.headers.get('content-type') || '';
@@ -144,7 +147,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Save Service edits (AJAX PUT)
   const saveServiceBtn = document.getElementById('saveEditServiceBtn');
-  if (saveServiceBtn) {
+  if (saveServiceBtn && saveServiceBtn.dataset.editSaveBound !== '1') {
+    saveServiceBtn.dataset.editSaveBound = '1';
     saveServiceBtn.addEventListener('click', async function () {
       const id = document.getElementById('editServiceId').value;
       const name = document.getElementById('editServiceName').value.trim();
@@ -187,7 +191,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Save Unit edits (AJAX PUT)
   const saveUnitBtn = document.getElementById('saveEditUnitBtn');
-  if (saveUnitBtn) {
+  if (saveUnitBtn && saveUnitBtn.dataset.editSaveBound !== '1') {
+    saveUnitBtn.dataset.editSaveBound = '1';
     saveUnitBtn.addEventListener('click', async function () {
       const id = document.getElementById('editUnitId').value;
       const name = document.getElementById('editUnitName').value.trim();
@@ -235,7 +240,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Save Subunit edits (AJAX PUT)
   const saveSubunitBtn = document.getElementById('saveEditSubunitBtn');
-  if (saveSubunitBtn) {
+  if (saveSubunitBtn && saveSubunitBtn.dataset.editSaveBound !== '1') {
+    saveSubunitBtn.dataset.editSaveBound = '1';
     saveSubunitBtn.addEventListener('click', async function () {
       const unitId = document.getElementById('editSubunitUnitId').value;
       const id = document.getElementById('editSubunitId').value;
@@ -287,4 +293,12 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
   }
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initEditItems, { once: true });
+} else {
+  initEditItems();
+}
+
+document.addEventListener('ajax:page:loaded', initEditItems);
