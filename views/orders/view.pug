@@ -192,7 +192,8 @@ block content
                       - var method = String(p.method || 'unknown').toLowerCase()
                       - var amount = Number(p.amount || 0).toFixed(2)
                       - var meta = (p.meta && typeof p.meta === 'object') ? p.meta : {}
-                      - var knownKeys = ['momoNumber','momoTxId','chequeNumber']
+                      - var paymentName = p.cashBookName || meta.cashBookName || String(method).toUpperCase()
+                      - var knownKeys = ['momoNumber','momoTxId','chequeNumber','depositDetails','cashBookId','cashBookName','cashBookKind','receivedAmount','creditExcess']
                       - var extraMeta = {}
                       - var keys = Object.keys(meta || {})
                       - for (var k = 0; k < keys.length; k++) {
@@ -202,7 +203,7 @@ block content
 
                       tr
                         td #{dt}
-                        td #{String(method).toUpperCase()}
+                        td #{paymentName}
                         td.text-end GH₵ #{amount}
                         td
                           if method === 'momo'
@@ -214,11 +215,19 @@ block content
                               div
                                 small.text-muted-light TxID:
                                 span.ms-2 #{meta.momoTxId}
-                          else if method === 'cheque'
+                          else if method === 'cheque' || method === 'bank'
                             if meta.chequeNumber
-                              div
+                              div.mb-1
                                 small.text-muted-light Cheque:
                                 span.ms-2 #{meta.chequeNumber}
+                            if meta.depositDetails
+                              div
+                                small.text-muted-light Deposit:
+                                span.ms-2 #{meta.depositDetails}
+                          if meta.receivedAmount && Number(meta.receivedAmount || 0) !== Number(p.amount || 0)
+                            div.mt-1
+                              small.text-muted-light Received:
+                              span.ms-2 GH₵ #{Number(meta.receivedAmount || 0).toFixed(2)}
 
                           - var extraKeys = Object.keys(extraMeta)
                           if extraKeys.length

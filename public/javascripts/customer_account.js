@@ -17,6 +17,23 @@ function initCustomerAccountPage() {
   const txnBody = document.getElementById('txnBody');
   const accountBalanceTypeEl = document.getElementById('accountBalanceType');
   const accountBalanceValueEl = document.getElementById('accountBalanceValue');
+  const creditCashBook = document.getElementById('creditCashBook');
+  const creditCashDirection = document.getElementById('creditCashDirection');
+  const creditMomoFields = document.getElementById('creditMomoFields');
+  const creditBankFields = document.getElementById('creditBankFields');
+  const creditMomoNumber = document.getElementById('creditMomoNumber');
+  const creditMomoTxId = document.getElementById('creditMomoTxId');
+  const creditChequeNumber = document.getElementById('creditChequeNumber');
+  const creditDepositDetails = document.getElementById('creditDepositDetails');
+  const debitCashBook = document.getElementById('debitCashBook');
+  const debitCashDirection = document.getElementById('debitCashDirection');
+  const debitMomoFields = document.getElementById('debitMomoFields');
+  const debitBankFields = document.getElementById('debitBankFields');
+  const debitMomoNumber = document.getElementById('debitMomoNumber');
+  const debitMomoTxId = document.getElementById('debitMomoTxId');
+  const debitChequeNumber = document.getElementById('debitChequeNumber');
+  const debitDepositDetails = document.getElementById('debitDepositDetails');
+  let activeCashBooks = [];
 
   function escapeHtml(s) {
     if (!s) return '';
@@ -32,6 +49,84 @@ function initCustomerAccountPage() {
 
   function fmtMoney(n) {
     return `GH₵ ${Number(n || 0).toFixed(2)}`;
+  }
+
+  function cashBookKindFromSelect(selectEl) {
+    if (!selectEl) return 'cash';
+    const opt = selectEl.options && selectEl.selectedIndex >= 0 ? selectEl.options[selectEl.selectedIndex] : null;
+    return String((opt && opt.dataset && opt.dataset.kind) || selectEl.value || 'cash').toLowerCase();
+  }
+
+  function selectedCashBookId(selectEl) {
+    if (!selectEl) return '';
+    return String(selectEl.value || '').trim();
+  }
+
+  function updateCreditCashBookFields() {
+    const direction = creditCashDirection ? String(creditCashDirection.value || 'inflow') : 'inflow';
+    const kind = cashBookKindFromSelect(creditCashBook);
+    const show = direction !== 'none';
+    if (creditMomoFields) creditMomoFields.style.display = show && kind === 'momo' ? '' : 'none';
+    if (creditBankFields) creditBankFields.style.display = show && kind === 'bank' ? '' : 'none';
+  }
+
+  function updateDebitCashBookFields() {
+    const direction = debitCashDirection ? String(debitCashDirection.value || 'none') : 'none';
+    const kind = cashBookKindFromSelect(debitCashBook);
+    const show = direction !== 'none';
+    if (debitMomoFields) debitMomoFields.style.display = show && kind === 'momo' ? '' : 'none';
+    if (debitBankFields) debitBankFields.style.display = show && kind === 'bank' ? '' : 'none';
+  }
+
+  function populateOneCashBookSelect(selectEl) {
+    if (!selectEl) return;
+    const current = selectEl.value;
+    selectEl.innerHTML = '';
+
+    if (!activeCashBooks.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No active cash books configured';
+      opt.dataset.kind = 'cash';
+      selectEl.appendChild(opt);
+      selectEl.disabled = true;
+      return;
+    }
+
+    activeCashBooks.forEach(book => {
+      const opt = document.createElement('option');
+      opt.value = book._id;
+      opt.dataset.kind = String(book.kind || 'cash').toLowerCase();
+      opt.textContent = `${book.name} (${book.kind === 'momo' ? 'MoMo' : (book.kind === 'bank' ? 'Bank' : 'Cash')})`;
+      selectEl.appendChild(opt);
+    });
+
+    selectEl.disabled = false;
+    if (current && activeCashBooks.some(b => String(b._id) === String(current))) selectEl.value = current;
+  }
+
+  function populateCashBookSelects() {
+    populateOneCashBookSelect(creditCashBook);
+    populateOneCashBookSelect(debitCashBook);
+    updateCreditCashBookFields();
+    updateDebitCashBookFields();
+  }
+
+  async function loadCashBooks() {
+    try {
+      const res = await fetch('/admin/cash-books/api', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin',
+        cache: 'no-store'
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j || !j.ok) throw new Error(j?.error || 'Failed to load cash books');
+      activeCashBooks = Array.isArray(j.cashBooks) ? j.cashBooks : [];
+    } catch (err) {
+      console.error('load cash books error', err);
+      activeCashBooks = [];
+    }
+    populateCashBookSelects();
   }
 
   function setBalanceSummary(net) {
@@ -105,11 +200,16 @@ function initCustomerAccountPage() {
           entryNote = `${entryNote} (A/C)`;
         }
       }
+      const cashBookName = String(t.cashBookName || '').trim();
+      const cashDirection = String(t.cashDirection || '').toLowerCase();
+      const cashBookLabel = cashBookName
+        ? ` (${cashBookName}${cashDirection ? ` ${cashDirection}` : ''})`
+        : '';
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="text-nowrap" style="min-width:170px;">${escapeHtml(formatDateTime(t.createdAt))}</td>
-        <td style="min-width:260px;">${escapeHtml(entryNote)}</td>
+        <td style="min-width:260px;">${escapeHtml(entryNote + cashBookLabel)}</td>
         <td class="text-end">${credit > 0 ? escapeHtml(fmtMoney(credit)) : '-'}</td>
         <td class="text-end pe-4" style="min-width:120px;">${debit > 0 ? escapeHtml(fmtMoney(debit)) : '-'}</td>
         <td class="ps-3 text-nowrap" style="min-width:130px;">${runningType}</td>
@@ -200,11 +300,11 @@ function initCustomerAccountPage() {
     }
   }
 
-  async function adjust(type, amount, note) {
+  async function adjust(type, amount, note, extra) {
     const res = await fetch(`/customers/${encodeURIComponent(customerId)}/account/adjust`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-      body: JSON.stringify({ type, amount, note }),
+      body: JSON.stringify(Object.assign({ type, amount, note }, extra || {})),
       credentials: 'same-origin'
     });
     const j = await res.json().catch(() => null);
@@ -217,15 +317,38 @@ function initCustomerAccountPage() {
     const amt = Number(document.getElementById('creditAmount')?.value || 0);
     const note = (document.getElementById('creditNote')?.value || '').trim();
     if (!amt || isNaN(amt) || amt <= 0) return alert('Enter a valid amount');
+    const cashDirection = creditCashDirection ? String(creditCashDirection.value || 'inflow') : 'inflow';
+    const cashBookId = selectedCashBookId(creditCashBook);
+    if (cashDirection !== 'none' && creditCashBook && !cashBookId) {
+      return alert('Select an active cash book or choose "No cash movement".');
+    }
+    const paymentKind = cashBookKindFromSelect(creditCashBook);
+    if (cashDirection !== 'none' && paymentKind === 'momo') {
+      const num = creditMomoNumber ? creditMomoNumber.value.trim() : '';
+      const tx = creditMomoTxId ? creditMomoTxId.value.trim() : '';
+      if (!num || !tx) return alert('Enter MoMo number and transaction ID');
+    }
 
     try {
       if (creditBtn) {
         creditBtn.disabled = true;
         creditBtn.textContent = 'Processing...';
       }
-      await adjust('credit', amt, note);
+      await adjust('credit', amt, note, {
+        cashBookId: cashDirection === 'none' ? null : cashBookId,
+        cashDirection,
+        paymentMethod: paymentKind,
+        momoNumber: creditMomoNumber ? creditMomoNumber.value.trim() : null,
+        momoTxId: creditMomoTxId ? creditMomoTxId.value.trim() : null,
+        chequeNumber: creditChequeNumber ? creditChequeNumber.value.trim() : null,
+        depositDetails: creditDepositDetails ? creditDepositDetails.value.trim() : null
+      });
       if (document.getElementById('creditAmount')) document.getElementById('creditAmount').value = '';
       if (document.getElementById('creditNote')) document.getElementById('creditNote').value = '';
+      if (creditMomoNumber) creditMomoNumber.value = '';
+      if (creditMomoTxId) creditMomoTxId.value = '';
+      if (creditChequeNumber) creditChequeNumber.value = '';
+      if (creditDepositDetails) creditDepositDetails.value = '';
       await fetchAccountAndRender();
     } catch (e) {
       alert(e.message);
@@ -242,15 +365,38 @@ function initCustomerAccountPage() {
     const amt = Number(document.getElementById('debitAmount')?.value || 0);
     const note = (document.getElementById('debitNote')?.value || '').trim();
     if (!amt || isNaN(amt) || amt <= 0) return alert('Enter a valid amount');
+    const cashDirection = debitCashDirection ? String(debitCashDirection.value || 'none') : 'none';
+    const cashBookId = selectedCashBookId(debitCashBook);
+    if (cashDirection !== 'none' && debitCashBook && !cashBookId) {
+      return alert('Select an active cash book or choose "No cash movement".');
+    }
+    const paymentKind = cashBookKindFromSelect(debitCashBook);
+    if (cashDirection !== 'none' && paymentKind === 'momo') {
+      const num = debitMomoNumber ? debitMomoNumber.value.trim() : '';
+      const tx = debitMomoTxId ? debitMomoTxId.value.trim() : '';
+      if (!num || !tx) return alert('Enter MoMo number and transaction ID');
+    }
 
     try {
       if (debitBtn) {
         debitBtn.disabled = true;
         debitBtn.textContent = 'Processing...';
       }
-      await adjust('debit', amt, note);
+      await adjust('debit', amt, note, {
+        cashBookId: cashDirection === 'none' ? null : cashBookId,
+        cashDirection,
+        paymentMethod: paymentKind,
+        momoNumber: debitMomoNumber ? debitMomoNumber.value.trim() : null,
+        momoTxId: debitMomoTxId ? debitMomoTxId.value.trim() : null,
+        chequeNumber: debitChequeNumber ? debitChequeNumber.value.trim() : null,
+        depositDetails: debitDepositDetails ? debitDepositDetails.value.trim() : null
+      });
       if (document.getElementById('debitAmount')) document.getElementById('debitAmount').value = '';
       if (document.getElementById('debitNote')) document.getElementById('debitNote').value = '';
+      if (debitMomoNumber) debitMomoNumber.value = '';
+      if (debitMomoTxId) debitMomoTxId.value = '';
+      if (debitChequeNumber) debitChequeNumber.value = '';
+      if (debitDepositDetails) debitDepositDetails.value = '';
       await fetchAccountAndRender();
     } catch (e) {
       alert(e.message);
@@ -269,6 +415,11 @@ function initCustomerAccountPage() {
     });
   }
 
+  if (creditCashBook) creditCashBook.addEventListener('change', updateCreditCashBookFields);
+  if (creditCashDirection) creditCashDirection.addEventListener('change', updateCreditCashBookFields);
+  if (debitCashBook) debitCashBook.addEventListener('change', updateDebitCashBookFields);
+  if (debitCashDirection) debitCashDirection.addEventListener('change', updateDebitCashBookFields);
+  loadCashBooks();
   fetchAccountAndRender();
 }
 

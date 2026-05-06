@@ -16,6 +16,10 @@ const StoreStock = require('../models/store_stock');
 const RegistrationSubmission = require('../models/registration_submission');
 const User = require('../models/user');
 const Book = require('../models/book');
+const {
+  resolvePaymentCashBookContext,
+  recordCashBookMovement
+} = require('../utilities/cash_books');
 
 function isOutSourcedCategoryName(name) {
   return /out[\s-]*sourced/i.test(String(name || '').trim());
@@ -1696,10 +1700,6 @@ exports.apiPayOrder = async (req, res) => {
       return res.status(400).json({ error: 'Account payments are applied automatically where applicable.' });
     }
 
-    // Normalize method (only allow these to be stored as-is)
-    const allowed = ['cash', 'momo', 'cheque', 'other'];
-    const method = allowed.includes(rawMethod) ? rawMethod : 'other';
-
     // Determine received amount (what cashier typed / received physically)
     // - If partPayment toggle is ON: must provide partPaymentAmount
     // - If partPayment toggle is OFF: if partPaymentAmount provided, treat it as received (allows overpay for customers)
@@ -1786,17 +1786,15 @@ exports.apiPayOrder = async (req, res) => {
         throw e;
       }
 
-      // Validate momo/cheque details if method needs them (light validation)
-      const meta = {};
-      if (method === 'momo') {
-        if (body.momoNumber) meta.momoNumber = String(body.momoNumber);
-        if (body.momoTxId) meta.momoTxId = String(body.momoTxId);
-      } else if (method === 'cheque') {
-        if (body.chequeNumber) meta.chequeNumber = String(body.chequeNumber);
+      const cashBookContext = await resolvePaymentCashBookContext(body, session);
+      const method = cashBookContext.method;
+      if (method === 'account') {
+        const e = new Error('Account payments are applied automatically where applicable.');
+        e.statusCode = 400;
+        throw e;
       }
 
-      // Attach extra meta
-      if (body.meta && typeof body.meta === 'object') Object.assign(meta, body.meta);
+      const meta = Object.assign({}, cashBookContext.meta || {});
 
       // Always store what was received + what was credited (if any)
       meta.receivedAmount = Number(receivedAmount.toFixed(2));
@@ -1811,6 +1809,9 @@ exports.apiPayOrder = async (req, res) => {
 
       const payment = {
         method,
+        cashBook: cashBookContext.cashBook ? cashBookContext.cashBook._id : null,
+        cashBookName: cashBookContext.cashBook ? (cashBookContext.cashBook.name || '') : '',
+        cashBookKind: cashBookContext.cashBook ? (meta.cashBookKind || cashBookContext.cashBook.kind || 'cash') : null,
         amount: Number(toRecordAmount.toFixed(2)),
         meta,
         note,
@@ -1844,6 +1845,22 @@ exports.apiPayOrder = async (req, res) => {
 
       await order.save({ session });
 
+      if (cashBookContext.cashBook) {
+        await recordCashBookMovement({
+          cashBook: cashBookContext.cashBook,
+          type: 'inflow',
+          amount: Number(receivedAmount.toFixed(2)),
+          sourceType: 'order_payment',
+          sourceId: order._id,
+          sourceRef: order.orderId,
+          note: `Payment received for order ${order.orderId}`,
+          meta,
+          recordedBy: payment.recordedBy || null,
+          recordedByName: payment.recordedByName || '',
+          session
+        });
+      }
+
       // Ledger: order payment reduces debtor side (credit entry)
       if (hasCustomer) {
         await CustomerAccountTxn.create(
@@ -1853,6 +1870,11 @@ exports.apiPayOrder = async (req, res) => {
               type: 'credit',
               amount: Number(toRecordAmount.toFixed(2)),
               note: `Order payment ${order.orderId}`,
+              cashBook: cashBookContext.cashBook ? cashBookContext.cashBook._id : null,
+              cashBookName: cashBookContext.cashBook ? (cashBookContext.cashBook.name || '') : '',
+              cashBookKind: cashBookContext.cashBook ? (meta.cashBookKind || cashBookContext.cashBook.kind || 'cash') : null,
+              cashDirection: cashBookContext.cashBook ? 'inflow' : null,
+              cashMeta: meta,
               recordedBy: payment.recordedBy || null,
               recordedByName: payment.recordedByName || ''
             }
@@ -1882,6 +1904,11 @@ exports.apiPayOrder = async (req, res) => {
               type: 'credit',
               amount: Number(creditExcess.toFixed(2)),
               note: `Overpayment credit from order ${order.orderId}`,
+              cashBook: cashBookContext.cashBook ? cashBookContext.cashBook._id : null,
+              cashBookName: cashBookContext.cashBook ? (cashBookContext.cashBook.name || '') : '',
+              cashBookKind: cashBookContext.cashBook ? (meta.cashBookKind || cashBookContext.cashBook.kind || 'cash') : null,
+              cashDirection: cashBookContext.cashBook ? 'inflow' : null,
+              cashMeta: meta,
               recordedBy: payment.recordedBy || null,
               recordedByName: payment.recordedByName || ''
             }
@@ -1964,68 +1991,118 @@ exports.apiPayOrder = async (req, res) => {
 
 // POST /orders/pay-bulk
 exports.apiPayBulkDebtor = async (req, res) => {
+  let session = null;
+
   try {
-    const { orderIds, paymentMethod, momoNumber, momoTxId, chequeNumber } = req.body;
+    const { orderIds } = req.body;
 
     if (!Array.isArray(orderIds) || !orderIds.length) {
       return res.status(400).json({ error: 'No orders provided for bulk payment' });
     }
 
-    // Optional: normalize method (keep existing behavior defaulting to 'cash')
-    const method = (paymentMethod || 'cash').toString().toLowerCase();
-    const safeMethod = ['cash', 'momo', 'cheque', 'other'].includes(method) ? method : 'other';
+    const body = req.body || {};
+    const rawMethod = String(body.paymentMethod || 'cash').toLowerCase().trim();
+    if (rawMethod === 'account') {
+      return res.status(400).json({ error: 'Account payments are applied automatically where applicable.' });
+    }
 
-    for (const oid of orderIds) {
-      const order = await Order.findOne({ orderId: oid });
-      if (!order) continue;
+    const smsJobs = [];
+    session = await mongoose.startSession();
 
-      const paidSoFar = (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
-      const outstanding = Number(order.total || 0) - paidSoFar;
-      if (outstanding <= 0) continue;
+    await session.withTransaction(async () => {
+      const cashBookContext = await resolvePaymentCashBookContext(body, session);
+      const method = cashBookContext.method;
+      if (method === 'account') {
+        const e = new Error('Account payments are applied automatically where applicable.');
+        e.statusCode = 400;
+        throw e;
+      }
 
-      order.payments = order.payments || [];
-      order.payments.push({
-        method: safeMethod,
-        amount: Number(outstanding),
-        meta: {
-          momoNumber,
-          momoTxId,
-          chequeNumber
-        },
-        note: 'bulk-full-payment',
-        createdAt: new Date(),
-        recordedBy: req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null,
-        recordedByName: (req.user?.name || req.user?.username || '').toString()
-      });
+      const recordedBy = req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null;
+      const recordedByName = (req.user?.name || req.user?.username || '').toString();
 
-      const wasPaidAlready = (order.status === 'paid'); // simple state check
-      order.status = 'paid';
-      order.paidAt = new Date();
+      for (const oid of orderIds) {
+        const order = await Order.findOne({ orderId: oid }).session(session);
+        if (!order) continue;
 
-      await order.save();
+        const paidSoFar = (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+        const outstanding = Number((Number(order.total || 0) - paidSoFar).toFixed(2));
+        if (outstanding <= 0) continue;
 
-      if (order.customer) {
-        try {
+        const meta = Object.assign({}, cashBookContext.meta || {});
+        meta.receivedAmount = Number(outstanding.toFixed(2));
+
+        order.payments = order.payments || [];
+        order.payments.push({
+          method,
+          cashBook: cashBookContext.cashBook ? cashBookContext.cashBook._id : null,
+          cashBookName: cashBookContext.cashBook ? (cashBookContext.cashBook.name || '') : '',
+          cashBookKind: cashBookContext.cashBook ? (meta.cashBookKind || cashBookContext.cashBook.kind || 'cash') : null,
+          amount: Number(outstanding.toFixed(2)),
+          meta,
+          note: 'bulk-full-payment',
+          createdAt: new Date(),
+          recordedBy,
+          recordedByName
+        });
+
+        const wasPaidAlready = (order.status === 'paid'); // simple state check
+        order.status = 'paid';
+        order.paidAt = new Date();
+
+        await order.save({ session });
+
+        if (cashBookContext.cashBook) {
+          await recordCashBookMovement({
+            cashBook: cashBookContext.cashBook,
+            type: 'inflow',
+            amount: Number(outstanding.toFixed(2)),
+            sourceType: 'order_payment_bulk',
+            sourceId: order._id,
+            sourceRef: order.orderId,
+            note: `Bulk payment received for order ${order.orderId}`,
+            meta,
+            recordedBy,
+            recordedByName,
+            session
+          });
+        }
+
+        if (order.customer) {
           await CustomerAccountTxn.create([{
             customer: order.customer,
             type: 'credit',
             amount: Number(outstanding.toFixed(2)),
             note: `Order payment ${order.orderId} (bulk)`,
-            recordedBy: req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null,
-            recordedByName: (req.user?.name || req.user?.username || '').toString()
-          }]);
-        } catch (ledgerErr) {
-          console.error('bulk payment ledger entry failed', ledgerErr);
+            cashBook: cashBookContext.cashBook ? cashBookContext.cashBook._id : null,
+            cashBookName: cashBookContext.cashBook ? (cashBookContext.cashBook.name || '') : '',
+            cashBookKind: cashBookContext.cashBook ? (meta.cashBookKind || cashBookContext.cashBook.kind || 'cash') : null,
+            cashDirection: cashBookContext.cashBook ? 'inflow' : null,
+            cashMeta: meta,
+            recordedBy,
+            recordedByName
+          }], { session });
+        }
+
+        if (!wasPaidAlready && order.customer) {
+          smsJobs.push({
+            orderId: order.orderId,
+            customer: order.customer,
+            amount: order.total,
+            totalBeforeDiscount: order.totalBeforeDiscount ?? '',
+            discountAmount: order.discountAmount ?? ''
+          });
         }
       }
+    });
 
       // -----------------------------
       // AUTO SMS ON PAY (dynamic) - bulk
       // only send if it wasn't already paid before
       // -----------------------------
+    for (const smsJob of smsJobs) {
       try {
-        if (!wasPaidAlready && order.customer) {
-          const cust = await Customer.findById(order.customer)
+          const cust = await Customer.findById(smsJob.customer)
             .select('_id phone category firstName businessName accountBalance')
             .lean();
 
@@ -2035,10 +2112,10 @@ exports.apiPayBulkDebtor = async (req, res) => {
               cust,
               'pay',
               {
-                orderId: order.orderId,
-                amount: order.total,
-                totalBeforeDiscount: order.totalBeforeDiscount ?? '',
-                discountAmount: order.discountAmount ?? ''
+                orderId: smsJob.orderId,
+                amount: smsJob.amount,
+                totalBeforeDiscount: smsJob.totalBeforeDiscount,
+                discountAmount: smsJob.discountAmount
               }
             );
 
@@ -2054,16 +2131,18 @@ exports.apiPayBulkDebtor = async (req, res) => {
               }
             }
           }
-        }
       } catch (smsErr) {
-        console.error('Bulk pay: failed to send PAY auto SMS for order', oid, smsErr);
+        console.error('Bulk pay: failed to send PAY auto SMS for order', smsJob.orderId, smsErr);
       }
     }
 
     return res.json({ ok: true });
   } catch (err) {
     console.error('apiPayBulkDebtor error', err);
+    if (err && err.statusCode) return res.status(err.statusCode).json({ error: err.message || 'Bulk payment failed' });
     return res.status(500).json({ error: 'Bulk payment failed' });
+  } finally {
+    try { if (session) session.endSession(); } catch (e) {}
   }
 };
 

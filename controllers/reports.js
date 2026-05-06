@@ -97,7 +97,7 @@ exports.apiFinancialSummary = async (req, res) => {
       {
         $group: {
           _id: { $ifNull: ['$payments.method', 'unknown'] },
-          total: { $sum: { $ifNull: ['$payments.amount', 0] } },
+          total: { $sum: { $ifNull: ['$payments.meta.receivedAmount', '$payments.amount'] } },
           count: { $sum: 1 }
         }
       },
@@ -145,12 +145,12 @@ exports.apiCashierCollections = async (req, res) => {
       { $unwind: '$payments' },
       {
         $match: {
-          'payments.method': { $in: ['cash', 'momo', 'cheque'] },
+          'payments.method': { $in: ['cash', 'momo', 'cheque', 'bank'] },
           'payments.createdAt': { $gte: start, $lte: end },
           'payments.recordedBy': { $exists: true, $ne: null }
         }
       },
-      { $group: { _id: '$payments.recordedBy', total: { $sum: '$payments.amount' } } }
+      { $group: { _id: '$payments.recordedBy', total: { $sum: { $ifNull: ['$payments.meta.receivedAmount', '$payments.amount'] } } } }
     ]);
     const payMap = {};
     paymentsByCashier.forEach(p => { payMap[String(p._id)] = Number(p.total || 0); });

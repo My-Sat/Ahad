@@ -1,0 +1,77 @@
+extends ../layout
+
+block content
+  .container
+    .d-none(data-main-width='wide')
+    .row
+      .col-12
+        .card.shadow-sm.dark-surface#cashBooksPage
+          .card-body.dark-card-body
+            .d-flex.justify-content-between.align-items-center.mb-3
+              div
+                h4.mb-1.text-white Cash Books
+                p.small.text-muted-light.mb-0 Create the actual books used when money is received or paid out.
+              a.btn.btn-outline-light-custom.btn-sm(href='/orders/pay', data-ajax='true') Back to Payments
+
+            .row.g-3
+              .col-lg-4
+                .card.dark-surface.border.border-secondary-subtle
+                  .card-body.dark-card-body
+                    h6.text-white.mb-3#cashBookFormTitle New Cash Book
+                    form#cashBookForm
+                      input#cashBookId(type='hidden')
+                      .mb-3
+                        label.form-label.text-muted-light(for='cashBookName') Name
+                        input.form-control.form-control-dark#cashBookName(type='text', placeholder='e.g. Main Cash, Bank A/C, MTN MoMo', required)
+                      .mb-3
+                        label.form-label.text-muted-light(for='cashBookKind') Type
+                        select.form-select.form-select-dark#cashBookKind
+                          option(value='cash' selected) Normal cash book
+                          option(value='bank') Bank
+                          option(value='momo') MoMo
+                      .mb-3#openingBalanceWrap
+                        label.form-label.text-muted-light(for='cashBookOpeningBalance') Opening balance
+                        input.form-control.form-control-dark#cashBookOpeningBalance(type='number', min='0', step='0.01', value='0')
+                        small.text-muted-light Opening balance is only used when creating a new cash book.
+                      .form-check.mb-3
+                        input.form-check-input#cashBookActive(type='checkbox', checked)
+                        label.form-check-label(for='cashBookActive') Active
+                      .d-flex.gap-2
+                        button.btn.btn-primary#saveCashBookBtn(type='submit') Create
+                        button.btn.btn-outline-light-custom#resetCashBookBtn(type='button') Reset
+                      p.small.mt-3.mb-0#cashBookStatus
+
+              .col-lg-8
+                .card.dark-surface.border.border-secondary-subtle
+                  .card-body.dark-card-body
+                    .d-flex.justify-content-between.align-items-center.mb-3
+                      h6.text-white.mb-0 Existing Cash Books
+                      button.btn.btn-outline-light-custom.btn-sm#reloadCashBooksBtn(type='button') Refresh
+                    .table-responsive
+                      table.table.table-sm.table-hover.align-middle#cashBooksTable
+                        thead
+                          tr
+                            th Name
+                            th Type
+                            th.text-end Balance
+                            th Status
+                            th.text-end Actions
+                        tbody
+                          if cashBooks && cashBooks.length
+                            each book in cashBooks
+                              tr(data-cash-book-id=String(book._id), data-name=book.name, data-kind=book.kind || 'cash', data-active=(book.active === false ? '0' : '1'))
+                                td.fw-semibold.text-white= book.name
+                                td.text-capitalize= book.kind === 'momo' ? 'MoMo' : (book.kind === 'bank' ? 'Bank' : 'Normal')
+                                td.text-end GH₵ #{Number(book.balance || 0).toFixed(2)}
+                                td
+                                  if book.active === false
+                                    span.badge.bg-secondary Inactive
+                                  else
+                                    span.badge.bg-success Active
+                                td.text-end
+                                  button.btn.btn-sm.btn-outline-light-custom.edit-cash-book(type='button') Edit
+                          else
+                            tr
+                              td.text-muted(colspan='5') No cash books yet.
+
+  script(src='/javascripts/cash_books.js')

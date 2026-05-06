@@ -32,12 +32,13 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
 
   // new UI elements
   const paymentControls = document.getElementById('paymentControls');
-  const paymentMethodSel = document.getElementById('paymentMethod');
+  const paymentMethodSel = document.getElementById('paymentCashBook') || document.getElementById('paymentMethod');
   const momoFields = document.getElementById('paymentMomoFields');
   const momoNumberInput = document.getElementById('momoNumber');
   const momoTxInput = document.getElementById('momoTxId');
-  const chequeField = document.getElementById('paymentChequeField');
+  const chequeField = document.getElementById('paymentBankFields') || document.getElementById('paymentChequeField');
   const chequeNumberInput = document.getElementById('chequeNumber');
+  const depositDetailsInput = document.getElementById('depositDetails');
   const partToggle = document.getElementById('partPaymentToggle');
   const partWrapper = document.getElementById('partPaymentAmountWrapper');
   const partAmountInput = document.getElementById('partPaymentAmount');
@@ -88,21 +89,100 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
 
 
   const fullPaymentConfirmText = document.getElementById('fullPaymentConfirmText');
-  const fullPaymentMethod = document.getElementById('fullPaymentMethod');
+  const fullPaymentMethod = document.getElementById('fullPaymentCashBook') || document.getElementById('fullPaymentMethod');
   const fullPaymentMomoFields = document.getElementById('fullPaymentMomoFields');
-  const fullPaymentChequeField = document.getElementById('fullPaymentChequeField');
+  const fullPaymentChequeField = document.getElementById('fullPaymentBankFields') || document.getElementById('fullPaymentChequeField');
   const fullPaymentMomoNumber = document.getElementById('fullPaymentMomoNumber');
   const fullPaymentMomoTx = document.getElementById('fullPaymentMomoTx');
   const fullPaymentCheque = document.getElementById('fullPaymentCheque');
+  const fullPaymentDepositDetails = document.getElementById('fullPaymentDepositDetails');
   const confirmFullPaymentBtn = document.getElementById('confirmFullPaymentBtn');
 
   let pendingFullPayment = null; // holds orderIds + total
+  let activeCashBooks = [];
+
+  function cashBookKindFromSelect(selectEl) {
+    if (!selectEl) return 'cash';
+    const opt = selectEl.options && selectEl.selectedIndex >= 0
+      ? selectEl.options[selectEl.selectedIndex]
+      : null;
+    return String((opt && opt.dataset && opt.dataset.kind) || selectEl.value || 'cash').toLowerCase();
+  }
+
+  function selectedCashBookId(selectEl) {
+    if (!selectEl) return '';
+    const opt = selectEl.options && selectEl.selectedIndex >= 0
+      ? selectEl.options[selectEl.selectedIndex]
+      : null;
+    if (opt && opt.dataset && opt.dataset.legacy === '1') return '';
+    return String(selectEl.value || '').trim();
+  }
+
+  function populateCashBookSelect(selectEl) {
+    if (!selectEl) return;
+    const current = selectEl.value;
+    selectEl.innerHTML = '';
+
+    if (!activeCashBooks.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No active cash books configured';
+      opt.dataset.kind = 'cash';
+      selectEl.appendChild(opt);
+      selectEl.disabled = true;
+      return;
+    }
+
+    activeCashBooks.forEach(book => {
+      const opt = document.createElement('option');
+      opt.value = book._id;
+      opt.dataset.kind = String(book.kind || 'cash').toLowerCase();
+      opt.textContent = `${book.name} (${book.kind === 'momo' ? 'MoMo' : (book.kind === 'bank' ? 'Bank' : 'Cash')})`;
+      selectEl.appendChild(opt);
+    });
+
+    selectEl.disabled = false;
+    if (current && activeCashBooks.some(b => String(b._id) === String(current))) {
+      selectEl.value = current;
+    }
+  }
+
+  function updateCashBookFields(selectEl, momoEl, bankEl) {
+    const kind = cashBookKindFromSelect(selectEl);
+    if (momoEl) momoEl.style.display = kind === 'momo' ? '' : 'none';
+    if (bankEl) bankEl.style.display = (kind === 'bank' || kind === 'cheque') ? '' : 'none';
+  }
+
+  function resetCashBookSelect(selectEl) {
+    if (!selectEl) return;
+    if (activeCashBooks.length) selectEl.selectedIndex = 0;
+    updateCashBookFields(selectEl, selectEl === fullPaymentMethod ? fullPaymentMomoFields : momoFields, selectEl === fullPaymentMethod ? fullPaymentChequeField : chequeField);
+  }
+
+  async function loadCashBooks() {
+    try {
+      const res = await fetch('/admin/cash-books/api', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin',
+        cache: 'no-store'
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j || !j.ok) throw new Error(j?.error || 'Failed to load cash books');
+      activeCashBooks = Array.isArray(j.cashBooks) ? j.cashBooks : [];
+    } catch (err) {
+      console.error('load cash books error', err);
+      activeCashBooks = [];
+    }
+
+    populateCashBookSelect(paymentMethodSel);
+    populateCashBookSelect(fullPaymentMethod);
+    updateCashBookFields(paymentMethodSel, momoFields, chequeField);
+    updateCashBookFields(fullPaymentMethod, fullPaymentMomoFields, fullPaymentChequeField);
+  }
 
   if (fullPaymentMethod) {
   fullPaymentMethod.addEventListener('change', function () {
-    const v = this.value;
-    fullPaymentMomoFields.style.display = v === 'momo' ? '' : 'none';
-    fullPaymentChequeField.style.display = v === 'cheque' ? '' : 'none';
+    updateCashBookFields(this, fullPaymentMomoFields, fullPaymentChequeField);
   });
 }
 
@@ -837,17 +917,16 @@ function discountAppliedLabel(order) {
       payNowBtn.style.display = '';
       payNowBtn.disabled = false;
 
-      // default payment method -> cash
+      // default cash book -> first active book
       if (paymentMethodSel) {
-        paymentMethodSel.value = 'cash';
-        momoFields && (momoFields.style.display = 'none');
-        chequeField && (chequeField.style.display = 'none');
+        resetCashBookSelect(paymentMethodSel);
       }
 
       // clear momo/cheque/part fields
       momoNumberInput && (momoNumberInput.value = '');
       momoTxInput && (momoTxInput.value = '');
       chequeNumberInput && (chequeNumberInput.value = '');
+      depositDetailsInput && (depositDetailsInput.value = '');
       partToggle && (partToggle.checked = false);
       partWrapper && (partWrapper.style.display = 'none');
       partAmountInput && (partAmountInput.value = '');
@@ -940,17 +1019,7 @@ function discountAppliedLabel(order) {
 
   if (paymentMethodSel) {
     paymentMethodSel.addEventListener('change', function () {
-      const v = this.value;
-      if (v === 'momo') {
-        momoFields.style.display = '';
-        chequeField.style.display = 'none';
-      } else if (v === 'cheque') {
-        chequeField.style.display = '';
-        momoFields.style.display = 'none';
-      } else {
-        momoFields.style.display = 'none';
-        chequeField.style.display = 'none';
-      }
+      updateCashBookFields(this, momoFields, chequeField);
     });
   }
 
@@ -975,8 +1044,13 @@ function discountAppliedLabel(order) {
         return;
       }
 
-      // validate fields depending on method & part payment
-      const method = paymentMethodSel ? paymentMethodSel.value : 'cash';
+      // validate fields depending on selected cash book & part payment
+      const cashBookId = selectedCashBookId(paymentMethodSel);
+      const method = cashBookKindFromSelect(paymentMethodSel);
+      if (paymentMethodSel && !cashBookId) {
+        showAlertModal('Select an active cash book before recording payment.', 'Cash book required');
+        return;
+      }
       const isPart = partToggle ? !!partToggle.checked : false;
       let partAmount = null;
 
@@ -1006,12 +1080,6 @@ function discountAppliedLabel(order) {
           showAlertModal('Enter MoMo number and transaction id', 'Missing MoMo details');
           return;
         }
-      } else if (method === 'cheque') {
-        const cnum = chequeNumberInput ? (chequeNumberInput.value || '').trim() : '';
-        if (!cnum) {
-          showAlertModal('Enter cheque number', 'Missing cheque number');
-          return;
-        }
       }
 
       // Confirm using modal
@@ -1032,10 +1100,12 @@ function discountAppliedLabel(order) {
       try {
         // Build payload - server currently ignores metadata, but this is prepared for backend support
         const payload = {
+          cashBookId,
           paymentMethod: method,
           momoNumber: (momoNumberInput && momoNumberInput.value) ? momoNumberInput.value.trim() : null,
           momoTxId: (momoTxInput && momoTxInput.value) ? momoTxInput.value.trim() : null,
           chequeNumber: (chequeNumberInput && chequeNumberInput.value) ? chequeNumberInput.value.trim() : null,
+          depositDetails: (depositDetailsInput && depositDetailsInput.value) ? depositDetailsInput.value.trim() : null,
           partPayment: isPart,
           partPaymentAmount: isPart ? Number(partAmount) : null
         };
@@ -1169,7 +1239,7 @@ function renderCashiersStatus(rows) {
 
       return `<tr data-cashier-id="${escapeHtml(r.cashierId)}">
         <td>${escapeHtml(r.name)}</td>
-        <!-- Today's Cash (green) shows payments recorded since last collection (cash+momo+cheque) -->
+        <!-- Today's Cash (green) shows payments recorded since last collection (cash+momo+bank/cheque) -->
         <td class="text-end text-success">GH₵ ${Number(total).toFixed(2)}</td>
         <td class="text-end text-danger">GH₵ ${Number(prevBal).toFixed(2)}</td>
         <td class="text-center"><button class="btn btn-sm btn-primary cashier-receive-btn" type="button" data-cashier-id="${escapeHtml(r.cashierId)}" data-cashier-name="${escapeHtml(r.name)}">Receive</button></td>
@@ -1758,16 +1828,18 @@ if (debtorsTable) {
       }
 
       if (fullPaymentMethod) {
-        fullPaymentMethod.value = 'cash';
+        resetCashBookSelect(fullPaymentMethod);
       }
 
       // reset fields
       if (fullPaymentMomoNumber) fullPaymentMomoNumber.value = '';
       if (fullPaymentMomoTx) fullPaymentMomoTx.value = '';
       if (fullPaymentCheque) fullPaymentCheque.value = '';
+      if (fullPaymentDepositDetails) fullPaymentDepositDetails.value = '';
 
       if (fullPaymentMomoFields) fullPaymentMomoFields.style.display = 'none';
-      if (fullPaymentChequeField) fullPaymentChequeField.style.display = 'none';
+      if (fullPaymentMethod) updateCashBookFields(fullPaymentMethod, fullPaymentMomoFields, fullPaymentChequeField);
+      else if (fullPaymentChequeField) fullPaymentChequeField.style.display = 'none';
 
       if (fullPaymentModal) fullPaymentModal.show();
       return;
@@ -1957,7 +2029,12 @@ if (confirmFullPaymentBtn) {
     }
 
     const { orderIds, total } = pendingFullPayment;
-    const method = fullPaymentMethod ? fullPaymentMethod.value : 'cash';
+    const cashBookId = selectedCashBookId(fullPaymentMethod);
+    const method = cashBookKindFromSelect(fullPaymentMethod);
+    if (fullPaymentMethod && !cashBookId) {
+      showAlertModal('Select an active cash book before applying payment.', 'Cash book required');
+      return;
+    }
 
     // --------------------
     // Validate inputs
@@ -1969,13 +2046,6 @@ if (confirmFullPaymentBtn) {
       }
     }
 
-    if (method === 'cheque') {
-      if (!fullPaymentCheque.value) {
-        showAlertModal('Enter cheque number', 'Missing details');
-        return;
-      }
-    }
-
     confirmFullPaymentBtn.disabled = true;
     const originalText = confirmFullPaymentBtn.textContent;
     confirmFullPaymentBtn.textContent = 'Processing...';
@@ -1983,10 +2053,12 @@ if (confirmFullPaymentBtn) {
     try {
       const payload = {
         orderIds,
+        cashBookId,
         paymentMethod: method,
         momoNumber: method === 'momo' ? fullPaymentMomoNumber.value.trim() : null,
         momoTxId: method === 'momo' ? fullPaymentMomoTx.value.trim() : null,
-        chequeNumber: method === 'cheque' ? fullPaymentCheque.value.trim() : null
+        chequeNumber: (method === 'bank' || method === 'cheque') && fullPaymentCheque ? fullPaymentCheque.value.trim() : null,
+        depositDetails: method === 'bank' && fullPaymentDepositDetails ? fullPaymentDepositDetails.value.trim() : null
       };
 
       const res = await fetch('/orders/pay-bulk', {
@@ -2026,6 +2098,7 @@ if (confirmFullPaymentBtn) {
 
 
   // Initial state
+  loadCashBooks();
   renderOrderDetails(null);
   loadDailyOrdersDropdown({ force: true });
   startDailyOrdersAutoRefresh();

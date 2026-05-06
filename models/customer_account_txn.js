@@ -6,6 +6,11 @@ const CustomerAccountTxnSchema = new mongoose.Schema({
   type: { type: String, enum: ['credit', 'debit'], required: true },
   amount: { type: Number, required: true, min: 0.01 },
   note: { type: String, default: '' },
+  cashBook: { type: mongoose.Schema.Types.ObjectId, ref: 'CashBook', default: null },
+  cashBookName: { type: String, default: '' },
+  cashBookKind: { type: String, enum: ['cash', 'bank', 'momo', null], default: null },
+  cashDirection: { type: String, enum: ['inflow', 'outflow', null], default: null },
+  cashMeta: { type: mongoose.Schema.Types.Mixed, default: {} },
 
   recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   recordedByName: { type: String, default: '' },

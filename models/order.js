@@ -36,8 +36,10 @@ const OrderItemSchema = new mongoose.Schema({
 }, { _id: false });
 
 const PaymentSchema = new mongoose.Schema({
-  // ✅ add 'account'
-  method: { type: String, enum: ['cash', 'momo', 'cheque', 'account', 'other'], default: 'cash' },
+  method: { type: String, enum: ['cash', 'momo', 'cheque', 'bank', 'account', 'other'], default: 'cash' },
+  cashBook: { type: mongoose.Schema.Types.ObjectId, ref: 'CashBook', default: null },
+  cashBookName: { type: String, default: '' },
+  cashBookKind: { type: String, enum: ['cash', 'bank', 'momo', null], default: null },
   amount: { type: Number, required: true },
   meta: { type: mongoose.Schema.Types.Mixed, default: {} },
   note: { type: String, default: '' },

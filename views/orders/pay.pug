@@ -113,13 +113,11 @@ block content
                           .col-12.col-md-3.d-flex.gap-2.justify-content-end
                             button.btn.btn-sm.btn-outline-light-custom#applyManualDiscountBtn(type='button') Apply Discount
 
-                  // Payment method selector
+                  // Cash book selector
                   .mb-2
-                    label.form-label.mb-1(for='paymentMethod') Payment method
-                    select.form-select.form-select-sm.form-select-dark#paymentMethod
-                      option(value='cash') Cash
-                      option(value='momo') MoMo
-                      option(value='cheque') Cheque
+                    label.form-label.mb-1(for='paymentCashBook') Cash book
+                    select.form-select.form-select-sm.form-select-dark#paymentCashBook
+                      option(value='') Loading cash books...
 
                   // MoMo fields
                   .row.g-2.mb-2#paymentMomoFields(style='display:none;')
@@ -130,10 +128,14 @@ block content
                       label.form-label.mb-0(for='momoTxId') Transaction ID
                       input.form-control.form-control-sm.form-control-dark(type='text', id='momoTxId', placeholder='MoMo transaction id')
 
-                  // Cheque field
-                  .mb-2#paymentChequeField(style='display:none;')
-                    label.form-label.mb-0(for='chequeNumber') Cheque number
-                    input.form-control.form-control-sm.form-control-dark(type='text', id='chequeNumber', placeholder='Cheque number')
+                  // Bank fields
+                  .row.g-2.mb-2#paymentBankFields(style='display:none;')
+                    .col-6
+                      label.form-label.mb-0(for='chequeNumber') Cheque number
+                      input.form-control.form-control-sm.form-control-dark(type='text', id='chequeNumber', placeholder='Optional cheque number')
+                    .col-6
+                      label.form-label.mb-0(for='depositDetails') Deposit details
+                      input.form-control.form-control-sm.form-control-dark(type='text', id='depositDetails', placeholder='Optional bank deposit details')
 
                   // Part payment toggle and amount
                   .form-check.mb-2
@@ -350,11 +352,9 @@ block content
           p#fullPaymentConfirmText.mb-3
 
           .mb-2
-            label.form-label.mb-1 Payment method
-            select.form-select.form-select-sm.form-select-dark#fullPaymentMethod
-              option(value='cash') Cash
-              option(value='momo') MoMo
-              option(value='cheque') Cheque
+            label.form-label.mb-1 Cash book
+            select.form-select.form-select-sm.form-select-dark#fullPaymentCashBook
+              option(value='') Loading cash books...
 
           .row.g-2.mb-2#fullPaymentMomoFields(style='display:none;')
             .col-6
@@ -364,9 +364,13 @@ block content
               label.form-label.mb-0 Transaction ID
               input.form-control.form-control-sm.form-control-dark#fullPaymentMomoTx(type='text')
 
-          .mb-2#fullPaymentChequeField(style='display:none;')
-            label.form-label.mb-0 Cheque Number
-            input.form-control.form-control-sm.form-control-dark#fullPaymentCheque(type='text')
+          .row.g-2.mb-2#fullPaymentBankFields(style='display:none;')
+            .col-6
+              label.form-label.mb-0 Cheque Number
+              input.form-control.form-control-sm.form-control-dark#fullPaymentCheque(type='text')
+            .col-6
+              label.form-label.mb-0 Deposit Details
+              input.form-control.form-control-sm.form-control-dark#fullPaymentDepositDetails(type='text')
 
         .modal-footer
           button.btn.btn-outline-light-custom(type='button', data-bs-dismiss='modal') Cancel

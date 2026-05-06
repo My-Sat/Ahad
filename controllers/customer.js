@@ -3,6 +3,10 @@ const Customer = require('../models/customer');
 const Order = require('../models/order');
 const mongoose = require('mongoose');
 const CustomerAccountTxn = require('../models/customer_account_txn');
+const {
+  resolvePaymentCashBookContext,
+  recordCashBookMovement
+} = require('../utilities/cash_books');
 
 /**
  * Render front desk page
@@ -439,6 +443,8 @@ exports.apiAdjustAccount = async (req, res) => {
     const type = String(req.body.type || '').toLowerCase().trim();
     const rawAmount = Number(req.body.amount || 0);
     const note = String(req.body.note || '').trim();
+    const requestedCashBookId = String(req.body.cashBookId || req.body.paymentCashBookId || req.body.cashBook || '').trim();
+    const rawCashDirection = String(req.body.cashDirection || '').toLowerCase().trim();
 
     if (!['credit', 'debit'].includes(type)) {
       return res.status(400).json({ ok: false, error: 'Invalid type' });
@@ -448,6 +454,10 @@ exports.apiAdjustAccount = async (req, res) => {
     }
 
     const amount = Number(rawAmount.toFixed(2));
+    const defaultCashDirection = type === 'debit' ? 'outflow' : 'inflow';
+    const cashDirection = rawCashDirection === 'outflow'
+      ? 'outflow'
+      : (rawCashDirection === 'none' ? 'none' : defaultCashDirection);
 
     const recordedBy = req.user?._id || null;
     const recordedByName = req.user?.name || req.user?.username || '';
@@ -464,6 +474,10 @@ exports.apiAdjustAccount = async (req, res) => {
         e.statusCode = 404;
         throw e;
       }
+
+      const cashBookContext = requestedCashBookId
+        ? await resolvePaymentCashBookContext(req.body, session)
+        : { cashBook: null, method: null, meta: {} };
 
       const currentBal = Number(updatedCustomer.accountBalance || 0);
 
@@ -485,9 +499,30 @@ exports.apiAdjustAccount = async (req, res) => {
         type,
         amount,
         note,
+        cashBook: cashBookContext.cashBook ? cashBookContext.cashBook._id : null,
+        cashBookName: cashBookContext.cashBook ? (cashBookContext.cashBook.name || '') : '',
+        cashBookKind: cashBookContext.cashBook ? (cashBookContext.meta.cashBookKind || cashBookContext.cashBook.kind || 'cash') : null,
+        cashDirection: cashBookContext.cashBook && cashDirection !== 'none' ? cashDirection : null,
+        cashMeta: cashBookContext.meta || {},
         recordedBy,
         recordedByName
       }], { session });
+
+      if (cashBookContext.cashBook && cashDirection !== 'none') {
+        await recordCashBookMovement({
+          cashBook: cashBookContext.cashBook,
+          type: cashDirection,
+          amount,
+          sourceType: 'customer_account_adjustment',
+          sourceId: updatedCustomer._id,
+          sourceRef: String(updatedCustomer.displayName || updatedCustomer.phone || updatedCustomer._id),
+          note: `${type === 'credit' ? 'Credit' : 'Debit'} customer account`,
+          meta: Object.assign({ customerId: String(updatedCustomer._id), adjustmentType: type }, cashBookContext.meta || {}),
+          recordedBy,
+          recordedByName,
+          session
+        });
+      }
 
       if (type === 'credit') {
         let available = Number(updatedCustomer.accountBalance || 0);

@@ -15,6 +15,7 @@ const serviceCategoryController = require('../controllers/serviceCategory');
 const { ensureHasPermission } = require('../middlewares/auth');
 const discountsController = require('../controllers/discounts');
 const reportsController = require('../controllers/reports');
+const cashBooksController = require('../controllers/cashBooks');
 
 
 
@@ -140,6 +141,12 @@ router.get('/discounts', ensureAdmin, discountsController.page);
 router.get('/discounts/api', ensureAdmin, discountsController.apiGet);
 router.post('/discounts', ensureAdmin, discountsController.apiSave);
 router.get('/discounts/customer-search', ensureAdmin, discountsController.apiSearchCustomers);
+
+// Cash Books
+router.get('/cash-books/api', cashBooksController.apiList);
+router.get('/cash-books', ensureAdmin, cashBooksController.page);
+router.post('/cash-books', ensureAdmin, cashBooksController.apiCreate);
+router.put('/cash-books/:id', ensureAdmin, cashBooksController.apiUpdate);
 
 // Reports (ADMIN)
 router.get('/reports', ensureAdmin, reportsController.page);

@@ -32,6 +32,31 @@ block content
                 .input-group.mb-2
                   input.form-control.form-control-dark(type='number', min='0.01', step='0.01', id='creditAmount', placeholder='Amount')
                   button.btn.btn-outline-success#creditBtn(type='button') Credit
+                .row.g-2.mb-2
+                  .col-md-7
+                    label.form-label.small.text-muted-light(for='creditCashBook') Cash book
+                    select.form-select.form-select-sm.form-select-dark#creditCashBook
+                      option(value='') Loading cash books...
+                  .col-md-5
+                    label.form-label.small.text-muted-light(for='creditCashDirection') Cash movement
+                    select.form-select.form-select-sm.form-select-dark#creditCashDirection
+                      option(value='inflow' selected) Receive into book
+                      option(value='outflow') Pay out from book
+                      option(value='none') No cash movement
+                .row.g-2.mb-2#creditMomoFields(style='display:none;')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='creditMomoNumber') MoMo Number
+                    input.form-control.form-control-sm.form-control-dark#creditMomoNumber(type='text')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='creditMomoTxId') Transaction ID
+                    input.form-control.form-control-sm.form-control-dark#creditMomoTxId(type='text')
+                .row.g-2.mb-2#creditBankFields(style='display:none;')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='creditChequeNumber') Cheque Number
+                    input.form-control.form-control-sm.form-control-dark#creditChequeNumber(type='text')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='creditDepositDetails') Deposit Details
+                    input.form-control.form-control-sm.form-control-dark#creditDepositDetails(type='text')
                 input.form-control.form-control-dark#creditNote(type='text', placeholder='Note (optional)')
 
               .col-md-6
@@ -39,6 +64,30 @@ block content
                 .input-group.mb-2
                   input.form-control.form-control-dark(type='number', min='0.01', step='0.01', id='debitAmount', placeholder='Amount')
                   button.btn.btn-outline-danger#debitBtn(type='button') Debit
+                .row.g-2.mb-2
+                  .col-md-7
+                    label.form-label.small.text-muted-light(for='debitCashBook') Cash book
+                    select.form-select.form-select-sm.form-select-dark#debitCashBook
+                      option(value='') Loading cash books...
+                  .col-md-5
+                    label.form-label.small.text-muted-light(for='debitCashDirection') Cash movement
+                    select.form-select.form-select-sm.form-select-dark#debitCashDirection
+                      option(value='none' selected) No cash movement
+                      option(value='outflow') Pay out from book
+                .row.g-2.mb-2#debitMomoFields(style='display:none;')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='debitMomoNumber') MoMo Number
+                    input.form-control.form-control-sm.form-control-dark#debitMomoNumber(type='text')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='debitMomoTxId') Transaction ID
+                    input.form-control.form-control-sm.form-control-dark#debitMomoTxId(type='text')
+                .row.g-2.mb-2#debitBankFields(style='display:none;')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='debitChequeNumber') Cheque Number
+                    input.form-control.form-control-sm.form-control-dark#debitChequeNumber(type='text')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='debitDepositDetails') Deposit Details
+                    input.form-control.form-control-sm.form-control-dark#debitDepositDetails(type='text')
                 input.form-control.form-control-dark#debitNote(type='text', placeholder='Note (optional)')
 
             hr

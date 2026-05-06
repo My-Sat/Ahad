@@ -23,11 +23,11 @@ async function sumPaymentsForCashier(cashierId, start, end) {
   const agg = await Order.aggregate([
     { $unwind: '$payments' },
     { $match: {
-      'payments.method': { $in: ['cash', 'momo', 'cheque'] },
+      'payments.method': { $in: ['cash', 'momo', 'cheque', 'bank'] },
       'payments.createdAt': { $gte: start, $lte: end },
       'payments.recordedBy': cashierObjId
     }},
-    { $group: { _id: null, total: { $sum: '$payments.amount' } } }
+    { $group: { _id: null, total: { $sum: { $ifNull: ['$payments.meta.receivedAmount', '$payments.amount'] } } } }
   ]);
   return Number(((agg && agg.length) ? (agg[0].total || 0) : 0));
 }
