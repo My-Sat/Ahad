@@ -18,7 +18,7 @@ block content
                 .card.dark-surface.border.border-secondary-subtle
                   .card-body.dark-card-body
                     h6.text-white.mb-3#cashBookFormTitle New Cash Book
-                    form#cashBookForm
+                    form#cashBookForm(data-disable-spinner='true')
                       input#cashBookId(type='hidden')
                       .mb-3
                         label.form-label.text-muted-light(for='cashBookName') Name
@@ -69,7 +69,12 @@ block content
                                   else
                                     span.badge.bg-success Active
                                 td.text-end
-                                  button.btn.btn-sm.btn-outline-light-custom.edit-cash-book(type='button') Edit
+                                  .btn-group.btn-group-sm
+                                    button.btn.btn-outline-light-custom.edit-cash-book(type='button') Edit
+                                    if book.active === false
+                                      button.btn.btn-outline-success.toggle-cash-book(type='button', data-action='restore') Restore
+                                    else
+                                      button.btn.btn-outline-warning.toggle-cash-book(type='button', data-action='archive') Archive
                           else
                             tr
                               td.text-muted(colspan='5') No cash books yet.

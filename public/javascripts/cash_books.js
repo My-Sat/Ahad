@@ -20,6 +20,8 @@ function initCashBooksPage() {
   const titleEl = document.getElementById('cashBookFormTitle');
   const table = document.getElementById('cashBooksTable');
 
+  if (form) form.dataset.disableSpinner = 'true';
+
   function escapeHtml(s) {
     return String(s || '').replace(/[&<>"'`=\/]/g, c => '&#' + c.charCodeAt(0) + ';');
   }
@@ -42,6 +44,20 @@ function initCashBooksPage() {
     statusEl.classList.toggle('text-success', !!msg && !isError);
   }
 
+  function restoreSaveButton(label) {
+    if (!saveBtn) return;
+    try {
+      if (window.__FormSpinner && typeof window.__FormSpinner.hide === 'function') {
+        window.__FormSpinner.hide(saveBtn);
+      }
+    } catch (e) {}
+    saveBtn.disabled = false;
+    saveBtn.classList.remove('loading');
+    saveBtn.removeAttribute('data-spinner-active');
+    saveBtn.removeAttribute('data-last-clicked');
+    saveBtn.textContent = label || 'Create';
+  }
+
   function resetForm() {
     if (idEl) idEl.value = '';
     if (nameEl) nameEl.value = '';
@@ -49,7 +65,7 @@ function initCashBooksPage() {
     if (openingEl) openingEl.value = '0';
     if (activeEl) activeEl.checked = true;
     if (titleEl) titleEl.textContent = 'New Cash Book';
-    if (saveBtn) saveBtn.textContent = 'Create';
+    restoreSaveButton('Create');
     if (openingWrap) openingWrap.style.display = '';
     setStatus('');
   }
@@ -72,7 +88,12 @@ function initCashBooksPage() {
           <td class="text-end">${escapeHtml(fmtMoney(book.balance))}</td>
           <td>${active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</td>
           <td class="text-end">
-            <button class="btn btn-sm btn-outline-light-custom edit-cash-book" type="button">Edit</button>
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-light-custom edit-cash-book" type="button">Edit</button>
+              <button class="btn ${active ? 'btn-outline-warning' : 'btn-outline-success'} toggle-cash-book" type="button" data-action="${active ? 'archive' : 'restore'}">
+                ${active ? 'Archive' : 'Restore'}
+              </button>
+            </div>
           </td>
         </tr>
       `;
@@ -131,16 +152,14 @@ function initCashBooksPage() {
         });
         const j = await res.json().catch(() => null);
         if (!res.ok || !j || !j.ok) throw new Error(j?.error || 'Save failed');
+        restoreSaveButton('Create');
         resetForm();
         setStatus('Cash book saved', false);
-        await loadCashBooks();
+        loadCashBooks();
       } catch (err) {
         setStatus(err.message || 'Save failed', true);
       } finally {
-        if (saveBtn) {
-          saveBtn.disabled = false;
-          saveBtn.textContent = idEl && idEl.value ? 'Save' : 'Create';
-        }
+        restoreSaveButton(idEl && idEl.value ? 'Save' : 'Create');
       }
     });
   }
@@ -149,10 +168,48 @@ function initCashBooksPage() {
   if (reloadBtn) reloadBtn.addEventListener('click', loadCashBooks);
 
   if (table) {
-    table.addEventListener('click', (ev) => {
+    table.addEventListener('click', async (ev) => {
       const btn = ev.target.closest('.edit-cash-book');
-      if (!btn) return;
-      const row = btn.closest('tr');
+      const toggleBtn = ev.target.closest('.toggle-cash-book');
+      if (!btn && !toggleBtn) return;
+      const row = btn ? btn.closest('tr') : null;
+      const toggleRow = toggleBtn ? toggleBtn.closest('tr') : null;
+
+      if (toggleBtn) {
+        const targetRow = toggleRow;
+        if (!targetRow) return;
+        const id = targetRow.dataset.cashBookId || '';
+        const action = String(toggleBtn.dataset.action || '').toLowerCase() === 'restore' ? 'restore' : 'archive';
+        const name = targetRow.dataset.name || 'this cash book';
+        const ok = window.confirm(action === 'archive'
+          ? `Archive ${name}? It will stop showing in payment selections, but existing records will remain intact.`
+          : `Restore ${name}? It will become available in payment selections again.`);
+        if (!ok) return;
+
+        const originalText = toggleBtn.textContent;
+        toggleBtn.disabled = true;
+        toggleBtn.textContent = action === 'archive' ? 'Archiving...' : 'Restoring...';
+        setStatus('');
+
+        try {
+          const res = await fetch(`/admin/cash-books/${encodeURIComponent(id)}/${action}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+          });
+          const j = await res.json().catch(() => null);
+          if (!res.ok || !j || !j.ok) throw new Error(j?.error || `${action} failed`);
+          resetForm();
+          setStatus(action === 'archive' ? 'Cash book archived' : 'Cash book restored', false);
+          await loadCashBooks();
+        } catch (err) {
+          setStatus(err.message || `${action} failed`, true);
+          toggleBtn.disabled = false;
+          toggleBtn.textContent = originalText;
+        }
+        return;
+      }
+
       if (!row) return;
       if (idEl) idEl.value = row.dataset.cashBookId || '';
       if (nameEl) nameEl.value = row.dataset.name || '';
@@ -160,7 +217,7 @@ function initCashBooksPage() {
       if (activeEl) activeEl.checked = row.dataset.active !== '0';
       if (openingWrap) openingWrap.style.display = 'none';
       if (titleEl) titleEl.textContent = 'Edit Cash Book';
-      if (saveBtn) saveBtn.textContent = 'Save';
+      restoreSaveButton('Save');
       setStatus('');
       try { nameEl && nameEl.focus(); } catch (e) {}
     });

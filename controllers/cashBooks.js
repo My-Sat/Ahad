@@ -137,3 +137,43 @@ exports.apiUpdate = async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Failed to update cash book' });
   }
 };
+
+exports.apiArchive = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const book = await CashBook.findByIdAndUpdate(
+      id,
+      {
+        active: false,
+        updatedBy: req.user?._id || null
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!book) return res.status(404).json({ ok: false, error: 'Cash book not found' });
+    return res.json({ ok: true, cashBook: serializeBook(book) });
+  } catch (err) {
+    console.error('cashBooks.apiArchive error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to archive cash book' });
+  }
+};
+
+exports.apiRestore = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const book = await CashBook.findByIdAndUpdate(
+      id,
+      {
+        active: true,
+        updatedBy: req.user?._id || null
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!book) return res.status(404).json({ ok: false, error: 'Cash book not found' });
+    return res.json({ ok: true, cashBook: serializeBook(book) });
+  } catch (err) {
+    console.error('cashBooks.apiRestore error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to restore cash book' });
+  }
+};
