@@ -6,6 +6,9 @@ block content
     h2.mb-0.text-white Stock Dashboard (Stores)
     .d-flex.gap-2
       a.btn.btn-secondary(href='/admin/catalogue') Catalogue
+      button.btn.btn-outline-light-custom(type='button', id='openSuppliersBtn')
+        i.bi.bi-truck.me-1
+        | Suppliers
       a.btn.btn-secondary(href='/admin/services') Back to services
 
   hr
@@ -124,10 +127,96 @@ block content
                 tr
                   td.text-muted(colspan='5') No stock items in this store.
 
+  // Stock purchase
+  .card.mb-4.dark-surface
+    .card-body.dark-card-body
+      .d-flex.justify-content-between.align-items-start.mb-3
+        div
+          h5.mb-1.text-white Purchase stock from supplier
+          p.text-muted-light.small.mb-0 Cash purchases debit the selected cash book. Credit purchases credit the supplier account.
+        button.btn.btn-outline-light-custom.btn-sm(type='button', id='openSuppliersBtnInline')
+          i.bi.bi-plus-circle.me-1
+          | Manage suppliers
+      if !selectedStore
+        p.text-muted-light.small Create/select a store first.
+      else
+        form#purchase-stock-form(class='row g-3' novalidate data-store-id=(selectedStore ? selectedStore._id : ''))
+          .col-12.col-lg-3
+            label.form-label.text-muted-light(for='purchaseSupplierSelect') Supplier
+            select.form-select#purchaseSupplierSelect
+              if suppliers && suppliers.length
+                each sup in suppliers
+                  if sup.active !== false
+                    option(value=sup._id)= sup.name
+              else
+                option(value='') No suppliers yet
+
+          .col-12.col-lg-3
+            label.form-label.text-muted-light(for='purchaseCatalogueSelect') Catalogue item
+            select.form-select#purchaseCatalogueSelect
+              if catalogues && catalogues.length
+                each c in catalogues
+                  option(value=c._id)= c.name
+              else
+                option(value='') No catalogue items yet
+
+          .col-6.col-lg-2
+            label.form-label.text-muted-light(for='purchaseQty') Quantity
+            input.form-control#purchaseQty(type='number', value='1', min='1', step='1')
+
+          .col-6.col-lg-2
+            label.form-label.text-muted-light(for='purchaseUnitCost') Unit cost
+            input.form-control#purchaseUnitCost(type='number', value='0', min='0.01', step='0.01')
+
+          .col-12.col-lg-2
+            label.form-label.text-muted-light(for='purchasePaymentType') Payment
+            select.form-select#purchasePaymentType
+              option(value='cash' selected) Cash
+              option(value='credit') Credit
+
+          .col-12.col-lg-4#purchaseCashBookWrap
+            label.form-label.text-muted-light(for='purchaseCashBook') Cash book
+            select.form-select#purchaseCashBook
+              option(value='') Loading cash books...
+
+          .col-12.col-lg-4#purchaseMomoFields(style='display:none;')
+            .row.g-2
+              .col-6
+                label.form-label.text-muted-light(for='purchaseMomoNumber') MoMo number
+                input.form-control#purchaseMomoNumber(type='text', placeholder='Optional')
+              .col-6
+                label.form-label.text-muted-light(for='purchaseMomoTxId') Transaction ID
+                input.form-control#purchaseMomoTxId(type='text', placeholder='Optional')
+
+          .col-12.col-lg-4#purchaseBankFields(style='display:none;')
+            .row.g-2
+              .col-6
+                label.form-label.text-muted-light(for='purchaseChequeNumber') Cheque number
+                input.form-control#purchaseChequeNumber(type='text', placeholder='Optional')
+              .col-6
+                label.form-label.text-muted-light(for='purchaseDepositDetails') Deposit details
+                input.form-control#purchaseDepositDetails(type='text', placeholder='Optional')
+
+          .col-12.col-lg-5
+            label.form-label.text-muted-light(for='purchaseNote') Note
+            input.form-control#purchaseNote(type='text', placeholder='Optional purchase note')
+
+          .col-12.col-lg-3.d-grid
+            label.form-label.text-muted-light Total
+            .input-group
+              span.input-group-text GH₵
+              input.form-control#purchaseTotal(type='text', value='0.00', readonly)
+
+          .col-12.d-flex.justify-content-end
+            button.btn.btn-primary#recordPurchaseBtn(type='button')
+              span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='recordPurchaseSpinner')
+              | Record Purchase
+
   // Add catalogue to selected store
   .card.mb-4.dark-surface
     .card-body.dark-card-body
       h5.mb-3.text-white Add catalogue to store
+      p.text-muted-light.small Use this only to make a catalogue item available in the selected store. Stock increases should be recorded as supplier purchases.
       if !selectedStore
         p.text-muted-light.small Create/select a store first.
       else
@@ -166,7 +255,101 @@ block content
             span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='createStoreSpinner')
             | Create
 
-    // Manage Store Modal
+  // Suppliers Modal
+  .modal.fade(id='suppliersModal', tabindex='-1', aria-hidden='true')
+    .modal-dialog.modal-xl.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title.text-white Suppliers
+          .ms-auto.me-2
+            button.btn.btn-primary.btn-sm#openSupplierFormBtn(type='button')
+              i.bi.bi-plus-circle.me-1
+              | Create Supplier
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          .d-flex.justify-content-between.align-items-center.mb-3
+            p.text-muted-light.small.mb-0 Manage supplier records used for stock purchases.
+            button.btn.btn-outline-light-custom.btn-sm#refreshSuppliersBtn(type='button')
+              i.bi.bi-arrow-clockwise.me-1
+              | Refresh
+          .table-responsive
+            table.table.table-sm.table-hover.align-middle#suppliersTable
+              thead
+                tr
+                  th Supplier
+                  th Phone
+                  th.text-end Balance
+                  th Status
+                  th.text-end Actions
+              tbody
+                if suppliers && suppliers.length
+                  each sup in suppliers
+                    tr(
+                      data-supplier-id=String(sup._id)
+                      data-name=sup.name
+                      data-phone=(sup.phone || '')
+                      data-email=(sup.email || '')
+                      data-address=(sup.address || '')
+                      data-notes=(sup.notes || '')
+                      data-active=(sup.active === false ? '0' : '1')
+                      data-balance=Number(sup.balance || 0)
+                    )
+                      td.fw-semibold.text-white= sup.name
+                      td.text-muted-light= sup.phone || '-'
+                      td.text-end GH₵ #{Number(sup.balance || 0).toFixed(2)}
+                      td
+                        if sup.active === false
+                          span.badge.bg-secondary Inactive
+                        else
+                          span.badge.bg-success Active
+                      td.text-end
+                        .btn-group.btn-group-sm
+                          a.btn.btn-outline-info.supplier-account-link(href=`/admin/suppliers/${sup._id}/account`, data-ajax='true') Account
+                          button.btn.btn-outline-light-custom.edit-supplier(type='button') Edit
+                          if sup.active === false
+                            button.btn.btn-outline-success.toggle-supplier(type='button', data-action='restore') Restore
+                          else
+                            button.btn.btn-outline-warning.toggle-supplier(type='button', data-action='archive') Archive
+                else
+                  tr
+                    td.text-muted(colspan='5') No suppliers yet.
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
+
+  // Supplier Form Modal
+  .modal.fade(id='supplierFormModal', tabindex='-1', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title.text-white#supplierFormTitle New supplier
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          input#supplierId(type='hidden')
+          .mb-3
+            label.form-label.text-muted-light(for='supplierName') Name
+            input.form-control#supplierName(type='text', placeholder='Supplier name')
+          .row.g-2
+            .col-md-6
+              label.form-label.text-muted-light(for='supplierPhone') Phone
+              input.form-control#supplierPhone(type='text', placeholder='Phone')
+            .col-md-6
+              label.form-label.text-muted-light(for='supplierEmail') Email
+              input.form-control#supplierEmail(type='email', placeholder='Email')
+          .mt-3
+            label.form-label.text-muted-light(for='supplierAddress') Address
+            input.form-control#supplierAddress(type='text', placeholder='Address')
+          .mt-3
+            label.form-label.text-muted-light(for='supplierNotes') Notes
+            textarea.form-control#supplierNotes(rows='3', placeholder='Optional notes')
+          .form-check.mt-3
+            input.form-check-input#supplierActive(type='checkbox', checked)
+            label.form-check-label(for='supplierActive') Active
+          p.small.mt-3.mb-0#supplierStatus
+        .modal-footer
+          button.btn.btn-secondary#resetSupplierBtn(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary#saveSupplierBtn(type='button') Save supplier
+
+  // Manage Store Modal
   .modal.fade(id='manageStoreModal', tabindex='-1', aria-hidden='true')
     .modal-dialog.modal-dialog-centered
       .modal-content.dark-surface

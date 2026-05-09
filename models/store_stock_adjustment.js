@@ -6,7 +6,7 @@ const StoreStockAdjustmentSchema = new mongoose.Schema({
   store: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true, index: true },
   material: { type: mongoose.Schema.Types.ObjectId, ref: 'Material', required: true, index: true },
 
-  kind: { type: String, enum: ['add', 'adjust-delta', 'adjust-absolute'], required: true },
+  kind: { type: String, enum: ['add', 'purchase', 'adjust-delta', 'adjust-absolute'], required: true },
 
   // for delta adjustments
   delta: { type: Number, default: 0 },

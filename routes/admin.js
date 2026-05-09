@@ -16,6 +16,7 @@ const { ensureHasPermission } = require('../middlewares/auth');
 const discountsController = require('../controllers/discounts');
 const reportsController = require('../controllers/reports');
 const cashBooksController = require('../controllers/cashBooks');
+const suppliersController = require('../controllers/suppliers');
 
 
 
@@ -108,6 +109,7 @@ router.delete('/stores/:id', ensureAdmin, materialsController.deleteStore);
 
 // store stock
 router.post('/stores/:storeId/stocks', ensureAdmin, materialsController.addStockToStore);
+router.post('/stores/:storeId/stocks/purchase', ensureAdmin, materialsController.purchaseStock);
 router.post('/stores/:storeId/stocks/:stockId/adjust', ensureAdmin, materialsController.adjustStoreStock);
 router.post('/stores/:storeId/stocks/:stockId/transfer', ensureAdmin, materialsController.transferStoreStock);
 router.delete('/stores/:storeId/stocks/:stockId', ensureAdmin, materialsController.removeStockFromStore);
@@ -149,6 +151,16 @@ router.post('/cash-books', ensureAdmin, cashBooksController.apiCreate);
 router.patch('/cash-books/:id/archive', ensureAdmin, cashBooksController.apiArchive);
 router.patch('/cash-books/:id/restore', ensureAdmin, cashBooksController.apiRestore);
 router.put('/cash-books/:id', ensureAdmin, cashBooksController.apiUpdate);
+
+// Suppliers
+router.get('/suppliers/api', ensureAdmin, suppliersController.apiList);
+router.post('/suppliers', ensureAdmin, suppliersController.apiCreate);
+router.get('/suppliers/:id/account', ensureAdmin, suppliersController.accountPage);
+router.get('/suppliers/:id/account/api', ensureAdmin, suppliersController.apiGetAccount);
+router.post('/suppliers/:id/account/adjust', ensureAdmin, suppliersController.apiAdjustAccount);
+router.put('/suppliers/:id', ensureAdmin, suppliersController.apiUpdate);
+router.patch('/suppliers/:id/archive', ensureAdmin, suppliersController.apiArchive);
+router.patch('/suppliers/:id/restore', ensureAdmin, suppliersController.apiRestore);
 
 // Reports (ADMIN)
 router.get('/reports', ensureAdmin, reportsController.page);

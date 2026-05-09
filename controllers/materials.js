@@ -9,6 +9,10 @@ const Store = require('../models/store');
 const StoreStock = require('../models/store_stock');
 const StoreStockTransfer = require('../models/store_stock_transfer');
 const StoreStockAdjustment = require('../models/store_stock_adjustment');
+const Supplier = require('../models/supplier');
+const SupplierAccountTxn = require('../models/supplier_account_txn');
+const StockPurchase = require('../models/stock_purchase');
+const { resolvePaymentCashBookContext, recordCashBookMovement } = require('../utilities/cash_books');
 
 
 // Helper: safely parse selections (JSON string or array)
@@ -367,20 +371,21 @@ exports.stockPage = async (req, res) => {
     if (!selectedStore && stores.length) selectedStore = stores[0];
 
     const catalogues = await Material.find().sort({ createdAt: -1 }).lean();
+    const suppliers = await Supplier.find().sort({ active: -1, name: 1 }).lean();
 
     let stocks = [];
     if (selectedStore) {
-    const rawStocks = await StoreStock.find({ store: selectedStore._id, active: true })
-      .populate({
-        path: 'material',
-        select: 'name selections',
-        populate: [
-          { path: 'selections.unit', select: 'name' },
-          { path: 'selections.subUnit', select: 'name' }
-        ]
-      })
-      .sort({ createdAt: -1 })
-      .lean();
+      const rawStocks = await StoreStock.find({ store: selectedStore._id, active: true })
+        .populate({
+          path: 'material',
+          select: 'name selections',
+          populate: [
+            { path: 'selections.unit', select: 'name' },
+            { path: 'selections.subUnit', select: 'name' }
+          ]
+        })
+        .sort({ createdAt: -1 })
+        .lean();
 
       const materialIds = rawStocks.map(s => s.material?._id).filter(Boolean);
       const aggDocs = materialIds.length
@@ -405,6 +410,7 @@ exports.stockPage = async (req, res) => {
       selectedStore: selectedStore || null,
       operationalStore: operational || null,
       catalogues,
+      suppliers,
       stocks
     });
   } catch (err) {
@@ -475,6 +481,184 @@ try {
   } catch (err) {
     console.error('materials.addStockToStore error', err);
     return res.status(500).json({ error: 'Error adding stock to store' });
+  }
+};
+
+// Purchase stock from a supplier (JSON)
+exports.purchaseStock = async (req, res) => {
+  let session = null;
+
+  try {
+    const { storeId } = req.params;
+    const materialId = req.body.materialId;
+    const supplierId = req.body.supplierId;
+    const paymentType = String(req.body.paymentType || 'cash').toLowerCase().trim() === 'credit' ? 'credit' : 'cash';
+    const note = String(req.body.note || '').trim();
+    const qty = Math.floor(Number(req.body.quantity || req.body.qty || 0));
+    const unitCost = Number(req.body.unitCost || 0);
+
+    if (!mongoose.Types.ObjectId.isValid(storeId)) return res.status(400).json({ error: 'Invalid store id' });
+    if (!mongoose.Types.ObjectId.isValid(materialId)) return res.status(400).json({ error: 'Invalid catalogue id' });
+    if (!mongoose.Types.ObjectId.isValid(supplierId)) return res.status(400).json({ error: 'Invalid supplier id' });
+    if (!isFinite(qty) || qty <= 0) return res.status(400).json({ error: 'Purchase quantity must be greater than zero' });
+    if (!isFinite(unitCost) || unitCost <= 0) return res.status(400).json({ error: 'Unit cost must be greater than zero' });
+
+    const totalCost = Number((qty * unitCost).toFixed(2));
+
+    session = await mongoose.startSession();
+    let result = null;
+
+    await session.withTransaction(async () => {
+      const [store, material, supplier] = await Promise.all([
+        Store.findById(storeId).session(session),
+        Material.findById(materialId).session(session),
+        Supplier.findById(supplierId).session(session)
+      ]);
+
+      if (!store) {
+        const e = new Error('Store not found');
+        e.statusCode = 404;
+        throw e;
+      }
+      if (!material) {
+        const e = new Error('Catalogue not found');
+        e.statusCode = 404;
+        throw e;
+      }
+      if (!supplier || supplier.active === false) {
+        const e = new Error('Supplier not found or inactive');
+        e.statusCode = 404;
+        throw e;
+      }
+
+      let cashBookContext = { cashBook: null, meta: {} };
+      if (paymentType === 'cash') {
+        cashBookContext = await resolvePaymentCashBookContext(req.body, session);
+        if (!cashBookContext.cashBook) {
+          const e = new Error('Select the cash book used for this purchase');
+          e.statusCode = 400;
+          throw e;
+        }
+      }
+
+      const updatedStock = await StoreStock.findOneAndUpdate(
+        { store: store._id, material: material._id },
+        { $set: { active: true }, $inc: { stocked: qty } },
+        { upsert: true, new: true, setDefaultsOnInsert: true, session }
+      );
+
+      const agg = await MaterialAggregate
+        .findOne({ store: store._id, material: material._id })
+        .session(session)
+        .lean();
+      const used = agg ? Number(agg.total || 0) : 0;
+      const remaining = Math.max(0, Number(updatedStock.stocked || 0) - used);
+
+      const recordedBy = req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null;
+      const recordedByName = (req.user?.name || req.user?.username || '').toString();
+
+      const purchaseDocs = await StockPurchase.create([{
+        supplier: supplier._id,
+        supplierName: supplier.name || '',
+        store: store._id,
+        storeName: store.name || '',
+        stock: updatedStock._id,
+        material: material._id,
+        materialName: material.name || '',
+        quantity: qty,
+        unitCost: Number(unitCost.toFixed(2)),
+        totalCost,
+        paymentType,
+        cashBook: cashBookContext.cashBook ? cashBookContext.cashBook._id : null,
+        cashBookName: cashBookContext.cashBook ? (cashBookContext.cashBook.name || '') : '',
+        cashBookKind: cashBookContext.cashBook ? (cashBookContext.meta?.cashBookKind || cashBookContext.cashBook.kind || 'cash') : null,
+        cashMeta: cashBookContext.meta || {},
+        note,
+        createdBy: recordedBy,
+        createdByName: recordedByName
+      }], { session });
+
+      const purchase = purchaseDocs[0];
+
+      await StoreStockAdjustment.create([{
+        stock: updatedStock._id,
+        store: store._id,
+        material: material._id,
+        kind: 'purchase',
+        delta: qty,
+        setTo: remaining,
+        stockedAfter: Number(updatedStock.stocked || 0),
+        usedAfter: Number(used || 0),
+        note: `Purchase from ${supplier.name || 'Supplier'} (${paymentType === 'credit' ? 'credit' : 'cash'})`,
+        actor: recordedBy
+      }], { session });
+
+      if (paymentType === 'cash') {
+        await recordCashBookMovement({
+          cashBook: cashBookContext.cashBook,
+          type: 'outflow',
+          amount: totalCost,
+          sourceType: 'stock_purchase',
+          sourceId: purchase._id,
+          sourceRef: `${material.name || 'Stock'} purchase`,
+          note: `Stock purchase from ${supplier.name || 'Supplier'}`,
+          meta: Object.assign({}, cashBookContext.meta || {}, {
+            supplierId: String(supplier._id),
+            supplierName: supplier.name || '',
+            storeId: String(store._id),
+            materialId: String(material._id),
+            quantity: qty,
+            unitCost: Number(unitCost.toFixed(2))
+          }),
+          recordedBy,
+          recordedByName,
+          session
+        });
+      } else {
+        await Supplier.findByIdAndUpdate(
+          supplier._id,
+          { $inc: { balance: totalCost }, $set: { updatedBy: recordedBy } },
+          { session }
+        );
+
+        await SupplierAccountTxn.create([{
+          supplier: supplier._id,
+          type: 'credit',
+          amount: totalCost,
+          note: `Stock purchase on credit: ${material.name || 'Stock'}`,
+          sourceType: 'stock_purchase',
+          sourceId: purchase._id,
+          sourceRef: `${material.name || 'Stock'} purchase`,
+          recordedBy,
+          recordedByName
+        }], { session });
+      }
+
+      result = {
+        ok: true,
+        purchase: {
+          _id: purchase._id,
+          quantity: qty,
+          unitCost: Number(unitCost.toFixed(2)),
+          totalCost,
+          paymentType
+        },
+        stock: {
+          _id: updatedStock._id,
+          stocked: Number(updatedStock.stocked || 0),
+          used,
+          remaining
+        }
+      };
+    });
+
+    return res.status(201).json(result || { ok: true });
+  } catch (err) {
+    console.error('materials.purchaseStock error', err);
+    if (err && err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'Error recording stock purchase' });
+  } finally {
+    try { if (session) session.endSession(); } catch (e) {}
   }
 };
 
@@ -706,10 +890,11 @@ exports.stockActivity = async (req, res) => {
 
     // adjustments are "snapshots" (setTo = remaining after action)
     adjustments.forEach(a => {
+      const kind = String(a.kind || '');
       events.push({
         createdAt: a.createdAt,
-        type: a.kind,              // add | adjust-delta | adjust-absolute
-        delta: (a.kind === 'adjust-delta') ? Number(a.delta || 0) : null,
+        type: a.kind,              // add | purchase | adjust-delta | adjust-absolute
+        delta: (kind === 'adjust-delta' || kind === 'purchase') ? Number(a.delta || 0) : null,
         setTo: Number(a.setTo || 0),
         details: a.note || ''
       });

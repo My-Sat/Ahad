@@ -1,4 +1,4 @@
-// public/javascripts/store_stock.js
+﻿// public/javascripts/store_stock.js
 // Store stock dashboard client (stores + stock items + activity + operational confirm)
 // Includes: create store, set operational (confirm), add stock, adjust, transfer, view activity, remove stock item
 // NOTE: Edit/Delete store actions are wired if the related elements exist in the page (manageStoreModal etc).
@@ -26,6 +26,52 @@ function initStoreStockPage() {
   const initialStockInput = document.getElementById('initialStockInput');
   const addToStoreBtn = document.getElementById('addToStoreBtn');
   const addToStoreSpinner = document.getElementById('addToStoreSpinner');
+
+  // ----------------------------
+  // Supplier purchase
+  // ----------------------------
+  const purchaseForm = document.getElementById('purchase-stock-form');
+  const purchaseSupplierSelect = document.getElementById('purchaseSupplierSelect');
+  const purchaseCatalogueSelect = document.getElementById('purchaseCatalogueSelect');
+  const purchaseQty = document.getElementById('purchaseQty');
+  const purchaseUnitCost = document.getElementById('purchaseUnitCost');
+  const purchasePaymentType = document.getElementById('purchasePaymentType');
+  const purchaseCashBookWrap = document.getElementById('purchaseCashBookWrap');
+  const purchaseCashBook = document.getElementById('purchaseCashBook');
+  const purchaseMomoFields = document.getElementById('purchaseMomoFields');
+  const purchaseMomoNumber = document.getElementById('purchaseMomoNumber');
+  const purchaseMomoTxId = document.getElementById('purchaseMomoTxId');
+  const purchaseBankFields = document.getElementById('purchaseBankFields');
+  const purchaseChequeNumber = document.getElementById('purchaseChequeNumber');
+  const purchaseDepositDetails = document.getElementById('purchaseDepositDetails');
+  const purchaseNote = document.getElementById('purchaseNote');
+  const purchaseTotal = document.getElementById('purchaseTotal');
+  const recordPurchaseBtn = document.getElementById('recordPurchaseBtn');
+  const recordPurchaseSpinner = document.getElementById('recordPurchaseSpinner');
+
+  // ----------------------------
+  // Suppliers modal
+  // ----------------------------
+  const openSuppliersBtn = document.getElementById('openSuppliersBtn');
+  const openSuppliersBtnInline = document.getElementById('openSuppliersBtnInline');
+  const suppliersModalEl = document.getElementById('suppliersModal');
+  const supplierFormModalEl = document.getElementById('supplierFormModal');
+  const openSupplierFormBtn = document.getElementById('openSupplierFormBtn');
+  const refreshSuppliersBtn = document.getElementById('refreshSuppliersBtn');
+  const supplierId = document.getElementById('supplierId');
+  const supplierName = document.getElementById('supplierName');
+  const supplierPhone = document.getElementById('supplierPhone');
+  const supplierEmail = document.getElementById('supplierEmail');
+  const supplierAddress = document.getElementById('supplierAddress');
+  const supplierNotes = document.getElementById('supplierNotes');
+  const supplierActive = document.getElementById('supplierActive');
+  const supplierFormTitle = document.getElementById('supplierFormTitle');
+  const saveSupplierBtn = document.getElementById('saveSupplierBtn');
+  const resetSupplierBtn = document.getElementById('resetSupplierBtn');
+  const supplierStatus = document.getElementById('supplierStatus');
+  const suppliersTable = document.getElementById('suppliersTable');
+  let activeCashBooks = [];
+  let suppliersCache = [];
 
   // ----------------------------
   // Adjust
@@ -88,7 +134,11 @@ function initStoreStockPage() {
   // ----------------------------
   // Helpers
   // ----------------------------
-  const selectedStoreId = () => (addForm ? addForm.dataset.storeId : '') || '';
+  const selectedStoreId = () => (
+    (addForm ? addForm.dataset.storeId : '') ||
+    (purchaseForm ? purchaseForm.dataset.storeId : '') ||
+    ''
+  );
 
   function showToast(msg, delay = 1500) {
     if (window.showGlobalToast) return window.showGlobalToast(msg, delay);
@@ -113,6 +163,441 @@ function initStoreStockPage() {
   function numOr(val, fallback = 0) {
     const n = Number(val);
     return isFinite(n) ? n : fallback;
+  }
+
+  function fmtMoney(n) {
+    return `GH₵ ${Number(n || 0).toFixed(2)}`;
+  }
+
+  function setSupplierStatus(msg, isError) {
+    if (!supplierStatus) return;
+    supplierStatus.textContent = msg || '';
+    supplierStatus.classList.toggle('text-danger', !!isError);
+    supplierStatus.classList.toggle('text-success', !!msg && !isError);
+  }
+
+  function kindLabel(kind) {
+    const k = String(kind || '').toLowerCase();
+    if (k === 'bank') return 'Bank';
+    if (k === 'momo') return 'MoMo';
+    return 'Cash';
+  }
+
+  function selectedCashBookKind() {
+    const opt = purchaseCashBook?.selectedOptions?.[0];
+    return String(opt?.dataset?.kind || 'cash').toLowerCase();
+  }
+
+  function updatePurchaseTotal() {
+    if (!purchaseTotal) return;
+    const qty = Math.max(0, Math.floor(numOr(purchaseQty ? purchaseQty.value : 0, 0)));
+    const unitCost = Math.max(0, numOr(purchaseUnitCost ? purchaseUnitCost.value : 0, 0));
+    purchaseTotal.value = Number((qty * unitCost).toFixed(2)).toFixed(2);
+  }
+
+  function togglePurchaseCashBook() {
+    const type = String(purchasePaymentType ? purchasePaymentType.value : 'cash').toLowerCase();
+    const isCredit = type === 'credit';
+    if (purchaseCashBookWrap) purchaseCashBookWrap.style.display = isCredit ? 'none' : '';
+    const kind = isCredit ? '' : selectedCashBookKind();
+    if (purchaseMomoFields) purchaseMomoFields.style.display = kind === 'momo' ? '' : 'none';
+    if (purchaseBankFields) purchaseBankFields.style.display = kind === 'bank' ? '' : 'none';
+  }
+
+  function populatePurchaseCashBooks() {
+    if (!purchaseCashBook) return;
+    const current = purchaseCashBook.value;
+    purchaseCashBook.innerHTML = '';
+
+    if (!activeCashBooks.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No active cash books configured';
+      purchaseCashBook.appendChild(opt);
+      purchaseCashBook.disabled = true;
+      togglePurchaseCashBook();
+      return;
+    }
+
+    activeCashBooks.forEach(book => {
+      const opt = document.createElement('option');
+      opt.value = book._id;
+      opt.dataset.kind = String(book.kind || 'cash').toLowerCase();
+      opt.textContent = `${book.name} (${kindLabel(book.kind)})`;
+      purchaseCashBook.appendChild(opt);
+    });
+    purchaseCashBook.disabled = false;
+    if (current && activeCashBooks.some(b => String(b._id) === String(current))) purchaseCashBook.value = current;
+    togglePurchaseCashBook();
+  }
+
+  async function loadCashBooksForPurchase() {
+    try {
+      const res = await fetch('/admin/cash-books/api', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin',
+        cache: 'no-store'
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j || !j.ok) throw new Error(j?.error || 'Failed to load cash books');
+      activeCashBooks = Array.isArray(j.cashBooks) ? j.cashBooks : [];
+    } catch (err) {
+      console.error('loadCashBooksForPurchase error', err);
+      activeCashBooks = [];
+    }
+    populatePurchaseCashBooks();
+  }
+
+  function resetSupplierForm() {
+    if (supplierId) supplierId.value = '';
+    if (supplierName) supplierName.value = '';
+    if (supplierPhone) supplierPhone.value = '';
+    if (supplierEmail) supplierEmail.value = '';
+    if (supplierAddress) supplierAddress.value = '';
+    if (supplierNotes) supplierNotes.value = '';
+    if (supplierActive) supplierActive.checked = true;
+    if (supplierFormTitle) supplierFormTitle.textContent = 'New supplier';
+    if (saveSupplierBtn) {
+      saveSupplierBtn.disabled = false;
+      saveSupplierBtn.textContent = 'Save supplier';
+    }
+    setSupplierStatus('');
+  }
+
+  function renderSupplierRows(rows) {
+    const tbody = suppliersTable ? suppliersTable.querySelector('tbody') : null;
+    if (!tbody) return;
+    if (!Array.isArray(rows) || !rows.length) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="5">No suppliers yet.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(s => {
+      const active = s.active !== false;
+      return `
+        <tr data-supplier-id="${escapeHtml(s._id)}" data-name="${escapeHtml(s.name)}" data-phone="${escapeHtml(s.phone || '')}" data-email="${escapeHtml(s.email || '')}" data-address="${escapeHtml(s.address || '')}" data-notes="${escapeHtml(s.notes || '')}" data-active="${active ? '1' : '0'}" data-balance="${Number(s.balance || 0)}">
+          <td class="fw-semibold text-white">${escapeHtml(s.name)}</td>
+          <td class="text-muted-light">${escapeHtml(s.phone || '-')}</td>
+          <td class="text-end">${escapeHtml(fmtMoney(s.balance || 0))}</td>
+          <td>${active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm">
+              <a class="btn btn-outline-info supplier-account-link" href="/admin/suppliers/${encodeURIComponent(s._id)}/account" data-ajax="true">Account</a>
+              <button class="btn btn-outline-light-custom edit-supplier" type="button">Edit</button>
+              <button class="btn ${active ? 'btn-outline-warning' : 'btn-outline-success'} toggle-supplier" type="button" data-action="${active ? 'archive' : 'restore'}">${active ? 'Archive' : 'Restore'}</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function renderSupplierSelect(rows) {
+    if (!purchaseSupplierSelect) return;
+    const current = purchaseSupplierSelect.value;
+    const activeRows = (rows || []).filter(s => s.active !== false);
+    purchaseSupplierSelect.innerHTML = '';
+    if (!activeRows.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No active suppliers';
+      purchaseSupplierSelect.appendChild(opt);
+      return;
+    }
+    activeRows.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s._id;
+      opt.textContent = s.name;
+      purchaseSupplierSelect.appendChild(opt);
+    });
+    if (current && activeRows.some(s => String(s._id) === String(current))) purchaseSupplierSelect.value = current;
+  }
+
+  async function loadSuppliers() {
+    try {
+      const res = await fetch('/admin/suppliers/api?all=1', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin',
+        cache: 'no-store'
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j || !j.ok) throw new Error(j?.error || 'Failed to load suppliers');
+      suppliersCache = Array.isArray(j.suppliers) ? j.suppliers : [];
+      renderSupplierRows(suppliersCache);
+      renderSupplierSelect(suppliersCache);
+    } catch (err) {
+      console.error('loadSuppliers error', err);
+      setSupplierStatus(err.message || 'Failed to load suppliers', true);
+    }
+  }
+
+  updatePurchaseTotal();
+  togglePurchaseCashBook();
+  loadCashBooksForPurchase();
+  loadSuppliers();
+
+  if (purchaseQty && purchaseQty.dataset.bound !== '1') {
+    purchaseQty.dataset.bound = '1';
+    purchaseQty.addEventListener('input', updatePurchaseTotal);
+  }
+
+  if (purchaseUnitCost && purchaseUnitCost.dataset.bound !== '1') {
+    purchaseUnitCost.dataset.bound = '1';
+    purchaseUnitCost.addEventListener('input', updatePurchaseTotal);
+  }
+
+  if (purchasePaymentType && purchasePaymentType.dataset.bound !== '1') {
+    purchasePaymentType.dataset.bound = '1';
+    purchasePaymentType.addEventListener('change', togglePurchaseCashBook);
+  }
+
+  if (purchaseCashBook && purchaseCashBook.dataset.bound !== '1') {
+    purchaseCashBook.dataset.bound = '1';
+    purchaseCashBook.addEventListener('change', togglePurchaseCashBook);
+  }
+
+  if (recordPurchaseBtn && recordPurchaseBtn.dataset.bound !== '1') {
+    recordPurchaseBtn.dataset.bound = '1';
+
+    recordPurchaseBtn.addEventListener('click', async function (ev) {
+      ev && ev.preventDefault && ev.preventDefault();
+
+      const storeId = selectedStoreId();
+      const supplierIdVal = String(purchaseSupplierSelect?.value || '').trim();
+      const materialId = String(purchaseCatalogueSelect?.value || '').trim();
+      const quantity = Math.floor(numOr(purchaseQty ? purchaseQty.value : 0, 0));
+      const unitCost = numOr(purchaseUnitCost ? purchaseUnitCost.value : 0, 0);
+      const paymentType = String(purchasePaymentType?.value || 'cash').toLowerCase() === 'credit' ? 'credit' : 'cash';
+      const cashBookId = String(purchaseCashBook?.value || '').trim();
+
+      if (!storeId) return alert('Select a store first');
+      if (!supplierIdVal) return alert('Select a supplier');
+      if (!materialId) return alert('Select a catalogue item');
+      if (!isFinite(quantity) || quantity <= 0) return alert('Quantity must be greater than zero');
+      if (!isFinite(unitCost) || unitCost <= 0) return alert('Unit cost must be greater than zero');
+      if (paymentType === 'cash' && !cashBookId) return alert('Select the cash book used for this purchase');
+
+      recordPurchaseBtn.disabled = true;
+      if (recordPurchaseSpinner) recordPurchaseSpinner.style.display = 'inline-block';
+
+      try {
+        const body = new URLSearchParams();
+        body.append('supplierId', supplierIdVal);
+        body.append('materialId', materialId);
+        body.append('quantity', String(quantity));
+        body.append('unitCost', String(unitCost));
+        body.append('paymentType', paymentType);
+        body.append('note', String(purchaseNote?.value || '').trim());
+        if (paymentType === 'cash') {
+          body.append('cashBookId', cashBookId);
+          body.append('momoNumber', String(purchaseMomoNumber?.value || '').trim());
+          body.append('momoTxId', String(purchaseMomoTxId?.value || '').trim());
+          body.append('chequeNumber', String(purchaseChequeNumber?.value || '').trim());
+          body.append('depositDetails', String(purchaseDepositDetails?.value || '').trim());
+        }
+
+        const res = await fetch(`/admin/stores/${encodeURIComponent(storeId)}/stocks/purchase`, {
+          method: 'POST',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+          },
+          body: body.toString()
+        });
+
+        const j = await res.json().catch(() => null);
+        if (res.status === 201 && j && j.ok) {
+          showToast('Stock purchase recorded', 1200);
+          window.location.reload();
+        } else {
+          alert((j && j.error) ? j.error : 'Failed to record stock purchase');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Failed to record stock purchase');
+      } finally {
+        recordPurchaseBtn.disabled = false;
+        if (recordPurchaseSpinner) recordPurchaseSpinner.style.display = 'none';
+      }
+    });
+  }
+
+  function openSuppliersModal() {
+    loadSuppliers();
+    bsShow(suppliersModalEl);
+  }
+
+  function openSupplierFormModal(row) {
+    resetSupplierForm();
+    if (row) {
+      const id = String(row.dataset.supplierId || '').trim();
+      if (supplierId) supplierId.value = id;
+      if (supplierName) supplierName.value = row.dataset.name || '';
+      if (supplierPhone) supplierPhone.value = row.dataset.phone || '';
+      if (supplierEmail) supplierEmail.value = row.dataset.email || '';
+      if (supplierAddress) supplierAddress.value = row.dataset.address || '';
+      if (supplierNotes) supplierNotes.value = row.dataset.notes || '';
+      if (supplierActive) supplierActive.checked = row.dataset.active !== '0';
+      if (supplierFormTitle) supplierFormTitle.textContent = 'Edit supplier';
+      if (saveSupplierBtn) saveSupplierBtn.textContent = 'Update supplier';
+    }
+    bsShow(supplierFormModalEl);
+    setTimeout(() => supplierName?.focus(), 150);
+  }
+
+  [openSuppliersBtn, openSuppliersBtnInline].forEach(btn => {
+    if (!btn || btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', function (ev) {
+      ev && ev.preventDefault && ev.preventDefault();
+      openSuppliersModal();
+    });
+  });
+
+  if (openSupplierFormBtn && openSupplierFormBtn.dataset.bound !== '1') {
+    openSupplierFormBtn.dataset.bound = '1';
+    openSupplierFormBtn.addEventListener('click', function (ev) {
+      ev && ev.preventDefault && ev.preventDefault();
+      openSupplierFormModal(null);
+    });
+  }
+
+  if (refreshSuppliersBtn && refreshSuppliersBtn.dataset.bound !== '1') {
+    refreshSuppliersBtn.dataset.bound = '1';
+    refreshSuppliersBtn.addEventListener('click', function (ev) {
+      ev && ev.preventDefault && ev.preventDefault();
+      loadSuppliers();
+    });
+  }
+
+  if (resetSupplierBtn && resetSupplierBtn.dataset.bound !== '1') {
+    resetSupplierBtn.dataset.bound = '1';
+    resetSupplierBtn.addEventListener('click', function (ev) {
+      ev && ev.preventDefault && ev.preventDefault();
+      bsHide(supplierFormModalEl);
+      resetSupplierForm();
+    });
+  }
+
+  if (supplierFormModalEl && supplierFormModalEl.dataset.bound !== '1') {
+    supplierFormModalEl.dataset.bound = '1';
+    supplierFormModalEl.addEventListener('hidden.bs.modal', function () {
+      resetSupplierForm();
+      if (suppliersModalEl && suppliersModalEl.classList.contains('show')) {
+        document.body.classList.add('modal-open');
+      }
+    });
+  }
+
+  if (saveSupplierBtn && saveSupplierBtn.dataset.bound !== '1') {
+    saveSupplierBtn.dataset.bound = '1';
+
+    saveSupplierBtn.addEventListener('click', async function (ev) {
+      ev && ev.preventDefault && ev.preventDefault();
+
+      const id = String(supplierId?.value || '').trim();
+      const name = String(supplierName?.value || '').trim();
+      if (!name) {
+        setSupplierStatus('Supplier name required', true);
+        return;
+      }
+
+      saveSupplierBtn.disabled = true;
+      const originalText = saveSupplierBtn.textContent;
+      let saved = false;
+      saveSupplierBtn.textContent = id ? 'Updating...' : 'Saving...';
+      setSupplierStatus('');
+
+      try {
+        const payload = {
+          name,
+          phone: String(supplierPhone?.value || '').trim(),
+          email: String(supplierEmail?.value || '').trim(),
+          address: String(supplierAddress?.value || '').trim(),
+          notes: String(supplierNotes?.value || '').trim(),
+          active: supplierActive ? supplierActive.checked : true
+        };
+
+        const res = await fetch(id ? `/admin/suppliers/${encodeURIComponent(id)}` : '/admin/suppliers', {
+          method: id ? 'PUT' : 'POST',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json'
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload)
+        });
+
+        const j = await res.json().catch(() => null);
+        if (!res.ok || !j || !j.ok) throw new Error(j?.error || 'Failed to save supplier');
+
+        showToast(id ? 'Supplier updated' : 'Supplier created', 1200);
+        saved = true;
+        bsHide(supplierFormModalEl);
+        resetSupplierForm();
+        await loadSuppliers();
+      } catch (err) {
+        console.error('save supplier error', err);
+        setSupplierStatus(err.message || 'Failed to save supplier', true);
+      } finally {
+        saveSupplierBtn.disabled = false;
+        if (!saved) saveSupplierBtn.textContent = originalText || 'Save supplier';
+      }
+    });
+  }
+
+  if (suppliersTable && suppliersTable.dataset.bound !== '1') {
+    suppliersTable.dataset.bound = '1';
+    suppliersTable.addEventListener('click', async function (ev) {
+      const accountLink = ev.target.closest && ev.target.closest('.supplier-account-link');
+      if (accountLink) {
+        bsHide(supplierFormModalEl);
+        bsHide(suppliersModalEl);
+        return;
+      }
+
+      const editBtn = ev.target.closest && ev.target.closest('.edit-supplier');
+      const toggleBtn = ev.target.closest && ev.target.closest('.toggle-supplier');
+      if (!editBtn && !toggleBtn) return;
+
+      ev.preventDefault();
+      const row = ev.target.closest('tr');
+      if (!row) return;
+
+      const id = String(row.dataset.supplierId || '').trim();
+      if (!id) return;
+
+      if (editBtn) {
+        openSupplierFormModal(row);
+        return;
+      }
+
+      const action = String(toggleBtn.dataset.action || '').toLowerCase() === 'restore' ? 'restore' : 'archive';
+      const name = row.dataset.name || 'this supplier';
+      if (!confirm(action === 'archive' ? `Archive ${name}?` : `Restore ${name}?`)) return;
+
+      toggleBtn.disabled = true;
+      try {
+        const res = await fetch(`/admin/suppliers/${encodeURIComponent(id)}/${action}`, {
+          method: 'PATCH',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          credentials: 'same-origin'
+        });
+        const j = await res.json().catch(() => null);
+        if (!res.ok || !j || !j.ok) throw new Error(j?.error || `Failed to ${action} supplier`);
+        showToast(action === 'archive' ? 'Supplier archived' : 'Supplier restored', 1200);
+        if (supplierId && String(supplierId.value) === id) {
+          bsHide(supplierFormModalEl);
+          resetSupplierForm();
+        }
+        await loadSuppliers();
+      } catch (err) {
+        console.error('toggle supplier error', err);
+        setSupplierStatus(err.message || `Failed to ${action} supplier`, true);
+      } finally {
+        toggleBtn.disabled = false;
+      }
+    });
   }
 
   // ----------------------------

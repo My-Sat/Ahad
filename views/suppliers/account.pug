@@ -1,0 +1,130 @@
+extends ../layout
+
+block content
+  .container
+    .d-none(data-main-width='wide')
+    .row
+      .col-12
+        .card.shadow-sm.dark-surface
+          .card-body.dark-card-body
+            .d-flex.justify-content-between.align-items-center.mb-3
+              div
+                h4.mb-0.text-white Supplier Account
+                p.text-muted-light.small.mb-0 Credit increases what we owe. Debit reduces what we owe.
+              a.btn.btn-outline-light-custom.btn-sm(href='/admin/stock', data-ajax='true')
+                | Back to Stock
+
+            p.text-muted-light.mb-2
+              strong.text-white Supplier:
+              |  #{supplier.name}
+              if supplier.phone
+                span.ms-2 #{supplier.phone}
+
+            .mb-3
+              span.small.text-muted-light Current balance:
+              span.ms-2.fw-semibold#supplierBalanceType Settled
+              strong.ms-2#supplierBalanceValue GH₵ 0.00
+
+            hr
+
+            .row.g-3
+              .col-md-6
+                h6.text-white Credit supplier
+                p.text-muted-light.small.mb-2 Increase supplier payable, e.g. additional supplier charge.
+                .input-group.mb-2
+                  input.form-control.form-control-dark(type='number', min='0.01', step='0.01', id='supplierCreditAmount', placeholder='Amount')
+                  button.btn.btn-outline-success#supplierCreditBtn(type='button') Credit
+                .row.g-2.mb-2
+                  .col-md-7
+                    label.form-label.small.text-muted-light(for='supplierCreditCashBook') Cash book
+                    select.form-select.form-select-sm.form-select-dark#supplierCreditCashBook
+                      option(value='') Loading cash books...
+                  .col-md-5
+                    label.form-label.small.text-muted-light(for='supplierCreditCashDirection') Cash movement
+                    select.form-select.form-select-sm.form-select-dark#supplierCreditCashDirection
+                      option(value='none' selected) No cash movement
+                      option(value='inflow') Receive into book
+                      option(value='outflow') Pay out from book
+                .row.g-2.mb-2#supplierCreditMomoFields(style='display:none;')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='supplierCreditMomoNumber') MoMo Number
+                    input.form-control.form-control-sm.form-control-dark#supplierCreditMomoNumber(type='text')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='supplierCreditMomoTxId') Transaction ID
+                    input.form-control.form-control-sm.form-control-dark#supplierCreditMomoTxId(type='text')
+                .row.g-2.mb-2#supplierCreditBankFields(style='display:none;')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='supplierCreditChequeNumber') Cheque Number
+                    input.form-control.form-control-sm.form-control-dark#supplierCreditChequeNumber(type='text')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='supplierCreditDepositDetails') Deposit Details
+                    input.form-control.form-control-sm.form-control-dark#supplierCreditDepositDetails(type='text')
+                input.form-control.form-control-dark#supplierCreditNote(type='text', placeholder='Note (optional)')
+
+              .col-md-6
+                h6.text-white Debit supplier
+                p.text-muted-light.small.mb-2 Reduce supplier payable, e.g. payment to supplier or returned stock.
+                .input-group.mb-2
+                  input.form-control.form-control-dark(type='number', min='0.01', step='0.01', id='supplierDebitAmount', placeholder='Amount')
+                  button.btn.btn-outline-danger#supplierDebitBtn(type='button') Debit
+                .row.g-2.mb-2
+                  .col-md-7
+                    label.form-label.small.text-muted-light(for='supplierDebitCashBook') Cash book
+                    select.form-select.form-select-sm.form-select-dark#supplierDebitCashBook
+                      option(value='') Loading cash books...
+                  .col-md-5
+                    label.form-label.small.text-muted-light(for='supplierDebitCashDirection') Cash movement
+                    select.form-select.form-select-sm.form-select-dark#supplierDebitCashDirection
+                      option(value='outflow' selected) Pay out from book
+                      option(value='inflow') Receive into book
+                      option(value='none') No cash movement
+                .row.g-2.mb-2#supplierDebitMomoFields(style='display:none;')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='supplierDebitMomoNumber') MoMo Number
+                    input.form-control.form-control-sm.form-control-dark#supplierDebitMomoNumber(type='text')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='supplierDebitMomoTxId') Transaction ID
+                    input.form-control.form-control-sm.form-control-dark#supplierDebitMomoTxId(type='text')
+                .row.g-2.mb-2#supplierDebitBankFields(style='display:none;')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='supplierDebitChequeNumber') Cheque Number
+                    input.form-control.form-control-sm.form-control-dark#supplierDebitChequeNumber(type='text')
+                  .col-6
+                    label.form-label.small.text-muted-light(for='supplierDebitDepositDetails') Deposit Details
+                    input.form-control.form-control-sm.form-control-dark#supplierDebitDepositDetails(type='text')
+                input.form-control.form-control-dark#supplierDebitNote(type='text', placeholder='Note (optional)')
+
+            hr
+
+            h6.text-white Account Ledger
+            .table-responsive
+              table.table.table-sm.table-hover#supplierLedgerTable
+                thead
+                  tr
+                    th.text-nowrap(style='min-width: 170px;') Date
+                    th(style='min-width: 280px;') Entry
+                    th.text-end Credit
+                    th.text-end.pe-4(style='min-width: 120px;') Debit
+                    th.text-nowrap.ps-3(style='min-width: 130px;') Balance Type
+                    th.text-end.pe-4(style='min-width: 150px;') Running Balance
+                    th.text-nowrap.ps-3(style='min-width: 150px;') Recorded by
+                tbody#supplierTxnBody
+                  if txns && txns.length
+                    each t in txns
+                      - var dt = ''
+                      - try { dt = t.createdAt ? new Date(t.createdAt).toLocaleString() : '' } catch(e){ dt='' }
+                      tr
+                        td #{dt}
+                        td #{t.note || t.sourceRef || String(t.type || '').toUpperCase()}
+                        td.text-end #{String(t.type || '').toLowerCase() === 'credit' ? ('GH₵ ' + Number(t.amount || 0).toFixed(2)) : '-'}
+                        td.text-end #{String(t.type || '').toLowerCase() === 'debit' ? ('GH₵ ' + Number(t.amount || 0).toFixed(2)) : '-'}
+                        td -
+                        td.text-end -
+                        td #{t.recordedByName || ''}
+                  else
+                    tr
+                      td.text-muted(colspan='7') No transactions yet.
+
+  script.
+    window.__SUPPLIER_ID__ = "#{supplier._id}";
+  script(src='/javascripts/supplier_account.js')
