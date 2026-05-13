@@ -752,7 +752,8 @@ exports.apiMaterialUsage = async (req, res) => {
       {
         $group: {
           _id: { store: '$store', material: '$material' },
-          totalCount: { $sum: { $ifNull: ['$count', 0] } }
+          totalCount: { $sum: { $ifNull: ['$count', 0] } },
+          totalCost: { $sum: { $ifNull: ['$totalCost', 0] } }
         }
       },
       { $sort: { totalCount: -1 } },
@@ -775,6 +776,7 @@ exports.apiMaterialUsage = async (req, res) => {
     materials.forEach(m => { mmap[String(m._id)] = m; });
 
     const totalUsed = rows.reduce((s, r) => s + Number(r.totalCount || 0), 0);
+    const totalCost = rows.reduce((s, r) => s + Number(r.totalCost || 0), 0);
 
     const out = rows.map(r => {
       const storeId = r._id?.store ? String(r._id.store) : '';
@@ -786,14 +788,15 @@ exports.apiMaterialUsage = async (req, res) => {
         storeName: store.name || 'Unknown',
         materialId,
         materialName: material.name || 'Unknown',
-        totalCount: Number((r.totalCount || 0).toFixed(2))
+        totalCount: Number((r.totalCount || 0).toFixed(2)),
+        totalCost: Number((r.totalCost || 0).toFixed(2))
       };
     });
 
     return res.json({
       ok: true,
       range: { from, to },
-      totals: { totalUsed: Number(totalUsed.toFixed(2)) },
+      totals: { totalUsed: Number(totalUsed.toFixed(2)), totalCost: Number(totalCost.toFixed(2)) },
       rows: out
     });
   } catch (err) {

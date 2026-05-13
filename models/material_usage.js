@@ -8,6 +8,8 @@ const MaterialUsageSchema = new mongoose.Schema({
   orderRef: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true },
   itemIndex: { type: Number, required: true },
   count: { type: Number, required: true, min: 0 },
+  unitCostSnapshot: { type: Number, default: 0, min: 0 },
+  totalCost: { type: Number, default: 0, min: 0 },
   createdAt: { type: Date, default: Date.now }
 });
 

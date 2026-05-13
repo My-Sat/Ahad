@@ -20,6 +20,15 @@ const {
   resolvePaymentCashBookContext,
   recordCashBookMovement
 } = require('../utilities/cash_books');
+const {
+  actorFromReq,
+  postOrderRevenue,
+  postOrderPayment,
+  postMaterialUsageCost,
+  postOutsourcedCost,
+  postPrinterDepreciation,
+  round2
+} = require('../utilities/accounting');
 
 function isOutSourcedCategoryName(name) {
   return /out[\s-]*sourced/i.test(String(name || '').trim());
@@ -162,6 +171,12 @@ exports.apiPayFromCustomerAccount = async (req, res) => {
       }
 
       await order.save({ session });
+      const savedPayment = order.payments && order.payments.length
+        ? order.payments[order.payments.length - 1]
+        : null;
+      if (savedPayment) {
+        await postOrderPayment(order, savedPayment, actorFromReq(req), session);
+      }
 
       result = {
         ok: true,
@@ -1099,10 +1114,21 @@ order.total = finalTotal;
 
     await order.save();
 
+    try {
+      const accountingActor = actorFromReq(req);
+      await postOrderRevenue(order, accountingActor);
+      for (const payment of (order.payments || [])) {
+        await postOrderPayment(order, payment, accountingActor);
+      }
+    } catch (acctErr) {
+      console.error('Accounting order revenue/payment posting failed', acctErr);
+    }
+
     // Credit outsourced artists for work rendered to us.
     try {
       const recBy = req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null;
       const recByName = (req.user?.name || req.user?.username || '').toString();
+      const accountingActor = actorFromReq(req);
       const artistTotals = new Map();
 
       for (const item of (order.items || [])) {
@@ -1122,6 +1148,7 @@ order.total = finalTotal;
           recordedBy: recBy,
           recordedByName: recByName
         }]);
+        await postOutsourcedCost(order, artistId, amount, accountingActor);
       }
     } catch (outsourceCreditErr) {
       console.error('Failed to credit outsourced artists', outsourceCreditErr);
@@ -1240,15 +1267,25 @@ try {
           : 1;
 
         const count = (Math.max(0, baseCount) + Math.max(0, spoiled)) * factorMul;
+        const unitCostSnapshot = round2(st.averageUnitCost || 0);
+        const totalCost = round2(count * unitCostSnapshot);
 
-        await MaterialUsage.create({
+        const usage = await MaterialUsage.create({
           store: opStore._id,
           material: m._id,
           orderId: order.orderId,
           orderRef: order._id,
           itemIndex: idx,
-          count
+          count,
+          unitCostSnapshot,
+          totalCost
         });
+
+        try {
+          await postMaterialUsageCost(usage, actorFromReq(req));
+        } catch (acctErr) {
+          console.error('Accounting material usage posting failed', acctErr);
+        }
 
         await MaterialAggregate.findOneAndUpdate(
           { store: opStore._id, material: m._id },
@@ -1281,7 +1318,7 @@ for (let idx = 0; idx < builtItems.length; idx++) {
   const usageType = (it.printerType === 'monochrome' || it.printerType === 'colour') ? it.printerType : null;
 
   // create usage record (store final usageCount)
-  await PrinterUsage.create({
+  const printerUsage = await PrinterUsage.create({
     printer: it.printer,
     orderId: order.orderId,
     orderRef: order._id,
@@ -1290,6 +1327,12 @@ for (let idx = 0; idx < builtItems.length; idx++) {
     type: usageType,
     note: 'order-created'
   });
+
+  try {
+    await postPrinterDepreciation(printerUsage, actorFromReq(req));
+  } catch (acctErr) {
+    console.error('Accounting printer depreciation posting failed', acctErr);
+  }
 
   // update printer aggregate (atomic increment) with usageCount
   try {
@@ -1844,6 +1887,9 @@ exports.apiPayOrder = async (req, res) => {
       }
 
       await order.save({ session });
+      const savedPayment = order.payments && order.payments.length
+        ? order.payments[order.payments.length - 1]
+        : payment;
 
       if (cashBookContext.cashBook) {
         await recordCashBookMovement({
@@ -1860,6 +1906,11 @@ exports.apiPayOrder = async (req, res) => {
           session
         });
       }
+
+      await postOrderPayment(order, savedPayment, {
+        postedBy: payment.recordedBy || null,
+        postedByName: payment.recordedByName || ''
+      }, session);
 
       // Ledger: order payment reduces debtor side (credit entry)
       if (hasCustomer) {
@@ -2051,6 +2102,9 @@ exports.apiPayBulkDebtor = async (req, res) => {
         order.paidAt = new Date();
 
         await order.save({ session });
+        const savedPayment = order.payments && order.payments.length
+          ? order.payments[order.payments.length - 1]
+          : null;
 
         if (cashBookContext.cashBook) {
           await recordCashBookMovement({
@@ -2066,6 +2120,10 @@ exports.apiPayBulkDebtor = async (req, res) => {
             recordedByName,
             session
           });
+        }
+
+        if (savedPayment) {
+          await postOrderPayment(order, savedPayment, { postedBy: recordedBy, postedByName: recordedByName }, session);
         }
 
         if (order.customer) {

@@ -5,6 +5,11 @@ const {
   resolvePaymentCashBookContext,
   recordCashBookMovement
 } = require('../utilities/cash_books');
+const {
+  ACCOUNTS,
+  actorFromReq,
+  postJournalEntry
+} = require('../utilities/accounting');
 
 function serializeSupplier(s) {
   return {
@@ -239,7 +244,7 @@ exports.apiAdjustAccount = async (req, res) => {
       updatedSupplier.updatedBy = recordedBy || null;
       await updatedSupplier.save({ session });
 
-      await SupplierAccountTxn.create([{
+      const txnDocs = await SupplierAccountTxn.create([{
         supplier: updatedSupplier._id,
         type,
         amount,
@@ -255,6 +260,7 @@ exports.apiAdjustAccount = async (req, res) => {
         recordedBy,
         recordedByName
       }], { session });
+      const supplierTxn = txnDocs[0];
 
       if (cashBookContext.cashBook && cashDirection !== 'none') {
         await recordCashBookMovement({
@@ -271,6 +277,49 @@ exports.apiAdjustAccount = async (req, res) => {
           session
         });
       }
+
+      const actor = actorFromReq(req);
+      const dimensions = {
+        supplierId: updatedSupplier._id,
+        cashBookId: cashBookContext.cashBook ? cashBookContext.cashBook._id : null,
+        cashBookName: cashBookContext.cashBook ? (cashBookContext.cashBook.name || '') : ''
+      };
+
+      let lines = [];
+      if (type === 'credit') {
+        lines = [
+          { accountCode: ACCOUNTS.GENERAL_EXPENSE, debit: amount, dimensions },
+          { accountCode: ACCOUNTS.ACCOUNTS_PAYABLE, credit: amount, dimensions }
+        ];
+      } else if (cashBookContext.cashBook && cashDirection === 'outflow') {
+        lines = [
+          { accountCode: ACCOUNTS.ACCOUNTS_PAYABLE, debit: amount, dimensions },
+          { accountCode: ACCOUNTS.CASH, credit: amount, dimensions }
+        ];
+      } else if (cashBookContext.cashBook && cashDirection === 'inflow') {
+        lines = [
+          { accountCode: ACCOUNTS.CASH, debit: amount, dimensions },
+          { accountCode: ACCOUNTS.ACCOUNTS_PAYABLE, credit: amount, dimensions }
+        ];
+      } else {
+        lines = [
+          { accountCode: ACCOUNTS.ACCOUNTS_PAYABLE, debit: amount, dimensions },
+          { accountCode: ACCOUNTS.SUPPLIER_ADJUSTMENT_INCOME, credit: amount, dimensions }
+        ];
+      }
+
+      await postJournalEntry({
+        sourceKey: `supplier_account_txn:${supplierTxn._id}`,
+        sourceType: 'supplier_account_adjustment',
+        sourceId: supplierTxn._id,
+        sourceRef: updatedSupplier.name || String(updatedSupplier._id),
+        date: supplierTxn.createdAt || new Date(),
+        memo: `${type === 'credit' ? 'Credit' : 'Debit'} supplier account`,
+        postedBy: actor.postedBy,
+        postedByName: actor.postedByName,
+        lines,
+        session
+      });
     });
 
     return res.json({

@@ -14,6 +14,7 @@ const PrinterUsageSchema = new mongoose.Schema({
   type: { type: String, enum: ['monochrome', 'colour', null], default: null },
   // optional note (e.g., 'manual adjust' or 'order-created')
   note: { type: String, default: '' },
+  depreciationCost: { type: Number, default: 0, min: 0 },
   createdAt: { type: Date, default: Date.now, index: true }
 });
 

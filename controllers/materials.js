@@ -13,6 +13,11 @@ const Supplier = require('../models/supplier');
 const SupplierAccountTxn = require('../models/supplier_account_txn');
 const StockPurchase = require('../models/stock_purchase');
 const { resolvePaymentCashBookContext, recordCashBookMovement } = require('../utilities/cash_books');
+const {
+  actorFromReq,
+  postStockPurchase,
+  round2
+} = require('../utilities/accounting');
 
 
 // Helper: safely parse selections (JSON string or array)
@@ -541,17 +546,34 @@ exports.purchaseStock = async (req, res) => {
         }
       }
 
-      const updatedStock = await StoreStock.findOneAndUpdate(
-        { store: store._id, material: material._id },
-        { $set: { active: true }, $inc: { stocked: qty } },
-        { upsert: true, new: true, setDefaultsOnInsert: true, session }
-      );
-
       const agg = await MaterialAggregate
         .findOne({ store: store._id, material: material._id })
         .session(session)
         .lean();
       const used = agg ? Number(agg.total || 0) : 0;
+      const existingStock = await StoreStock.findOne({ store: store._id, material: material._id }).session(session);
+      const oldStocked = existingStock ? Number(existingStock.stocked || 0) : 0;
+      const oldAverageUnitCost = existingStock ? Number(existingStock.averageUnitCost || 0) : 0;
+      const oldRemaining = Math.max(0, oldStocked - used);
+      const oldRemainingValue = round2(oldRemaining * oldAverageUnitCost);
+      const newAverageUnitCost = oldRemaining + qty > 0
+        ? round2((oldRemainingValue + totalCost) / (oldRemaining + qty))
+        : round2(unitCost);
+
+      const updatedStock = await StoreStock.findOneAndUpdate(
+        { store: store._id, material: material._id },
+        {
+          $set: {
+            active: true,
+            averageUnitCost: newAverageUnitCost,
+            lastPurchaseUnitCost: Number(unitCost.toFixed(2)),
+            lastPurchaseAt: new Date()
+          },
+          $inc: { stocked: qty }
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true, session }
+      );
+
       const remaining = Math.max(0, Number(updatedStock.stocked || 0) - used);
 
       const recordedBy = req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null;
@@ -633,6 +655,8 @@ exports.purchaseStock = async (req, res) => {
           recordedByName
         }], { session });
       }
+
+      await postStockPurchase(purchase, actorFromReq(req), session);
 
       result = {
         ok: true,
@@ -770,6 +794,8 @@ exports.transferStoreStock = async (req, res) => {
       return res.status(409).json({ error: `Insufficient remaining stock to transfer. Remaining: ${remaining}` });
     }
 
+    const sourceUnitCost = round2(fromStock.averageUnitCost || 0);
+
     // deduct from source stock
     const newFromStocked = Math.max(0, stocked - qty);
     const updatedFrom = await StoreStock.findByIdAndUpdate(
@@ -778,10 +804,29 @@ exports.transferStoreStock = async (req, res) => {
       { new: true }
     ).populate('material', 'name selections').lean();
 
+    const existingDestStock = await StoreStock.findOne({ store: toStoreId, material: fromStock.material._id }).lean();
+    const destAgg = await MaterialAggregate.findOne({ store: toStoreId, material: fromStock.material._id }).lean();
+    const destUsed = destAgg ? Number(destAgg.total || 0) : 0;
+    const destStocked = existingDestStock ? Number(existingDestStock.stocked || 0) : 0;
+    const destRemaining = Math.max(0, destStocked - destUsed);
+    const destAverageCost = existingDestStock ? Number(existingDestStock.averageUnitCost || 0) : 0;
+    const destValue = round2(destRemaining * destAverageCost);
+    const transferValue = round2(qty * sourceUnitCost);
+    const newDestRemaining = destRemaining + qty;
+    const newDestAverageCost = newDestRemaining > 0 ? round2((destValue + transferValue) / newDestRemaining) : destAverageCost;
+
     // add to destination stock (upsert)
     const updatedTo = await StoreStock.findOneAndUpdate(
       { store: toStoreId, material: fromStock.material._id },
-      { $set: { active: true }, $inc: { stocked: qty } },
+      {
+        $set: {
+          active: true,
+          averageUnitCost: newDestAverageCost,
+          lastPurchaseUnitCost: sourceUnitCost,
+          lastPurchaseAt: new Date()
+        },
+        $inc: { stocked: qty }
+      },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     ).populate('material', 'name selections').lean();
 

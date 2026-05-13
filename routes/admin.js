@@ -17,6 +17,7 @@ const discountsController = require('../controllers/discounts');
 const reportsController = require('../controllers/reports');
 const cashBooksController = require('../controllers/cashBooks');
 const suppliersController = require('../controllers/suppliers');
+const accountingController = require('../controllers/accounting');
 
 
 
@@ -152,6 +153,18 @@ router.patch('/cash-books/:id/archive', ensureAdmin, cashBooksController.apiArch
 router.patch('/cash-books/:id/restore', ensureAdmin, cashBooksController.apiRestore);
 router.put('/cash-books/:id', ensureAdmin, cashBooksController.apiUpdate);
 
+// Accounting
+router.get('/accounting', ensureAdmin, accountingController.page);
+router.get('/accounting/api/profit-loss', ensureAdmin, accountingController.apiProfitLoss);
+router.get('/accounting/api/journal-entries', ensureAdmin, accountingController.apiJournalEntries);
+router.get('/accounting/api/prepaid-expenses', ensureAdmin, accountingController.apiPrepaidExpenses);
+router.get('/accounting/api/accrued-expenses', ensureAdmin, accountingController.apiAccruedExpenses);
+router.post('/accounting/manual-expenses', ensureAdmin, accountingController.apiCreateManualExpense);
+router.post('/accounting/prepaid-expenses/:id/release', ensureAdmin, accountingController.apiReleasePrepaidExpense);
+router.post('/accounting/accrued-expenses/:id/pay', ensureAdmin, accountingController.apiPayAccruedExpense);
+router.post('/accounting/fixed-assets', ensureAdmin, accountingController.apiCreateFixedAsset);
+router.post('/accounting/fixed-assets/:id/depreciate', ensureAdmin, accountingController.apiDepreciateFixedAsset);
+
 // Suppliers
 router.get('/suppliers/api', ensureAdmin, suppliersController.apiList);
 router.post('/suppliers', ensureAdmin, suppliersController.apiCreate);
@@ -177,6 +190,7 @@ router.get('/reports/api/customer-summary', ensureAdmin, reportsController.apiCu
 router.get('/reports/api/customer-account-activity', ensureAdmin, reportsController.apiCustomerAccountActivity);
 router.get('/reports/api/printer-usage', ensureAdmin, reportsController.apiPrinterUsage);
 router.get('/reports/api/material-usage', ensureAdmin, reportsController.apiMaterialUsage);
+router.get('/reports/api/profit-loss', ensureAdmin, accountingController.apiProfitLoss);
 
 
 module.exports = router;

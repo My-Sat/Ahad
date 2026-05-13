@@ -71,6 +71,44 @@ block content
                           tr
                             td.text-muted(colspan='3') Loading...
 
+                    h6.text-white.mt-4.mb-2 Profit & Loss (Accrual)
+                    .row.g-2.mb-2
+                      .col-6.col-lg-2
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Revenue
+                            strong#reportPlRevenue GH₵ 0.00
+                      .col-6.col-lg-2
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Cost of Sales
+                            strong#reportPlCogs GH₵ 0.00
+                      .col-6.col-lg-2
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Gross Profit
+                            strong#reportPlGross GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Operating Expenses
+                            strong#reportPlOperating GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Net Profit / Loss
+                            strong#reportPlNet GH₵ 0.00
+                    .table-responsive.mb-3
+                      table.table.table-sm.table-hover#profitLossTable
+                        thead
+                          tr
+                            th Section
+                            th Account
+                            th.text-end Amount (GH₵)
+                        tbody
+                          tr
+                            td.text-muted(colspan='3') Loading...
+
                     h6.text-white.mt-3.mb-2 Cashier Collections (Range)
                     .table-responsive.mb-3
                       table.table.table-sm.table-hover#cashierCollectionsTable
@@ -293,9 +331,10 @@ block content
                             th Store
                             th Material
                             th.text-end Total Used
+                            th.text-end Cost (GH₵)
                         tbody
                           tr
-                            td.text-muted(colspan='3') Loading...
+                            td.text-muted(colspan='4') Loading...
 
                     h6.text-white.mt-3.mb-2 Inventory Snapshot (Current)
                     .table-responsive.mb-3

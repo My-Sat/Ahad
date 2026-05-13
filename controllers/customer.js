@@ -7,6 +7,12 @@ const {
   resolvePaymentCashBookContext,
   recordCashBookMovement
 } = require('../utilities/cash_books');
+const {
+  ACCOUNTS,
+  actorFromReq,
+  postJournalEntry,
+  postOrderPayment
+} = require('../utilities/accounting');
 
 /**
  * Render front desk page
@@ -494,7 +500,7 @@ exports.apiAdjustAccount = async (req, res) => {
       await updatedCustomer.save({ session });
 
       // Always record the manual adjustment itself.
-      await CustomerAccountTxn.create([{
+      const txnDocs = await CustomerAccountTxn.create([{
         customer: updatedCustomer._id,
         type,
         amount,
@@ -507,6 +513,7 @@ exports.apiAdjustAccount = async (req, res) => {
         recordedBy,
         recordedByName
       }], { session });
+      const accountTxn = txnDocs[0];
 
       if (cashBookContext.cashBook && cashDirection !== 'none') {
         await recordCashBookMovement({
@@ -523,6 +530,50 @@ exports.apiAdjustAccount = async (req, res) => {
           session
         });
       }
+
+      const dimensions = {
+        customerId: updatedCustomer._id,
+        cashBookId: cashBookContext.cashBook ? cashBookContext.cashBook._id : null,
+        cashBookName: cashBookContext.cashBook ? (cashBookContext.cashBook.name || '') : ''
+      };
+      let lines = [];
+      if (type === 'credit') {
+        if (cashBookContext.cashBook && cashDirection === 'inflow') {
+          lines = [
+            { accountCode: ACCOUNTS.CASH, debit: amount, dimensions },
+            { accountCode: ACCOUNTS.CUSTOMER_CREDITS, credit: amount, dimensions }
+          ];
+        } else {
+          lines = [
+            { accountCode: ACCOUNTS.GENERAL_EXPENSE, debit: amount, dimensions },
+            { accountCode: ACCOUNTS.CUSTOMER_CREDITS, credit: amount, dimensions }
+          ];
+        }
+      } else if (cashBookContext.cashBook && cashDirection === 'outflow') {
+        lines = [
+          { accountCode: ACCOUNTS.CUSTOMER_CREDITS, debit: amount, dimensions },
+          { accountCode: ACCOUNTS.CASH, credit: amount, dimensions }
+        ];
+      } else {
+        lines = [
+          { accountCode: ACCOUNTS.ACCOUNTS_RECEIVABLE, debit: amount, dimensions },
+          { accountCode: ACCOUNTS.SALES_REVENUE, credit: amount, dimensions }
+        ];
+      }
+
+      const actor = actorFromReq(req);
+      await postJournalEntry({
+        sourceKey: `customer_account_txn:${accountTxn._id}`,
+        sourceType: 'customer_account_adjustment',
+        sourceId: accountTxn._id,
+        sourceRef: String(updatedCustomer.displayName || updatedCustomer.phone || updatedCustomer._id),
+        date: accountTxn.createdAt || new Date(),
+        memo: `${type === 'credit' ? 'Credit' : 'Debit'} customer account`,
+        postedBy: actor.postedBy,
+        postedByName: actor.postedByName,
+        lines,
+        session
+      });
 
       if (type === 'credit') {
         let available = Number(updatedCustomer.accountBalance || 0);
@@ -559,6 +610,12 @@ exports.apiAdjustAccount = async (req, res) => {
             }
 
             await order.save({ session });
+            const savedPayment = order.payments && order.payments.length
+              ? order.payments[order.payments.length - 1]
+              : null;
+            if (savedPayment) {
+              await postOrderPayment(order, savedPayment, { postedBy: recordedBy, postedByName: recordedByName }, session);
+            }
             available = Number((available - use).toFixed(2));
             settledAmount = Number((settledAmount + use).toFixed(2));
             settledOrdersCount += 1;

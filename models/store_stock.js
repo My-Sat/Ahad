@@ -7,6 +7,9 @@ const StoreStockSchema = new mongoose.Schema({
 
   // Stock reference for THIS store (not global)
   stocked: { type: Number, default: 0, min: 0 },
+  averageUnitCost: { type: Number, default: 0, min: 0 },
+  lastPurchaseUnitCost: { type: Number, default: 0, min: 0 },
+  lastPurchaseAt: { type: Date, default: null },
 
   // remove from store list without deleting history
   active: { type: Boolean, default: true }

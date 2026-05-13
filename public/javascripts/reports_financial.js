@@ -80,6 +80,41 @@
     });
   }
 
+  function renderProfitLoss(pl) {
+    const totals = pl?.totals || {};
+    setText('reportPlRevenue', formatCedi(totals.revenueTotal || 0));
+    setText('reportPlCogs', formatCedi(totals.cogsTotal || 0));
+    setText('reportPlGross', formatCedi(totals.grossProfit || 0));
+    setText('reportPlOperating', formatCedi(totals.operatingExpensesTotal || 0));
+    setText('reportPlNet', formatCedi(totals.netProfit || 0));
+
+    const table = document.getElementById('profitLossTable');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+
+    const rows = []
+      .concat((pl?.revenue || []).map(r => Object.assign({ section: 'Revenue' }, r)))
+      .concat((pl?.cogs || []).map(r => Object.assign({ section: 'Cost of Sales' }, r)))
+      .concat((pl?.operatingExpenses || []).map(r => Object.assign({ section: 'Operating Expenses' }, r)));
+
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="3">No accounting entries in this range.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.section || '')}</td>
+        <td>${escapeHtml(`${r.code || ''} ${r.name || ''}`.trim())}</td>
+        <td class="text-end">${formatCedi(r.amount || 0)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
   function renderAccountantLedger(rows) {
     const table = document.getElementById('accountantLedgerTable');
     if (!table) return;
@@ -352,7 +387,7 @@
     const tbody = table.querySelector('tbody');
     if (!tbody) return;
     if (!rows || !rows.length) {
-      tbody.innerHTML = '<tr><td class="text-muted" colspan="3">No material usage in this range.</td></tr>';
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="4">No material usage in this range.</td></tr>';
       return;
     }
     tbody.innerHTML = '';
@@ -362,6 +397,7 @@
         <td>${escapeHtml(r.storeName || '')}</td>
         <td>${escapeHtml(r.materialName || '')}</td>
         <td class="text-end">${Number(r.totalCount || 0)}</td>
+        <td class="text-end">${formatCedi(r.totalCost || 0)}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -400,7 +436,8 @@
         customerSummary,
         customerAccount,
         printerUsage,
-        materialUsage
+        materialUsage,
+        profitLoss
       ] = await Promise.all([
         fetchJson(`/admin/reports/api/financial-summary${rangeQuery}`),
         fetchJson(`/admin/reports/api/cashier-collections${rangeQuery}`),
@@ -414,7 +451,8 @@
         fetchJson(`/admin/reports/api/customer-summary${rangeQuery}`),
         fetchJson(`/admin/reports/api/customer-account-activity${rangeQuery}`),
         fetchJson(`/admin/reports/api/printer-usage${rangeQuery}`),
-        fetchJson(`/admin/reports/api/material-usage${rangeQuery}`)
+        fetchJson(`/admin/reports/api/material-usage${rangeQuery}`),
+        fetchJson(`/admin/reports/api/profit-loss${rangeQuery}`)
       ]);
 
       if (financial && financial.summary) {
@@ -456,6 +494,7 @@
         (materialUsage && materialUsage.totals) ? materialUsage.totals : { totalUsed: 0 },
         (materialUsage && materialUsage.rows) ? materialUsage.rows : []
       );
+      renderProfitLoss(profitLoss || {});
 
       if (statusEl) {
         const label = (financial && financial.range)
