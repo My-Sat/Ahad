@@ -380,10 +380,10 @@ block content
                           label.form-label.text-muted-light(for='fixedAssetDate') Purchase date
                           input.form-control.form-control-dark#fixedAssetDate(type='date', value=defaultTo)
                       .row.g-2.mt-1
-                        .col-6
+                        .col-6#fixedAssetUnitsWrap
                           label.form-label.text-muted-light(for='fixedAssetUnits') Useful life units
                           input.form-control.form-control-dark#fixedAssetUnits(type='number', min='0', step='1', placeholder='e.g. 1000000')
-                        .col-6
+                        .col-6#fixedAssetMonthsWrap
                           label.form-label.text-muted-light(for='fixedAssetMonths') Useful life months
                           input.form-control.form-control-dark#fixedAssetMonths(type='number', min='0', step='1')
                       p.small.text-muted-light.mt-2.mb-0 Usage based posts when the linked printer is used. Straight line posts automatically once per month.

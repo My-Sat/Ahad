@@ -64,6 +64,12 @@
       return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
     }
 
+    function formatDateTime(value) {
+      if (!value) return '';
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? '' : d.toLocaleString();
+    }
+
     function prependTableRow(tableId, rowHtml) {
       const tbody = document.querySelector(`#${tableId} tbody`);
       if (!tbody) return;
@@ -255,6 +261,36 @@
       renderAccruedPayments(j.payments || []);
     }
 
+    function renderJournalEntries(entries) {
+      const tbody = document.querySelector('#journalEntriesTable tbody');
+      if (!tbody) return;
+      if (!entries || !entries.length) {
+        tbody.innerHTML = '<tr><td class="text-muted" colspan="4">No journal entries yet.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = entries.map(j => {
+        const lines = (j.lines || []).map(line => `
+          <div class="small">
+            ${escapeHtml(line.accountCode || '')} ${escapeHtml(line.accountName || '')}: Dr ${Number(line.debit || 0).toFixed(2)} / Cr ${Number(line.credit || 0).toFixed(2)}
+          </div>
+        `).join('');
+        return `
+          <tr>
+            <td>${formatDateTime(j.date)}</td>
+            <td>${escapeHtml(j.sourceType || '')}</td>
+            <td>${escapeHtml(j.memo || '')}</td>
+            <td>${lines}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function loadJournalEntries() {
+      const j = await fetchJson('/admin/accounting/api/journal-entries');
+      renderJournalEntries(j.entries || []);
+    }
+
     async function loadProfitLoss() {
       const j = await fetchJson(`/admin/accounting/api/profit-loss${query()}`);
       const t = j.totals || {};
@@ -287,6 +323,14 @@
       if (bankWrap) bankWrap.classList.toggle('d-none', !!forceHidden || kind !== 'bank');
     }
 
+    function toggleFixedAssetLifeFields() {
+      const method = document.getElementById('fixedAssetMethod')?.value || 'usage';
+      const unitsWrap = document.getElementById('fixedAssetUnitsWrap');
+      const monthsWrap = document.getElementById('fixedAssetMonthsWrap');
+      if (unitsWrap) unitsWrap.classList.toggle('d-none', method === 'straight_line');
+      if (monthsWrap) monthsWrap.classList.toggle('d-none', method !== 'straight_line');
+    }
+
     document.getElementById('loadProfitLossBtn')?.addEventListener('click', () => {
       loadProfitLoss().catch(err => alert(err.message));
     });
@@ -296,10 +340,12 @@
     document.getElementById('fixedAssetCashBook')?.addEventListener('change', () => {
       toggleCashBookDetails('fixedAssetCashBook', 'fixedAssetMomoWrap', 'fixedAssetBankWrap', false);
     });
+    document.getElementById('fixedAssetMethod')?.addEventListener('change', toggleFixedAssetLifeFields);
     document.getElementById('accruedPaymentCashBook')?.addEventListener('change', () => {
       toggleCashBookDetails('accruedPaymentCashBook', 'accruedPaymentMomoWrap', 'accruedPaymentBankWrap', false);
     });
     toggleManualExpenseCashBook();
+    toggleFixedAssetLifeFields();
     toggleCashBookDetails('fixedAssetCashBook', 'fixedAssetMomoWrap', 'fixedAssetBankWrap', false);
     toggleCashBookDetails('accruedPaymentCashBook', 'accruedPaymentMomoWrap', 'accruedPaymentBankWrap', false);
 
@@ -336,6 +382,7 @@
         await loadPrepaids();
         await loadAccruedExpenses();
         await loadProfitLoss();
+        await loadJournalEntries();
       } catch (err) {
         if (status) status.textContent = err.message;
         else alert(err.message);
@@ -388,6 +435,7 @@
         toggleCashBookDetails('accruedPaymentCashBook', 'accruedPaymentMomoWrap', 'accruedPaymentBankWrap', false);
         await loadAccruedExpenses();
         await loadProfitLoss();
+        await loadJournalEntries();
       } catch (err) {
         if (status) status.textContent = err.message;
         else alert(err.message);
@@ -434,6 +482,7 @@
         this.reset();
         await loadPrepaids();
         await loadProfitLoss();
+        await loadJournalEntries();
       } catch (err) {
         if (status) status.textContent = err.message;
         else alert(err.message);
@@ -477,6 +526,7 @@
         prependFixedAsset(j.asset, fallbackPrinterName);
         if (status) status.textContent = 'Fixed asset recorded.';
         this.reset();
+        toggleFixedAssetLifeFields();
         toggleCashBookDetails('fixedAssetCashBook', 'fixedAssetMomoWrap', 'fixedAssetBankWrap', false);
       } catch (err) {
         if (status) status.textContent = err.message;

@@ -422,7 +422,7 @@ exports.page = async (req, res) => {
       AccruedExpensePayment.find().sort({ date: -1, createdAt: -1 }).limit(100).lean(),
       ManualExpense.find({ treatment: 'prepaid' }).sort({ date: -1, createdAt: -1 }).limit(200).lean(),
       PrepaidRelease.find().sort({ date: -1, createdAt: -1 }).limit(100).lean(),
-      JournalEntry.find().sort({ date: -1, createdAt: -1 }).limit(50).lean()
+      JournalEntry.find().sort({ createdAt: -1, _id: -1 }).limit(50).lean()
     ]);
 
     return res.render('accounting/index', {
@@ -1093,7 +1093,7 @@ exports.apiDepreciateFixedAsset = async (req, res) => {
 
 exports.apiJournalEntries = async (req, res) => {
   try {
-    const entries = await JournalEntry.find().sort({ date: -1, createdAt: -1 }).limit(100).lean();
+    const entries = await JournalEntry.find().sort({ createdAt: -1, _id: -1 }).limit(100).lean();
     return res.json({ ok: true, entries });
   } catch (err) {
     console.error('accounting.apiJournalEntries error', err);
