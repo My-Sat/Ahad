@@ -156,6 +156,8 @@ router.put('/cash-books/:id', ensureAdmin, cashBooksController.apiUpdate);
 // Accounting
 router.get('/accounting', ensureAdmin, accountingController.page);
 router.get('/accounting/api/profit-loss', ensureAdmin, accountingController.apiProfitLoss);
+router.get('/accounting/api/trial-balance', ensureAdmin, accountingController.apiTrialBalance);
+router.get('/accounting/api/balance-sheet', ensureAdmin, accountingController.apiBalanceSheet);
 router.get('/accounting/api/journal-entries', ensureAdmin, accountingController.apiJournalEntries);
 router.get('/accounting/api/prepaid-expenses', ensureAdmin, accountingController.apiPrepaidExpenses);
 router.get('/accounting/api/accrued-expenses', ensureAdmin, accountingController.apiAccruedExpenses);

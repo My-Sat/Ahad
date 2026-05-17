@@ -43,6 +43,20 @@
       return sp.toString() ? `?${sp}` : '';
     }
 
+    function trialBalanceQuery() {
+      const to = document.getElementById('trialBalanceTo')?.value || '';
+      const sp = new URLSearchParams();
+      if (to) sp.set('to', to);
+      return sp.toString() ? `?${sp}` : '';
+    }
+
+    function balanceSheetQuery() {
+      const to = document.getElementById('balanceSheetTo')?.value || '';
+      const sp = new URLSearchParams();
+      if (to) sp.set('to', to);
+      return sp.toString() ? `?${sp}` : '';
+    }
+
     function renderRows(tableId, rows) {
       const tbody = document.querySelector(`#${tableId} tbody`);
       if (!tbody) return;
@@ -68,6 +82,12 @@
       if (!value) return '';
       const d = new Date(value);
       return Number.isNaN(d.getTime()) ? '' : d.toLocaleString();
+    }
+
+    function fmtBalance(value) {
+      const amount = Number(value || 0);
+      if (amount < -0.009) return `(${fmt(Math.abs(amount))})`;
+      return fmt(amount);
     }
 
     function prependTableRow(tableId, rowHtml) {
@@ -291,6 +311,86 @@
       renderJournalEntries(j.entries || []);
     }
 
+    function renderTrialBalance(data) {
+      const rows = data?.rows || [];
+      const totals = data?.totals || {};
+      const tbody = document.querySelector('#trialBalanceTable tbody');
+      setText('trialBalanceDebit', fmt(totals.totalDebit));
+      setText('trialBalanceCredit', fmt(totals.totalCredit));
+      setText('trialBalanceDifference', fmt(Math.abs(Number(totals.difference || 0))));
+
+      const badge = document.getElementById('trialBalanceStatusBadge');
+      if (badge) {
+        badge.className = `badge ${totals.balanced ? 'bg-success' : 'bg-danger'}`;
+        badge.textContent = totals.balanced ? 'Balanced' : 'Out of balance';
+      }
+
+      if (!tbody) return;
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No trial balance entries.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(row => {
+        const debit = Number(row.debitBalance || 0);
+        const credit = Number(row.creditBalance || 0);
+        const isZero = Math.abs(debit) <= 0.009 && Math.abs(credit) <= 0.009;
+        return `
+          <tr class="${isZero ? 'text-muted' : ''}">
+            <td>${escapeHtml(row.code || '')}</td>
+            <td>${escapeHtml(row.name || '')}</td>
+            <td>${escapeHtml(row.type || '')}</td>
+            <td>${escapeHtml(row.group || '')}</td>
+            <td class="text-end">${debit > 0 ? fmt(debit) : '-'}</td>
+            <td class="text-end">${credit > 0 ? fmt(credit) : '-'}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function loadTrialBalance() {
+      const j = await fetchJson(`/admin/accounting/api/trial-balance${trialBalanceQuery()}`);
+      renderTrialBalance(j);
+    }
+
+    function renderBalanceSheetRows(tableId, rows) {
+      const tbody = document.querySelector(`#${tableId} tbody`);
+      if (!tbody) return;
+      if (!rows || !rows.length) {
+        tbody.innerHTML = '<tr><td class="text-muted" colspan="3">No balances.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(row => `
+        <tr class="${row.calculated ? 'table-active' : ''}">
+          <td>${row.code ? `${escapeHtml(row.code)} ` : ''}${escapeHtml(row.name || '')}</td>
+          <td>${escapeHtml(row.group || '')}</td>
+          <td class="text-end">${fmtBalance(row.amount)}</td>
+        </tr>
+      `).join('');
+    }
+
+    function renderBalanceSheet(data) {
+      const totals = data?.totals || {};
+      setText('balanceSheetAssets', fmtBalance(totals.totalAssets));
+      setText('balanceSheetLiabilities', fmtBalance(totals.totalLiabilities));
+      setText('balanceSheetEquity', fmtBalance(totals.totalEquity));
+      setText('balanceSheetLiabilitiesEquity', fmtBalance(totals.totalLiabilitiesAndEquity));
+
+      const badge = document.getElementById('balanceSheetStatusBadge');
+      if (badge) {
+        badge.className = `badge ${totals.balanced ? 'bg-success' : 'bg-danger'}`;
+        badge.textContent = totals.balanced ? 'Balanced' : `Difference ${fmtBalance(totals.difference)}`;
+      }
+
+      renderBalanceSheetRows('balanceSheetAssetsTable', data?.assets || []);
+      renderBalanceSheetRows('balanceSheetLiabilitiesTable', data?.liabilities || []);
+      renderBalanceSheetRows('balanceSheetEquityTable', data?.equity || []);
+    }
+
+    async function loadBalanceSheet() {
+      const j = await fetchJson(`/admin/accounting/api/balance-sheet${balanceSheetQuery()}`);
+      renderBalanceSheet(j);
+    }
+
     async function loadProfitLoss() {
       const j = await fetchJson(`/admin/accounting/api/profit-loss${query()}`);
       const t = j.totals || {};
@@ -333,6 +433,19 @@
 
     document.getElementById('loadProfitLossBtn')?.addEventListener('click', () => {
       loadProfitLoss().catch(err => alert(err.message));
+    });
+    document.getElementById('loadTrialBalanceBtn')?.addEventListener('click', () => {
+      loadTrialBalance().catch(err => alert(err.message));
+    });
+    document.getElementById('loadBalanceSheetBtn')?.addEventListener('click', async function () {
+      const originalText = setButtonLoading(this, 'Loading...');
+      try {
+        await loadBalanceSheet();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        restoreButton(this, originalText);
+      }
     });
 
     document.getElementById('manualExpenseTreatment')?.addEventListener('change', toggleManualExpenseCashBook);
@@ -382,6 +495,8 @@
         await loadPrepaids();
         await loadAccruedExpenses();
         await loadProfitLoss();
+        await loadTrialBalance();
+        await loadBalanceSheet();
         await loadJournalEntries();
       } catch (err) {
         if (status) status.textContent = err.message;
@@ -435,6 +550,8 @@
         toggleCashBookDetails('accruedPaymentCashBook', 'accruedPaymentMomoWrap', 'accruedPaymentBankWrap', false);
         await loadAccruedExpenses();
         await loadProfitLoss();
+        await loadTrialBalance();
+        await loadBalanceSheet();
         await loadJournalEntries();
       } catch (err) {
         if (status) status.textContent = err.message;
@@ -482,6 +599,8 @@
         this.reset();
         await loadPrepaids();
         await loadProfitLoss();
+        await loadTrialBalance();
+        await loadBalanceSheet();
         await loadJournalEntries();
       } catch (err) {
         if (status) status.textContent = err.message;
@@ -528,6 +647,10 @@
         this.reset();
         toggleFixedAssetLifeFields();
         toggleCashBookDetails('fixedAssetCashBook', 'fixedAssetMomoWrap', 'fixedAssetBankWrap', false);
+        await loadProfitLoss();
+        await loadTrialBalance();
+        await loadBalanceSheet();
+        await loadJournalEntries();
       } catch (err) {
         if (status) status.textContent = err.message;
         else alert(err.message);
@@ -537,6 +660,8 @@
     });
 
     loadProfitLoss().catch(() => {});
+    loadTrialBalance().catch(() => {});
+    loadBalanceSheet().catch(() => {});
   }
 
   if (document.readyState === 'loading') {

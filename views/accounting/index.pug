@@ -16,6 +16,10 @@ block content
               li.nav-item(role='presentation')
                 button.nav-link.active(type='button', data-bs-toggle='tab', data-bs-target='#tabProfitLoss') Profit & Loss
               li.nav-item(role='presentation')
+                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabTrialBalance') Trial Balance
+              li.nav-item(role='presentation')
+                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabBalanceSheet') Balance Sheet
+              li.nav-item(role='presentation')
                 button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabManualExpenses') Manual Expenses
               li.nav-item(role='presentation')
                 button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabAccruedExpenses') Accrued Expenses
@@ -81,6 +85,119 @@ block content
                       tbody
                         tr
                           td.text-muted Loading...
+
+              #tabTrialBalance.tab-pane.fade
+                .d-flex.flex-wrap.gap-2.align-items-end.mb-3
+                  div
+                    label.form-label.small.text-muted-light(for='trialBalanceTo') As of
+                    input.form-control.form-control-sm.form-control-dark#trialBalanceTo(type='date', value=defaultTo)
+                  button.btn.btn-primary.btn-sm#loadTrialBalanceBtn(type='button') Load Trial Balance
+                  small.text-muted-light.ms-sm-2 Trial Balance summarizes all journal balances up to the selected date.
+                .row.g-2.mb-3
+                  .col-6.col-lg-3
+                    .card.dark-surface.border-0
+                      .card-body.p-2.dark-card-body
+                        div.small.text-muted-light Total Debit
+                        strong#trialBalanceDebit GH₵ 0.00
+                  .col-6.col-lg-3
+                    .card.dark-surface.border-0
+                      .card-body.p-2.dark-card-body
+                        div.small.text-muted-light Total Credit
+                        strong#trialBalanceCredit GH₵ 0.00
+                  .col-6.col-lg-3
+                    .card.dark-surface.border-0
+                      .card-body.p-2.dark-card-body
+                        div.small.text-muted-light Difference
+                        strong#trialBalanceDifference GH₵ 0.00
+                  .col-6.col-lg-3
+                    .card.dark-surface.border-0
+                      .card-body.p-2.dark-card-body
+                        div.small.text-muted-light Status
+                        span.badge#trialBalanceStatusBadge.bg-secondary Loading
+                .table-responsive
+                  table.table.table-sm.table-hover#trialBalanceTable
+                    thead
+                      tr
+                        th Code
+                        th Account
+                        th Type
+                        th Group
+                        th.text-end Debit
+                        th.text-end Credit
+                    tbody
+                      tr
+                        td.text-muted(colspan='6') Loading...
+
+              #tabBalanceSheet.tab-pane.fade
+                .d-flex.flex-wrap.gap-2.align-items-end.mb-3
+                  div
+                    label.form-label.small.text-muted-light(for='balanceSheetTo') As of
+                    input.form-control.form-control-sm.form-control-dark#balanceSheetTo(type='date', value=defaultTo)
+                  button.btn.btn-primary.btn-sm#loadBalanceSheetBtn(type='button') Load Balance Sheet
+                  small.text-muted-light.ms-sm-2 Assets must equal liabilities plus equity. Profit/loss is included as calculated equity.
+                .row.g-2.mb-3
+                  .col-6.col-lg
+                    .card.dark-surface.border-0
+                      .card-body.p-2.dark-card-body
+                        div.small.text-muted-light Total Assets
+                        strong#balanceSheetAssets GH₵ 0.00
+                  .col-6.col-lg
+                    .card.dark-surface.border-0
+                      .card-body.p-2.dark-card-body
+                        div.small.text-muted-light Total Liabilities
+                        strong#balanceSheetLiabilities GH₵ 0.00
+                  .col-6.col-lg
+                    .card.dark-surface.border-0
+                      .card-body.p-2.dark-card-body
+                        div.small.text-muted-light Total Equity
+                        strong#balanceSheetEquity GH₵ 0.00
+                  .col-6.col-lg
+                    .card.dark-surface.border-0
+                      .card-body.p-2.dark-card-body
+                        div.small.text-muted-light Liabilities + Equity
+                        strong#balanceSheetLiabilitiesEquity GH₵ 0.00
+                  .col-6.col-lg
+                    .card.dark-surface.border-0
+                      .card-body.p-2.dark-card-body
+                        div.small.text-muted-light Status
+                        span.badge#balanceSheetStatusBadge.bg-secondary Loading
+                .row.g-3
+                  .col-lg-4
+                    h6.text-white Assets
+                    .table-responsive
+                      table.table.table-sm.table-hover#balanceSheetAssetsTable
+                        thead
+                          tr
+                            th Account
+                            th Group
+                            th.text-end Amount
+                        tbody
+                          tr
+                            td.text-muted(colspan='3') Loading...
+                  .col-lg-4
+                    h6.text-white Liabilities
+                    .table-responsive
+                      table.table.table-sm.table-hover#balanceSheetLiabilitiesTable
+                        thead
+                          tr
+                            th Account
+                            th Group
+                            th.text-end Amount
+                        tbody
+                          tr
+                            td.text-muted(colspan='3') Loading...
+                  .col-lg-4
+                    h6.text-white Equity
+                    .table-responsive
+                      table.table.table-sm.table-hover#balanceSheetEquityTable
+                        thead
+                          tr
+                            th Account
+                            th Group
+                            th.text-end Amount
+                        tbody
+                          tr
+                            td.text-muted(colspan='3') Loading...
 
               #tabManualExpenses.tab-pane.fade
                 .row.g-3

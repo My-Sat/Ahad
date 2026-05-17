@@ -407,6 +407,74 @@ function serializeAccruedPayment(payment) {
   };
 }
 
+async function getAccountBalancesAsOf(end) {
+  const [accounts, balances] = await Promise.all([
+    AccountingAccount.find({ active: true }).sort({ code: 1 }).lean(),
+    JournalEntry.aggregate([
+      { $match: { date: { $lte: end } } },
+      { $unwind: '$lines' },
+      {
+        $group: {
+          _id: '$lines.accountCode',
+          name: { $first: '$lines.accountName' },
+          type: { $first: '$lines.accountType' },
+          debit: { $sum: '$lines.debit' },
+          credit: { $sum: '$lines.credit' }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ])
+  ]);
+
+  const byCode = new Map();
+  balances.forEach(row => {
+    byCode.set(String(row._id || ''), {
+      code: String(row._id || ''),
+      name: row.name || '',
+      type: row.type || '',
+      group: '',
+      debit: round2(row.debit || 0),
+      credit: round2(row.credit || 0)
+    });
+  });
+
+  const rows = accounts.map(account => {
+    const balance = byCode.get(String(account.code)) || {};
+    byCode.delete(String(account.code));
+    return {
+      code: account.code,
+      name: account.name,
+      type: account.type,
+      group: account.group || '',
+      debit: round2(balance.debit || 0),
+      credit: round2(balance.credit || 0)
+    };
+  });
+
+  byCode.forEach(balance => {
+    rows.push({
+      code: balance.code,
+      name: balance.name || 'Unknown account',
+      type: balance.type || '',
+      group: balance.group || '',
+      debit: round2(balance.debit || 0),
+      credit: round2(balance.credit || 0)
+    });
+  });
+
+  rows.sort((a, b) => String(a.code || '').localeCompare(String(b.code || '')));
+  return rows;
+}
+
+function normalBalanceAmount(row) {
+  const debit = Number(row.debit || 0);
+  const credit = Number(row.credit || 0);
+  if (['liability', 'equity', 'revenue'].includes(String(row.type || ''))) {
+    return round2(credit - debit);
+  }
+  return round2(debit - credit);
+}
+
 exports.page = async (req, res) => {
   try {
     await ensureDefaultExpenseCategories();
@@ -505,6 +573,127 @@ exports.apiProfitLoss = async (req, res) => {
   } catch (err) {
     console.error('accounting.apiProfitLoss error', err);
     return res.status(500).json({ ok: false, error: 'Failed to load profit and loss' });
+  }
+};
+
+exports.apiTrialBalance = async (req, res) => {
+  try {
+    await ensureDefaultAccounts();
+    const end = parseDateEnd(req.query.to) || new Date();
+    await postDueStraightLineDepreciation(end, actorFromReq(req));
+    await postDuePrepaidReleases(end, actorFromReq(req));
+
+    const rows = (await getAccountBalancesAsOf(end)).map(row => {
+      const debit = round2(row.debit || 0);
+      const credit = round2(row.credit || 0);
+      const net = round2(debit - credit);
+      return {
+        code: row.code,
+        name: row.name,
+        type: row.type,
+        group: row.group || '',
+        debit,
+        credit,
+        debitBalance: net >= 0 ? net : 0,
+        creditBalance: net < 0 ? round2(Math.abs(net)) : 0
+      };
+    });
+
+    const totalDebit = round2(rows.reduce((sum, row) => sum + Number(row.debitBalance || 0), 0));
+    const totalCredit = round2(rows.reduce((sum, row) => sum + Number(row.creditBalance || 0), 0));
+    const difference = round2(totalDebit - totalCredit);
+
+    return res.json({
+      ok: true,
+      asOf: isoDate(end),
+      rows,
+      totals: {
+        totalDebit,
+        totalCredit,
+        difference,
+        balanced: Math.abs(difference) <= 0.009
+      }
+    });
+  } catch (err) {
+    console.error('accounting.apiTrialBalance error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load trial balance' });
+  }
+};
+
+exports.apiBalanceSheet = async (req, res) => {
+  try {
+    await ensureDefaultAccounts();
+    const end = parseDateEnd(req.query.to) || new Date();
+    await postDueStraightLineDepreciation(end, actorFromReq(req));
+    await postDuePrepaidReleases(end, actorFromReq(req));
+
+    const accountRows = await getAccountBalancesAsOf(end);
+    const assets = [];
+    const liabilities = [];
+    const equity = [];
+    let revenueTotal = 0;
+    let expenseTotal = 0;
+
+    accountRows.forEach(row => {
+      const amount = normalBalanceAmount(row);
+      const out = {
+        code: row.code,
+        name: row.name,
+        type: row.type,
+        group: row.group || '',
+        amount
+      };
+
+      if (row.type === 'asset') {
+        if (Math.abs(amount) > 0.009) assets.push(out);
+      } else if (row.type === 'liability') {
+        if (Math.abs(amount) > 0.009) liabilities.push(out);
+      } else if (row.type === 'equity') {
+        if (Math.abs(amount) > 0.009) equity.push(out);
+      } else if (row.type === 'revenue') {
+        revenueTotal = round2(revenueTotal + amount);
+      } else if (row.type === 'expense') {
+        expenseTotal = round2(expenseTotal + amount);
+      }
+    });
+
+    const accumulatedProfit = round2(revenueTotal - expenseTotal);
+    equity.push({
+      code: '',
+      name: 'Accumulated Profit / Loss',
+      type: 'equity',
+      group: 'Calculated Equity',
+      amount: accumulatedProfit,
+      calculated: true
+    });
+
+    const totalAssets = round2(assets.reduce((sum, row) => sum + Number(row.amount || 0), 0));
+    const totalLiabilities = round2(liabilities.reduce((sum, row) => sum + Number(row.amount || 0), 0));
+    const totalEquity = round2(equity.reduce((sum, row) => sum + Number(row.amount || 0), 0));
+    const totalLiabilitiesAndEquity = round2(totalLiabilities + totalEquity);
+    const difference = round2(totalAssets - totalLiabilitiesAndEquity);
+
+    return res.json({
+      ok: true,
+      asOf: isoDate(end),
+      assets,
+      liabilities,
+      equity,
+      totals: {
+        totalAssets,
+        totalLiabilities,
+        totalEquity,
+        totalLiabilitiesAndEquity,
+        difference,
+        balanced: Math.abs(difference) <= 0.009,
+        revenueTotal,
+        expenseTotal,
+        accumulatedProfit
+      }
+    });
+  } catch (err) {
+    console.error('accounting.apiBalanceSheet error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load balance sheet' });
   }
 };
 
