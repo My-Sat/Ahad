@@ -90,6 +90,20 @@
       return fmt(amount);
     }
 
+    function equityTypeLabel(type) {
+      const labels = {
+        owner_capital: 'Owner capital / investment',
+        owner_drawing: 'Owner drawing / withdrawal',
+        opening_asset: 'Opening asset balance',
+        opening_liability: 'Opening liability balance'
+      };
+      return labels[type] || type || '';
+    }
+
+    function requiredEquityAccountType(type) {
+      return type === 'opening_liability' ? 'liability' : 'asset';
+    }
+
     function prependTableRow(tableId, rowHtml) {
       const tbody = document.querySelector(`#${tableId} tbody`);
       if (!tbody) return;
@@ -132,6 +146,44 @@
           <td class="text-end">${fixedAssetPostingBadge(asset)}</td>
         </tr>
       `);
+    }
+
+    function renderEquityTransactions(entries) {
+      const tbody = document.querySelector('#equityTransactionsTable tbody');
+      if (!tbody) return;
+      if (!entries || !entries.length) {
+        tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No equity entries yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = entries.map(entry => `
+        <tr>
+          <td>${formatDate(entry.date)}</td>
+          <td>${escapeHtml(equityTypeLabel(entry.type))}</td>
+          <td>${escapeHtml(entry.accountCode || '')} ${escapeHtml(entry.accountName || '')}</td>
+          <td>${escapeHtml(entry.description || '')}</td>
+          <td>${escapeHtml(entry.cashBookName || '')}</td>
+          <td class="text-end">${fmt(entry.amount)}</td>
+        </tr>
+      `).join('');
+    }
+
+    function prependEquityTransaction(entry) {
+      if (!entry) return;
+      prependTableRow('equityTransactionsTable', `
+        <tr>
+          <td>${formatDate(entry.date)}</td>
+          <td>${escapeHtml(equityTypeLabel(entry.type))}</td>
+          <td>${escapeHtml(entry.accountCode || '')} ${escapeHtml(entry.accountName || '')}</td>
+          <td>${escapeHtml(entry.description || '')}</td>
+          <td>${escapeHtml(entry.cashBookName || '')}</td>
+          <td class="text-end">${fmt(entry.amount)}</td>
+        </tr>
+      `);
+    }
+
+    async function loadEquityTransactions() {
+      const j = await fetchJson('/admin/accounting/api/equity-transactions');
+      renderEquityTransactions(j.entries || []);
     }
 
     function renderPrepaids(prepaids) {
@@ -431,6 +483,35 @@
       if (monthsWrap) monthsWrap.classList.toggle('d-none', method !== 'straight_line');
     }
 
+    function toggleEquityCashBook() {
+      const accountSelect = document.getElementById('equityTransactionAccount');
+      const cashBookWrap = document.getElementById('equityCashBookWrap');
+      const isCashAccount = String(accountSelect?.value || '') === '1000';
+      if (cashBookWrap) cashBookWrap.classList.toggle('d-none', !isCashAccount);
+      if (!isCashAccount) {
+        const cashBook = document.getElementById('equityCashBook');
+        if (cashBook) cashBook.value = '';
+      }
+      toggleCashBookDetails('equityCashBook', 'equityMomoWrap', 'equityBankWrap', !isCashAccount);
+    }
+
+    function updateEquityAccountOptions() {
+      const type = document.getElementById('equityTransactionType')?.value || 'owner_capital';
+      const accountSelect = document.getElementById('equityTransactionAccount');
+      if (!accountSelect) return;
+      const requiredType = requiredEquityAccountType(type);
+      let firstAllowed = '';
+      Array.from(accountSelect.options).forEach(option => {
+        const allowed = String(option.dataset.type || '') === requiredType;
+        option.disabled = !allowed;
+        option.hidden = !allowed;
+        if (allowed && !firstAllowed) firstAllowed = option.value;
+      });
+      const selected = accountSelect.selectedOptions?.[0];
+      if (!selected || selected.disabled) accountSelect.value = firstAllowed;
+      toggleEquityCashBook();
+    }
+
     document.getElementById('loadProfitLossBtn')?.addEventListener('click', () => {
       loadProfitLoss().catch(err => alert(err.message));
     });
@@ -450,6 +531,9 @@
 
     document.getElementById('manualExpenseTreatment')?.addEventListener('change', toggleManualExpenseCashBook);
     document.getElementById('manualExpenseCashBook')?.addEventListener('change', toggleManualExpenseCashBook);
+    document.getElementById('equityTransactionType')?.addEventListener('change', updateEquityAccountOptions);
+    document.getElementById('equityTransactionAccount')?.addEventListener('change', toggleEquityCashBook);
+    document.getElementById('equityCashBook')?.addEventListener('change', toggleEquityCashBook);
     document.getElementById('fixedAssetCashBook')?.addEventListener('change', () => {
       toggleCashBookDetails('fixedAssetCashBook', 'fixedAssetMomoWrap', 'fixedAssetBankWrap', false);
     });
@@ -458,9 +542,49 @@
       toggleCashBookDetails('accruedPaymentCashBook', 'accruedPaymentMomoWrap', 'accruedPaymentBankWrap', false);
     });
     toggleManualExpenseCashBook();
+    updateEquityAccountOptions();
     toggleFixedAssetLifeFields();
     toggleCashBookDetails('fixedAssetCashBook', 'fixedAssetMomoWrap', 'fixedAssetBankWrap', false);
     toggleCashBookDetails('accruedPaymentCashBook', 'accruedPaymentMomoWrap', 'accruedPaymentBankWrap', false);
+
+    document.getElementById('equityTransactionForm')?.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      const status = document.getElementById('equityTransactionStatus');
+      const btn = document.getElementById('saveEquityTransactionBtn');
+      if (status) status.textContent = '';
+      const originalBtnText = setButtonLoading(btn, 'Saving...');
+      try {
+        const body = {
+          type: document.getElementById('equityTransactionType')?.value || '',
+          accountCode: document.getElementById('equityTransactionAccount')?.value || '',
+          amount: document.getElementById('equityTransactionAmount')?.value || '',
+          date: document.getElementById('equityTransactionDate')?.value || '',
+          description: document.getElementById('equityTransactionDescription')?.value || '',
+          cashBookId: document.getElementById('equityCashBook')?.value || '',
+          momoNumber: document.getElementById('equityMomoNumber')?.value || '',
+          momoTxId: document.getElementById('equityMomoTxId')?.value || '',
+          chequeNumber: document.getElementById('equityChequeNumber')?.value || '',
+          depositDetails: document.getElementById('equityDepositDetails')?.value || ''
+        };
+        const j = await fetchJson('/admin/accounting/equity-transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          body: JSON.stringify(body)
+        });
+        prependEquityTransaction(j.entry);
+        if (status) status.textContent = 'Equity entry recorded.';
+        this.reset();
+        updateEquityAccountOptions();
+        await loadTrialBalance();
+        await loadBalanceSheet();
+        await loadJournalEntries();
+      } catch (err) {
+        if (status) status.textContent = err.message;
+        else alert(err.message);
+      } finally {
+        restoreButton(btn, originalBtnText);
+      }
+    });
 
     document.getElementById('manualExpenseForm')?.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -662,6 +786,7 @@
     loadProfitLoss().catch(() => {});
     loadTrialBalance().catch(() => {});
     loadBalanceSheet().catch(() => {});
+    loadEquityTransactions().catch(() => {});
   }
 
   if (document.readyState === 'loading') {

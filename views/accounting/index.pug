@@ -20,6 +20,8 @@ block content
               li.nav-item(role='presentation')
                 button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabBalanceSheet') Balance Sheet
               li.nav-item(role='presentation')
+                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabEquity') Equity
+              li.nav-item(role='presentation')
                 button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabManualExpenses') Manual Expenses
               li.nav-item(role='presentation')
                 button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabAccruedExpenses') Accrued Expenses
@@ -134,7 +136,7 @@ block content
                     label.form-label.small.text-muted-light(for='balanceSheetTo') As of
                     input.form-control.form-control-sm.form-control-dark#balanceSheetTo(type='date', value=defaultTo)
                   button.btn.btn-primary.btn-sm#loadBalanceSheetBtn(type='button') Load Balance Sheet
-                  small.text-muted-light.ms-sm-2 Assets must equal liabilities plus equity. Profit/loss is included as calculated equity.
+                  small.text-muted-light.ms-sm-2 Assets must equal liabilities plus equity. Equity includes capital, drawings, opening balances, and accumulated profit/loss.
                 .row.g-2.mb-3
                   .col-6.col-lg
                     .card.dark-surface.border-0
@@ -149,7 +151,7 @@ block content
                   .col-6.col-lg
                     .card.dark-surface.border-0
                       .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Total Equity
+                        div.small.text-muted-light Business Value / Equity
                         strong#balanceSheetEquity GH₵ 0.00
                   .col-6.col-lg
                     .card.dark-surface.border-0
@@ -196,8 +198,85 @@ block content
                             th Group
                             th.text-end Amount
                         tbody
+                      tr
+                        td.text-muted(colspan='3') Loading...
+
+              #tabEquity.tab-pane.fade
+                .row.g-3
+                  .col-lg-4
+                    h6.text-white Owner Equity & Opening Balances
+                    p.small.text-muted-light.mb-2 Use this for owner investments, owner withdrawals, and existing asset/liability balances from before the accounting system started.
+                    form#equityTransactionForm(data-disable-spinner='true')
+                      .mb-2
+                        label.form-label.text-muted-light(for='equityTransactionType') Entry type
+                        select.form-select.form-select-dark#equityTransactionType(required)
+                          option(value='owner_capital' selected) Owner capital / investment
+                          option(value='owner_drawing') Owner drawing / withdrawal
+                          option(value='opening_asset') Opening asset balance
+                          option(value='opening_liability') Opening liability balance
+                      .mb-2
+                        label.form-label.text-muted-light(for='equityTransactionAccount') Affected account
+                        select.form-select.form-select-dark#equityTransactionAccount(required)
+                          each account in accounts
+                            if ['asset', 'liability'].includes(account.type)
+                              option(value=account.code data-type=account.type data-group=account.group)= `${account.code} ${account.name}`
+                      .row.g-2
+                        .col-6
+                          label.form-label.text-muted-light(for='equityTransactionAmount') Amount
+                          input.form-control.form-control-dark#equityTransactionAmount(type='number', min='0.01', step='0.01', required)
+                        .col-6
+                          label.form-label.text-muted-light(for='equityTransactionDate') Date
+                          input.form-control.form-control-dark#equityTransactionDate(type='date', value=defaultTo)
+                      .mb-2.mt-2
+                        label.form-label.text-muted-light(for='equityTransactionDescription') Description
+                        input.form-control.form-control-dark#equityTransactionDescription(type='text', placeholder='e.g. Opening cash balance')
+                      .mb-2#equityCashBookWrap
+                        label.form-label.text-muted-light(for='equityCashBook') Cash book affected
+                        select.form-select.form-select-dark#equityCashBook
+                          option(value='') Select cash book
+                          each book in cashBooks
+                            option(value=book._id data-kind=book.kind)= `${book.name} (${book.kind === 'momo' ? 'MoMo' : (book.kind === 'bank' ? 'Bank' : 'Cash')})`
+                      .row.g-2.d-none#equityMomoWrap
+                        .col-6
+                          label.form-label.text-muted-light(for='equityMomoNumber') MoMo number
+                          input.form-control.form-control-dark#equityMomoNumber(type='text')
+                        .col-6
+                          label.form-label.text-muted-light(for='equityMomoTxId') Transaction ID
+                          input.form-control.form-control-dark#equityMomoTxId(type='text')
+                      .row.g-2.d-none#equityBankWrap
+                        .col-6
+                          label.form-label.text-muted-light(for='equityChequeNumber') Cheque number
+                          input.form-control.form-control-dark#equityChequeNumber(type='text')
+                        .col-6
+                          label.form-label.text-muted-light(for='equityDepositDetails') Deposit details
+                          input.form-control.form-control-dark#equityDepositDetails(type='text')
+                      button.btn.btn-primary#saveEquityTransactionBtn(type='submit') Save Equity Entry
+                      p.small.mt-2#equityTransactionStatus
+                  .col-lg-8
+                    h6.text-white Recent Equity Entries
+                    .table-responsive
+                      table.table.table-sm.table-hover#equityTransactionsTable
+                        thead
                           tr
-                            td.text-muted(colspan='3') Loading...
+                            th Date
+                            th Type
+                            th Account
+                            th Description
+                            th Cash Book
+                            th.text-end Amount
+                        tbody
+                          if equityTransactions && equityTransactions.length
+                            each entry in equityTransactions
+                              tr
+                                td #{entry.date ? new Date(entry.date).toLocaleDateString() : ''}
+                                td= entry.type
+                                td #{entry.accountCode} #{entry.accountName}
+                                td= entry.description
+                                td= entry.cashBookName
+                                td.text-end GH₵ #{Number(entry.amount || 0).toFixed(2)}
+                          else
+                            tr
+                              td.text-muted(colspan='6') No equity entries yet.
 
               #tabManualExpenses.tab-pane.fade
                 .row.g-3
@@ -674,6 +753,35 @@ block content
               .col-lg-6
                 .card.dark-surface.border-secondary.h-100
                   .card-body
+                    h6.text-white Equity
+                    p.text-muted-light.small Equity is the owner's/business value after liabilities are removed from assets. Profit increases it; drawings reduce it.
+                    .table-responsive
+                      table.table.table-sm.mb-0
+                        thead
+                          tr
+                            th Code
+                            th Account
+                            th What It Means
+                            th P&L Effect
+                        tbody
+                          tr
+                            td 3000
+                            td Owner Capital
+                            td Money or assets invested into the business by the owner.
+                            td No direct P&L effect; it increases business equity.
+                          tr
+                            td 3100
+                            td Owner Drawings
+                            td Money or assets taken out of the business by the owner.
+                            td No direct P&L effect; it reduces business equity.
+                          tr
+                            td 3200
+                            td Opening Balance Equity
+                            td Net value from asset/liability balances that existed before the system started.
+                            td No direct P&L effect; it helps the Balance Sheet show full business value.
+              .col-lg-6
+                .card.dark-surface.border-secondary.h-100
+                  .card-body
                     h6.text-white Revenue
                     p.text-muted-light.small Revenue is income earned from jobs/orders. Revenue increases profit.
                     .table-responsive
@@ -805,6 +913,21 @@ block content
                       td Expense account
                       td Prepaid Expenses
                       td Future-paid cost is moved into current P&L.
+                    tr
+                      td Owner invests cash
+                      td Cash and Bank Books
+                      td Owner Capital
+                      td Cash and business equity increase; no P&L effect.
+                    tr
+                      td Owner withdraws cash
+                      td Owner Drawings
+                      td Cash and Bank Books
+                      td Cash and business equity reduce; no P&L effect.
+                    tr
+                      td Opening asset recorded
+                      td Asset account
+                      td Opening Balance Equity
+                      td Existing business value is added without affecting P&L.
           .modal-footer.border-secondary
             button.btn.btn-outline-light-custom(type='button', data-bs-dismiss='modal') Close
 

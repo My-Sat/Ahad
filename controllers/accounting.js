@@ -6,6 +6,7 @@ const ManualExpense = require('../models/manual_expense');
 const PrepaidRelease = require('../models/prepaid_release');
 const AccruedExpensePayment = require('../models/accrued_expense_payment');
 const FixedAsset = require('../models/fixed_asset');
+const EquityTransaction = require('../models/equity_transaction');
 const CashBook = require('../models/cash_book');
 const Printer = require('../models/printer');
 const {
@@ -407,6 +408,38 @@ function serializeAccruedPayment(payment) {
   };
 }
 
+function serializeEquityTransaction(txn) {
+  return {
+    _id: txn._id,
+    type: txn.type || '',
+    accountCode: txn.accountCode || '',
+    accountName: txn.accountName || '',
+    accountType: txn.accountType || '',
+    accountGroup: txn.accountGroup || '',
+    description: txn.description || '',
+    amount: round2(txn.amount || 0),
+    date: txn.date,
+    cashBookName: txn.cashBookName || '',
+    createdByName: txn.createdByName || ''
+  };
+}
+
+function allowedEquityAccountTypes(type) {
+  const t = String(type || '').trim();
+  if (t === 'opening_liability') return ['liability'];
+  return ['asset'];
+}
+
+function equityEntryLabel(type) {
+  const labels = {
+    owner_capital: 'Owner capital / investment',
+    owner_drawing: 'Owner drawing / withdrawal',
+    opening_asset: 'Opening asset balance',
+    opening_liability: 'Opening liability balance'
+  };
+  return labels[String(type || '')] || 'Equity entry';
+}
+
 async function getAccountBalancesAsOf(end) {
   const [accounts, balances] = await Promise.all([
     AccountingAccount.find({ active: true }).sort({ code: 1 }).lean(),
@@ -480,16 +513,18 @@ exports.page = async (req, res) => {
     await ensureDefaultExpenseCategories();
     await postDueStraightLineDepreciation(new Date(), actorFromReq(req));
     await postDuePrepaidReleases(new Date(), actorFromReq(req));
-    const [categories, cashBooks, printers, assets, expenses, accruedExpenses, accruedPayments, prepaids, prepaidReleases, entries] = await Promise.all([
+    const [categories, cashBooks, printers, accounts, assets, expenses, accruedExpenses, accruedPayments, prepaids, prepaidReleases, equityTransactions, entries] = await Promise.all([
       ExpenseCategory.find({ active: true }).sort({ name: 1 }).lean(),
       CashBook.find({ active: true }).sort({ name: 1 }).lean(),
       Printer.find().sort({ name: 1 }).lean(),
+      AccountingAccount.find({ active: true, type: { $in: ['asset', 'liability', 'equity'] } }).sort({ code: 1 }).lean(),
       FixedAsset.find().populate('printer', 'name').sort({ createdAt: -1 }).limit(100).lean(),
       ManualExpense.find().sort({ date: -1, createdAt: -1 }).limit(100).lean(),
       ManualExpense.find({ treatment: 'accrued' }).sort({ date: -1, createdAt: -1 }).limit(200).lean(),
       AccruedExpensePayment.find().sort({ date: -1, createdAt: -1 }).limit(100).lean(),
       ManualExpense.find({ treatment: 'prepaid' }).sort({ date: -1, createdAt: -1 }).limit(200).lean(),
       PrepaidRelease.find().sort({ date: -1, createdAt: -1 }).limit(100).lean(),
+      EquityTransaction.find().sort({ date: -1, createdAt: -1 }).limit(100).lean(),
       JournalEntry.find().sort({ createdAt: -1, _id: -1 }).limit(50).lean()
     ]);
 
@@ -498,12 +533,14 @@ exports.page = async (req, res) => {
       categories,
       cashBooks,
       printers,
+      accounts,
       assets,
       expenses,
       accruedExpenses: accruedExpenses.map(serializeAccrued),
       accruedPayments: accruedPayments.map(serializeAccruedPayment),
       prepaids: prepaids.map(serializePrepaid),
       prepaidReleases: prepaidReleases.map(serializePrepaidRelease),
+      equityTransactions: equityTransactions.map(serializeEquityTransaction),
       entries,
       defaultFrom: isoDate(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1))),
       defaultTo: isoDate(new Date())
@@ -694,6 +731,149 @@ exports.apiBalanceSheet = async (req, res) => {
   } catch (err) {
     console.error('accounting.apiBalanceSheet error', err);
     return res.status(500).json({ ok: false, error: 'Failed to load balance sheet' });
+  }
+};
+
+exports.apiEquityTransactions = async (req, res) => {
+  try {
+    const entries = await EquityTransaction.find().sort({ date: -1, createdAt: -1 }).limit(100).lean();
+    return res.json({ ok: true, entries: entries.map(serializeEquityTransaction) });
+  } catch (err) {
+    console.error('accounting.apiEquityTransactions error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load equity entries' });
+  }
+};
+
+exports.apiCreateEquityTransaction = async (req, res) => {
+  let session = null;
+  try {
+    await ensureDefaultAccounts();
+    const allowedTypes = ['owner_capital', 'owner_drawing', 'opening_asset', 'opening_liability'];
+    const type = String(req.body.type || '').trim();
+    const accountCode = String(req.body.accountCode || '').trim();
+    const amount = Number(req.body.amount || 0);
+    const description = String(req.body.description || '').trim();
+    const date = req.body.date ? new Date(req.body.date) : new Date();
+
+    if (!allowedTypes.includes(type)) return res.status(400).json({ ok: false, error: 'Select a valid equity entry type' });
+    if (!accountCode) return res.status(400).json({ ok: false, error: 'Select the affected account' });
+    if (!amount || isNaN(amount) || amount <= 0) return res.status(400).json({ ok: false, error: 'Enter a valid amount' });
+    if (isNaN(date.getTime())) return res.status(400).json({ ok: false, error: 'Enter a valid date' });
+
+    session = await mongoose.startSession();
+    let equityTransaction = null;
+
+    await session.withTransaction(async () => {
+      const account = await AccountingAccount.findOne({ code: accountCode, active: true }).session(session);
+      if (!account) {
+        const e = new Error('Affected account not found');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      const allowedAccountTypes = allowedEquityAccountTypes(type);
+      if (!allowedAccountTypes.includes(account.type)) {
+        const e = new Error(`${equityEntryLabel(type)} must use a ${allowedAccountTypes.join(' or ')} account`);
+        e.statusCode = 400;
+        throw e;
+      }
+
+      const usesCashAccount = String(account.code) === ACCOUNTS.CASH;
+      if (!usesCashAccount && String(req.body.cashBookId || '').trim()) {
+        const e = new Error('Cash book can only be selected when the affected account is Cash and Bank Books');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      const cashBookContext = usesCashAccount
+        ? await resolvePaymentCashBookContext(req.body, session)
+        : { cashBook: null, meta: {} };
+      if (usesCashAccount && !cashBookContext.cashBook) {
+        const e = new Error('Select the cash book affected by this entry');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      const actor = actorFromReq(req);
+      const docs = await EquityTransaction.create([{
+        type,
+        accountCode: account.code,
+        accountName: account.name,
+        accountType: account.type,
+        accountGroup: account.group || '',
+        description,
+        amount: round2(amount),
+        date,
+        cashBook: cashBookContext.cashBook ? cashBookContext.cashBook._id : null,
+        cashBookName: cashBookContext.cashBook ? cashBookContext.cashBook.name : '',
+        cashBookKind: cashBookContext.cashBook ? cashBookContext.cashBook.kind : null,
+        cashMeta: cashBookContext.meta || {},
+        createdBy: actor.postedBy,
+        createdByName: actor.postedByName
+      }], { session });
+      equityTransaction = docs[0];
+
+      if (cashBookContext.cashBook) {
+        const movementType = type === 'owner_drawing' ? 'outflow' : 'inflow';
+        await recordCashBookMovement({
+          cashBook: cashBookContext.cashBook,
+          type: movementType,
+          amount: round2(amount),
+          sourceType: type,
+          sourceId: equityTransaction._id,
+          sourceRef: description || equityEntryLabel(type),
+          note: description || equityEntryLabel(type),
+          meta: cashBookContext.meta || {},
+          recordedBy: actor.postedBy,
+          recordedByName: actor.postedByName,
+          session
+        });
+      }
+
+      let lines = [];
+      if (type === 'owner_capital') {
+        lines = [
+          { accountCode: account.code, debit: round2(amount), dimensions: { equityTransactionId: equityTransaction._id, cashBookId: cashBookContext.cashBook ? cashBookContext.cashBook._id : null } },
+          { accountCode: ACCOUNTS.OWNER_CAPITAL, credit: round2(amount), dimensions: { equityTransactionId: equityTransaction._id } }
+        ];
+      } else if (type === 'owner_drawing') {
+        lines = [
+          { accountCode: ACCOUNTS.OWNER_DRAWINGS, debit: round2(amount), dimensions: { equityTransactionId: equityTransaction._id } },
+          { accountCode: account.code, credit: round2(amount), dimensions: { equityTransactionId: equityTransaction._id, cashBookId: cashBookContext.cashBook ? cashBookContext.cashBook._id : null } }
+        ];
+      } else if (type === 'opening_asset') {
+        lines = [
+          { accountCode: account.code, debit: round2(amount), dimensions: { equityTransactionId: equityTransaction._id, cashBookId: cashBookContext.cashBook ? cashBookContext.cashBook._id : null } },
+          { accountCode: ACCOUNTS.OPENING_BALANCE_EQUITY, credit: round2(amount), dimensions: { equityTransactionId: equityTransaction._id } }
+        ];
+      } else if (type === 'opening_liability') {
+        lines = [
+          { accountCode: ACCOUNTS.OPENING_BALANCE_EQUITY, debit: round2(amount), dimensions: { equityTransactionId: equityTransaction._id } },
+          { accountCode: account.code, credit: round2(amount), dimensions: { equityTransactionId: equityTransaction._id } }
+        ];
+      }
+
+      await postJournalEntry({
+        sourceKey: `equity_transaction:${equityTransaction._id}`,
+        sourceType: type,
+        sourceId: equityTransaction._id,
+        sourceRef: description || equityEntryLabel(type),
+        date,
+        memo: description || equityEntryLabel(type),
+        postedBy: actor.postedBy,
+        postedByName: actor.postedByName,
+        session,
+        lines
+      });
+    });
+
+    return res.status(201).json({ ok: true, entry: serializeEquityTransaction(equityTransaction) });
+  } catch (err) {
+    console.error('accounting.apiCreateEquityTransaction error', err);
+    if (err && err.statusCode) return res.status(err.statusCode).json({ ok: false, error: err.message });
+    return res.status(500).json({ ok: false, error: 'Failed to record equity entry' });
+  } finally {
+    try { if (session) session.endSession(); } catch (e) {}
   }
 };
 
