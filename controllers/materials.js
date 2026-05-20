@@ -16,7 +16,8 @@ const { resolvePaymentCashBookContext, recordCashBookMovement } = require('../ut
 const {
   actorFromReq,
   postStockPurchase,
-  round2
+  round2,
+  roundUnitCost
 } = require('../utilities/accounting');
 
 
@@ -508,7 +509,8 @@ exports.purchaseStock = async (req, res) => {
     if (!isFinite(qty) || qty <= 0) return res.status(400).json({ error: 'Purchase quantity must be greater than zero' });
     if (!isFinite(unitCost) || unitCost <= 0) return res.status(400).json({ error: 'Unit cost must be greater than zero' });
 
-    const totalCost = Number((qty * unitCost).toFixed(2));
+    const preciseUnitCost = roundUnitCost(unitCost);
+    const totalCost = round2(qty * preciseUnitCost);
 
     session = await mongoose.startSession();
     let result = null;
@@ -555,10 +557,10 @@ exports.purchaseStock = async (req, res) => {
       const oldStocked = existingStock ? Number(existingStock.stocked || 0) : 0;
       const oldAverageUnitCost = existingStock ? Number(existingStock.averageUnitCost || 0) : 0;
       const oldRemaining = Math.max(0, oldStocked - used);
-      const oldRemainingValue = round2(oldRemaining * oldAverageUnitCost);
+      const oldRemainingValue = oldRemaining * oldAverageUnitCost;
       const newAverageUnitCost = oldRemaining + qty > 0
-        ? round2((oldRemainingValue + totalCost) / (oldRemaining + qty))
-        : round2(unitCost);
+        ? roundUnitCost((oldRemainingValue + totalCost) / (oldRemaining + qty))
+        : preciseUnitCost;
 
       const updatedStock = await StoreStock.findOneAndUpdate(
         { store: store._id, material: material._id },
@@ -566,7 +568,7 @@ exports.purchaseStock = async (req, res) => {
           $set: {
             active: true,
             averageUnitCost: newAverageUnitCost,
-            lastPurchaseUnitCost: Number(unitCost.toFixed(2)),
+            lastPurchaseUnitCost: preciseUnitCost,
             lastPurchaseAt: new Date()
           },
           $inc: { stocked: qty }
@@ -588,7 +590,7 @@ exports.purchaseStock = async (req, res) => {
         material: material._id,
         materialName: material.name || '',
         quantity: qty,
-        unitCost: Number(unitCost.toFixed(2)),
+        unitCost: preciseUnitCost,
         totalCost,
         paymentType,
         cashBook: cashBookContext.cashBook ? cashBookContext.cashBook._id : null,
@@ -630,7 +632,7 @@ exports.purchaseStock = async (req, res) => {
             storeId: String(store._id),
             materialId: String(material._id),
             quantity: qty,
-            unitCost: Number(unitCost.toFixed(2))
+            unitCost: preciseUnitCost
           }),
           recordedBy,
           recordedByName,
@@ -663,7 +665,7 @@ exports.purchaseStock = async (req, res) => {
         purchase: {
           _id: purchase._id,
           quantity: qty,
-          unitCost: Number(unitCost.toFixed(2)),
+          unitCost: preciseUnitCost,
           totalCost,
           paymentType
         },
@@ -794,7 +796,7 @@ exports.transferStoreStock = async (req, res) => {
       return res.status(409).json({ error: `Insufficient remaining stock to transfer. Remaining: ${remaining}` });
     }
 
-    const sourceUnitCost = round2(fromStock.averageUnitCost || 0);
+    const sourceUnitCost = roundUnitCost(fromStock.averageUnitCost || 0);
 
     // deduct from source stock
     const newFromStocked = Math.max(0, stocked - qty);
@@ -810,10 +812,10 @@ exports.transferStoreStock = async (req, res) => {
     const destStocked = existingDestStock ? Number(existingDestStock.stocked || 0) : 0;
     const destRemaining = Math.max(0, destStocked - destUsed);
     const destAverageCost = existingDestStock ? Number(existingDestStock.averageUnitCost || 0) : 0;
-    const destValue = round2(destRemaining * destAverageCost);
-    const transferValue = round2(qty * sourceUnitCost);
+    const destValue = destRemaining * destAverageCost;
+    const transferValue = qty * sourceUnitCost;
     const newDestRemaining = destRemaining + qty;
-    const newDestAverageCost = newDestRemaining > 0 ? round2((destValue + transferValue) / newDestRemaining) : destAverageCost;
+    const newDestAverageCost = newDestRemaining > 0 ? roundUnitCost((destValue + transferValue) / newDestRemaining) : roundUnitCost(destAverageCost);
 
     // add to destination stock (upsert)
     const updatedTo = await StoreStock.findOneAndUpdate(

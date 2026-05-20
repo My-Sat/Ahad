@@ -13,6 +13,9 @@ const { ObjectId } = require('mongoose').Types;
 const DiscountConfig = require('../models/discount');
 const Store = require('../models/store');
 const StoreStock = require('../models/store_stock');
+const StockPurchase = require('../models/stock_purchase');
+const StoreStockAdjustment = require('../models/store_stock_adjustment');
+const StoreStockTransfer = require('../models/store_stock_transfer');
 const RegistrationSubmission = require('../models/registration_submission');
 const User = require('../models/user');
 const Book = require('../models/book');
@@ -27,11 +30,82 @@ const {
   postMaterialUsageCost,
   postOutsourcedCost,
   postPrinterDepreciation,
-  round2
+  round2,
+  roundUnitCost
 } = require('../utilities/accounting');
 
 function isOutSourcedCategoryName(name) {
   return /out[\s-]*sourced/i.test(String(name || '').trim());
+}
+
+async function resolveMaterialUnitCostSnapshot(stockDoc, storeId, materialId) {
+  const stored = roundUnitCost(stockDoc && stockDoc.averageUnitCost ? stockDoc.averageUnitCost : 0);
+  if (!stockDoc || !storeId || !materialId || stored <= 0) return stored;
+
+  // Older stock rows may have averageUnitCost rounded to 2 decimals. Rebuild the
+  // moving average from purchase totals only when the stock history is simple.
+  if (Math.abs(stored - round2(stored)) > 0.000001) return stored;
+
+  const stockId = stockDoc._id;
+  const [hasTransfer, hasManualAdjustment, purchases, usages] = await Promise.all([
+    stockId
+      ? StoreStockTransfer.exists({ $or: [{ fromStock: stockId }, { toStock: stockId }] })
+      : null,
+    stockId
+      ? StoreStockAdjustment.exists({ stock: stockId, kind: { $nin: ['add', 'purchase'] } })
+      : null,
+    StockPurchase.find({ store: storeId, material: materialId })
+      .select('_id quantity totalCost createdAt')
+      .sort({ createdAt: 1, _id: 1 })
+      .lean(),
+    MaterialUsage.find({ store: storeId, material: materialId })
+      .select('_id count createdAt')
+      .sort({ createdAt: 1, _id: 1 })
+      .lean()
+  ]);
+
+  if (hasTransfer || hasManualAdjustment || !purchases.length) return stored;
+
+  const events = [];
+  purchases.forEach(p => {
+    const qty = Math.max(0, Number(p.quantity || 0));
+    const totalCost = round2(p.totalCost || 0);
+    if (qty > 0 && totalCost > 0) {
+      events.push({ type: 'purchase', qty, totalCost, createdAt: p.createdAt, _id: p._id });
+    }
+  });
+  usages.forEach(u => {
+    const qty = Math.max(0, Number(u.count || 0));
+    if (qty > 0) events.push({ type: 'usage', qty, createdAt: u.createdAt, _id: u._id });
+  });
+
+  events.sort((a, b) => {
+    const ta = new Date(a.createdAt || 0).getTime();
+    const tb = new Date(b.createdAt || 0).getTime();
+    if (ta !== tb) return ta - tb;
+    return String(a._id || '').localeCompare(String(b._id || ''));
+  });
+
+  let remaining = 0;
+  let average = 0;
+  events.forEach(event => {
+    if (event.type === 'purchase') {
+      const oldValue = remaining * average;
+      remaining += event.qty;
+      average = remaining > 0 ? roundUnitCost((oldValue + event.totalCost) / remaining) : average;
+    } else if (event.type === 'usage') {
+      remaining = Math.max(0, remaining - event.qty);
+    }
+  });
+
+  if (average > 0 && Math.abs(average - stored) > 0.000001 && stockId) {
+    await StoreStock.updateOne(
+      { _id: stockId, averageUnitCost: stored },
+      { $set: { averageUnitCost: average } }
+    );
+  }
+
+  return average > 0 ? average : stored;
 }
 
 
@@ -1267,7 +1341,7 @@ try {
           : 1;
 
         const count = (Math.max(0, baseCount) + Math.max(0, spoiled)) * factorMul;
-        const unitCostSnapshot = round2(st.averageUnitCost || 0);
+        const unitCostSnapshot = await resolveMaterialUnitCostSnapshot(st, opStore._id, m._id);
         const totalCost = round2(count * unitCostSnapshot);
 
         const usage = await MaterialUsage.create({

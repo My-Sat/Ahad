@@ -59,6 +59,10 @@ function round2(n) {
   return Number(Number(n || 0).toFixed(2));
 }
 
+function roundUnitCost(n) {
+  return Number(Number(n || 0).toFixed(6));
+}
+
 function actorFromReq(req) {
   return {
     postedBy: req?.user?._id || null,
@@ -427,5 +431,6 @@ module.exports = {
   postMaterialUsageCost,
   postOutsourcedCost,
   postPrinterDepreciation,
-  round2
+  round2,
+  roundUnitCost
 };
