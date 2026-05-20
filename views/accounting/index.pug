@@ -230,6 +230,36 @@ block content
                       .mb-2.mt-2
                         label.form-label.text-muted-light(for='equityTransactionDescription') Description
                         input.form-control.form-control-dark#equityTransactionDescription(type='text', placeholder='e.g. Opening cash balance')
+                      .card.dark-surface.border-secondary.mb-2.d-none#equityFixedAssetWrap
+                        .card-body.p-2
+                          h6.text-white.mb-1 Opening Fixed Asset Details
+                          p.small.text-muted-light.mb-2 The Amount above becomes the opening book value/cost. Depreciation starts from the selected date.
+                          .mb-2
+                            label.form-label.text-muted-light(for='equityFixedAssetName') Asset name
+                            input.form-control.form-control-dark#equityFixedAssetName(type='text', placeholder='e.g. Large format printer')
+                          .mb-2
+                            label.form-label.text-muted-light(for='equityFixedAssetPrinter') Linked printer
+                            select.form-select.form-select-dark#equityFixedAssetPrinter
+                              option(value='') Not linked
+                              each p in printers
+                                option(value=p._id)= p.name
+                            small.text-muted-light Link only actual printer assets. Tables, chairs, and other assets stay unlinked.
+                          .row.g-2.mt-1
+                            .col-6
+                              label.form-label.text-muted-light(for='equityFixedAssetResidual') Residual value
+                              input.form-control.form-control-dark#equityFixedAssetResidual(type='number', min='0', step='0.01', value='0')
+                            .col-6
+                              label.form-label.text-muted-light(for='equityFixedAssetMethod') Depreciation
+                              select.form-select.form-select-dark#equityFixedAssetMethod
+                                option(value='straight_line' selected) Straight line
+                                option(value='usage') Usage based
+                          .row.g-2.mt-1
+                            .col-6#equityFixedAssetUnitsWrap
+                              label.form-label.text-muted-light(for='equityFixedAssetUnits') Useful life units
+                              input.form-control.form-control-dark#equityFixedAssetUnits(type='number', min='0', step='1', placeholder='e.g. 1000000')
+                            .col-6#equityFixedAssetMonthsWrap
+                              label.form-label.text-muted-light(for='equityFixedAssetMonths') Useful life months
+                              input.form-control.form-control-dark#equityFixedAssetMonths(type='number', min='0', step='1', placeholder='e.g. 60')
                       .mb-2#equityCashBookWrap
                         label.form-label.text-muted-light(for='equityCashBook') Cash book affected
                         select.form-select.form-select-dark#equityCashBook
@@ -271,7 +301,10 @@ block content
                                 td #{entry.date ? new Date(entry.date).toLocaleDateString() : ''}
                                 td= entry.type
                                 td #{entry.accountCode} #{entry.accountName}
-                                td= entry.description
+                                td
+                                  div= entry.description
+                                  if entry.fixedAssetName
+                                    small.text-muted-light Asset: #{entry.fixedAssetName}
                                 td= entry.cashBookName
                                 td.text-end GH₵ #{Number(entry.amount || 0).toFixed(2)}
                           else

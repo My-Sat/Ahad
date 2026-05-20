@@ -23,6 +23,8 @@ const EquityTransactionSchema = new mongoose.Schema({
   cashBookName: { type: String, trim: true, default: '' },
   cashBookKind: { type: String, enum: ['cash', 'bank', 'momo', null], default: null },
   cashMeta: { type: mongoose.Schema.Types.Mixed, default: {} },
+  fixedAsset: { type: mongoose.Schema.Types.ObjectId, ref: 'FixedAsset', default: null },
+  fixedAssetName: { type: String, trim: true, default: '' },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   createdByName: { type: String, trim: true, default: '' }
 }, { timestamps: true });

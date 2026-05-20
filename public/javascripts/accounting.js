@@ -160,7 +160,7 @@
           <td>${formatDate(entry.date)}</td>
           <td>${escapeHtml(equityTypeLabel(entry.type))}</td>
           <td>${escapeHtml(entry.accountCode || '')} ${escapeHtml(entry.accountName || '')}</td>
-          <td>${escapeHtml(entry.description || '')}</td>
+          <td>${escapeHtml(entry.description || '')}${entry.fixedAssetName ? `<div class="small text-muted-light">Asset: ${escapeHtml(entry.fixedAssetName)}</div>` : ''}</td>
           <td>${escapeHtml(entry.cashBookName || '')}</td>
           <td class="text-end">${fmt(entry.amount)}</td>
         </tr>
@@ -174,7 +174,7 @@
           <td>${formatDate(entry.date)}</td>
           <td>${escapeHtml(equityTypeLabel(entry.type))}</td>
           <td>${escapeHtml(entry.accountCode || '')} ${escapeHtml(entry.accountName || '')}</td>
-          <td>${escapeHtml(entry.description || '')}</td>
+          <td>${escapeHtml(entry.description || '')}${entry.fixedAssetName ? `<div class="small text-muted-light">Asset: ${escapeHtml(entry.fixedAssetName)}</div>` : ''}</td>
           <td>${escapeHtml(entry.cashBookName || '')}</td>
           <td class="text-end">${fmt(entry.amount)}</td>
         </tr>
@@ -483,6 +483,29 @@
       if (monthsWrap) monthsWrap.classList.toggle('d-none', method !== 'straight_line');
     }
 
+    function toggleEquityFixedAssetFields() {
+      const type = document.getElementById('equityTransactionType')?.value || '';
+      const accountCode = document.getElementById('equityTransactionAccount')?.value || '';
+      const show = type === 'opening_asset' && accountCode === '1500';
+      const wrap = document.getElementById('equityFixedAssetWrap');
+      if (wrap) wrap.classList.toggle('d-none', !show);
+
+      const name = document.getElementById('equityFixedAssetName');
+      const methodEl = document.getElementById('equityFixedAssetMethod');
+      const method = methodEl?.value || 'straight_line';
+      const unitsWrap = document.getElementById('equityFixedAssetUnitsWrap');
+      const monthsWrap = document.getElementById('equityFixedAssetMonthsWrap');
+      const units = document.getElementById('equityFixedAssetUnits');
+      const months = document.getElementById('equityFixedAssetMonths');
+      const isUsage = method === 'usage';
+
+      if (unitsWrap) unitsWrap.classList.toggle('d-none', !show || !isUsage);
+      if (monthsWrap) monthsWrap.classList.toggle('d-none', !show || isUsage);
+      if (name) name.required = show;
+      if (units) units.required = show && isUsage;
+      if (months) months.required = show && !isUsage;
+    }
+
     function toggleEquityCashBook() {
       const accountSelect = document.getElementById('equityTransactionAccount');
       const cashBookWrap = document.getElementById('equityCashBookWrap');
@@ -493,6 +516,7 @@
         if (cashBook) cashBook.value = '';
       }
       toggleCashBookDetails('equityCashBook', 'equityMomoWrap', 'equityBankWrap', !isCashAccount);
+      toggleEquityFixedAssetFields();
     }
 
     function updateEquityAccountOptions() {
@@ -510,6 +534,7 @@
       const selected = accountSelect.selectedOptions?.[0];
       if (!selected || selected.disabled) accountSelect.value = firstAllowed;
       toggleEquityCashBook();
+      toggleEquityFixedAssetFields();
     }
 
     document.getElementById('loadProfitLossBtn')?.addEventListener('click', () => {
@@ -534,6 +559,7 @@
     document.getElementById('equityTransactionType')?.addEventListener('change', updateEquityAccountOptions);
     document.getElementById('equityTransactionAccount')?.addEventListener('change', toggleEquityCashBook);
     document.getElementById('equityCashBook')?.addEventListener('change', toggleEquityCashBook);
+    document.getElementById('equityFixedAssetMethod')?.addEventListener('change', toggleEquityFixedAssetFields);
     document.getElementById('fixedAssetCashBook')?.addEventListener('change', () => {
       toggleCashBookDetails('fixedAssetCashBook', 'fixedAssetMomoWrap', 'fixedAssetBankWrap', false);
     });
@@ -564,7 +590,13 @@
           momoNumber: document.getElementById('equityMomoNumber')?.value || '',
           momoTxId: document.getElementById('equityMomoTxId')?.value || '',
           chequeNumber: document.getElementById('equityChequeNumber')?.value || '',
-          depositDetails: document.getElementById('equityDepositDetails')?.value || ''
+          depositDetails: document.getElementById('equityDepositDetails')?.value || '',
+          fixedAssetName: document.getElementById('equityFixedAssetName')?.value || '',
+          fixedAssetPrinterId: document.getElementById('equityFixedAssetPrinter')?.value || '',
+          fixedAssetResidualValue: document.getElementById('equityFixedAssetResidual')?.value || 0,
+          fixedAssetDepreciationMethod: document.getElementById('equityFixedAssetMethod')?.value || 'straight_line',
+          fixedAssetUsefulLifeUnits: document.getElementById('equityFixedAssetUnits')?.value || 0,
+          fixedAssetUsefulLifeMonths: document.getElementById('equityFixedAssetMonths')?.value || 0
         };
         const j = await fetchJson('/admin/accounting/equity-transactions', {
           method: 'POST',
@@ -572,9 +604,11 @@
           body: JSON.stringify(body)
         });
         prependEquityTransaction(j.entry);
-        if (status) status.textContent = 'Equity entry recorded.';
+        if (j.fixedAsset) prependFixedAsset(j.fixedAsset);
+        if (status) status.textContent = j.fixedAsset ? 'Opening fixed asset recorded.' : 'Equity entry recorded.';
         this.reset();
         updateEquityAccountOptions();
+        await loadProfitLoss();
         await loadTrialBalance();
         await loadBalanceSheet();
         await loadJournalEntries();

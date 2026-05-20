@@ -420,6 +420,8 @@ function serializeEquityTransaction(txn) {
     amount: round2(txn.amount || 0),
     date: txn.date,
     cashBookName: txn.cashBookName || '',
+    fixedAsset: txn.fixedAsset || null,
+    fixedAssetName: txn.fixedAssetName || '',
     createdByName: txn.createdByName || ''
   };
 }
@@ -754,14 +756,34 @@ exports.apiCreateEquityTransaction = async (req, res) => {
     const amount = Number(req.body.amount || 0);
     const description = String(req.body.description || '').trim();
     const date = req.body.date ? new Date(req.body.date) : new Date();
+    const openingFixedAssetRequested = type === 'opening_asset' && accountCode === ACCOUNTS.FIXED_ASSETS;
+    const fixedAssetName = String(req.body.fixedAssetName || '').trim();
+    const fixedAssetPrinterId = String(req.body.fixedAssetPrinterId || '').trim();
+    const fixedAssetResidualValue = Number(req.body.fixedAssetResidualValue || 0);
+    const fixedAssetDepreciationMethod = String(req.body.fixedAssetDepreciationMethod || 'straight_line') === 'usage' ? 'usage' : 'straight_line';
+    const fixedAssetUsefulLifeUnits = Math.max(0, Math.floor(Number(req.body.fixedAssetUsefulLifeUnits || 0)));
+    const fixedAssetUsefulLifeMonths = Math.max(0, Math.floor(Number(req.body.fixedAssetUsefulLifeMonths || 0)));
 
     if (!allowedTypes.includes(type)) return res.status(400).json({ ok: false, error: 'Select a valid equity entry type' });
     if (!accountCode) return res.status(400).json({ ok: false, error: 'Select the affected account' });
     if (!amount || isNaN(amount) || amount <= 0) return res.status(400).json({ ok: false, error: 'Enter a valid amount' });
     if (isNaN(date.getTime())) return res.status(400).json({ ok: false, error: 'Enter a valid date' });
+    if (openingFixedAssetRequested && !fixedAssetName) return res.status(400).json({ ok: false, error: 'Enter the opening fixed asset name' });
+    if (openingFixedAssetRequested && fixedAssetResidualValue < 0) return res.status(400).json({ ok: false, error: 'Residual value cannot be negative' });
+    if (openingFixedAssetRequested && fixedAssetResidualValue > amount) return res.status(400).json({ ok: false, error: 'Residual value cannot exceed the opening asset amount' });
+    if (openingFixedAssetRequested && fixedAssetDepreciationMethod === 'usage' && !fixedAssetPrinterId) {
+      return res.status(400).json({ ok: false, error: 'Usage-based opening assets must be linked to a printer. Use straight-line for assets like tables and chairs.' });
+    }
+    if (openingFixedAssetRequested && fixedAssetDepreciationMethod === 'usage' && fixedAssetUsefulLifeUnits <= 0) {
+      return res.status(400).json({ ok: false, error: 'Usage-based opening assets need useful life units' });
+    }
+    if (openingFixedAssetRequested && fixedAssetDepreciationMethod === 'straight_line' && fixedAssetUsefulLifeMonths <= 0) {
+      return res.status(400).json({ ok: false, error: 'Straight-line opening assets need useful life months' });
+    }
 
     session = await mongoose.startSession();
     let equityTransaction = null;
+    let fixedAsset = null;
 
     await session.withTransaction(async () => {
       const account = await AccountingAccount.findOne({ code: accountCode, active: true }).session(session);
@@ -795,6 +817,39 @@ exports.apiCreateEquityTransaction = async (req, res) => {
       }
 
       const actor = actorFromReq(req);
+      if (openingFixedAssetRequested) {
+        let printer = null;
+        if (fixedAssetPrinterId) {
+          if (!mongoose.Types.ObjectId.isValid(fixedAssetPrinterId)) {
+            const e = new Error('Invalid linked printer');
+            e.statusCode = 400;
+            throw e;
+          }
+          printer = await Printer.findById(fixedAssetPrinterId).session(session);
+          if (!printer) {
+            const e = new Error('Linked printer not found');
+            e.statusCode = 404;
+            throw e;
+          }
+        }
+
+        const fixedAssetDocs = await FixedAsset.create([{
+          name: fixedAssetName,
+          assetType: printer ? 'printer' : 'asset',
+          printer: printer ? printer._id : null,
+          purchaseDate: date,
+          purchaseCost: round2(amount),
+          residualValue: round2(fixedAssetResidualValue),
+          depreciationMethod: fixedAssetDepreciationMethod,
+          usefulLifeUnits: fixedAssetDepreciationMethod === 'usage' ? fixedAssetUsefulLifeUnits : 0,
+          usefulLifeMonths: fixedAssetDepreciationMethod === 'straight_line' ? fixedAssetUsefulLifeMonths : 0,
+          note: description || 'Opening fixed asset',
+          createdBy: actor.postedBy,
+          createdByName: actor.postedByName
+        }], { session });
+        fixedAsset = fixedAssetDocs[0];
+      }
+
       const docs = await EquityTransaction.create([{
         type,
         accountCode: account.code,
@@ -808,6 +863,8 @@ exports.apiCreateEquityTransaction = async (req, res) => {
         cashBookName: cashBookContext.cashBook ? cashBookContext.cashBook.name : '',
         cashBookKind: cashBookContext.cashBook ? cashBookContext.cashBook.kind : null,
         cashMeta: cashBookContext.meta || {},
+        fixedAsset: fixedAsset ? fixedAsset._id : null,
+        fixedAssetName: fixedAsset ? fixedAsset.name : '',
         createdBy: actor.postedBy,
         createdByName: actor.postedByName
       }], { session });
@@ -843,8 +900,8 @@ exports.apiCreateEquityTransaction = async (req, res) => {
         ];
       } else if (type === 'opening_asset') {
         lines = [
-          { accountCode: account.code, debit: round2(amount), dimensions: { equityTransactionId: equityTransaction._id, cashBookId: cashBookContext.cashBook ? cashBookContext.cashBook._id : null } },
-          { accountCode: ACCOUNTS.OPENING_BALANCE_EQUITY, credit: round2(amount), dimensions: { equityTransactionId: equityTransaction._id } }
+          { accountCode: account.code, debit: round2(amount), dimensions: { equityTransactionId: equityTransaction._id, fixedAssetId: fixedAsset ? fixedAsset._id : null, cashBookId: cashBookContext.cashBook ? cashBookContext.cashBook._id : null } },
+          { accountCode: ACCOUNTS.OPENING_BALANCE_EQUITY, credit: round2(amount), dimensions: { equityTransactionId: equityTransaction._id, fixedAssetId: fixedAsset ? fixedAsset._id : null } }
         ];
       } else if (type === 'opening_liability') {
         lines = [
@@ -867,7 +924,21 @@ exports.apiCreateEquityTransaction = async (req, res) => {
       });
     });
 
-    return res.status(201).json({ ok: true, entry: serializeEquityTransaction(equityTransaction) });
+    let autoDepreciation = { posted: 0 };
+    let responseFixedAsset = null;
+    if (fixedAsset && fixedAsset.depreciationMethod === 'straight_line') {
+      autoDepreciation = await postDueStraightLineDepreciation(new Date(), actorFromReq(req));
+    }
+    if (fixedAsset) {
+      responseFixedAsset = await FixedAsset.findById(fixedAsset._id).populate('printer', 'name').lean();
+    }
+
+    return res.status(201).json({
+      ok: true,
+      entry: serializeEquityTransaction(equityTransaction),
+      fixedAsset: responseFixedAsset,
+      autoDepreciation
+    });
   } catch (err) {
     console.error('accounting.apiCreateEquityTransaction error', err);
     if (err && err.statusCode) return res.status(err.statusCode).json({ ok: false, error: err.message });
