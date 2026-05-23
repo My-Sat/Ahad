@@ -58,6 +58,11 @@ async function createStockLot({
   sourceId = null,
   sourceRef = '',
   parentLot = null,
+  purchaseUnitName = '',
+  purchaseUnitFactor = 1,
+  purchaseUnitQuantity = 0,
+  purchaseUnitCost = 0,
+  baseUnitName = 'piece',
   receivedAt = new Date(),
   session = null
 }) {
@@ -78,6 +83,11 @@ async function createStockLot({
     remainingQuantity: lotQty,
     unitCost: safeUnitCost,
     totalCost: round2(lotQty * safeUnitCost),
+    purchaseUnitName,
+    purchaseUnitFactor,
+    purchaseUnitQuantity,
+    purchaseUnitCost,
+    baseUnitName,
     receivedAt,
     active: true
   }], session ? { session } : undefined);
@@ -290,7 +300,7 @@ async function ensureLotsForStock({ store, stock = null, material, session = nul
 
   const purchases = await maybeSession(
     StockPurchase.find({ stock: stockDoc._id })
-      .select('_id supplierName quantity unitCost totalCost createdAt')
+      .select('_id supplierName quantity unitCost totalCost purchaseUnitName purchaseUnitFactor purchaseUnitQuantity purchaseUnitCost baseUnitName createdAt')
       .sort({ createdAt: 1, _id: 1 }),
     session
   ).lean();
@@ -313,6 +323,11 @@ async function ensureLotsForStock({ store, stock = null, material, session = nul
         sourceType: 'purchase',
         sourceId: purchase._id,
         sourceRef: purchase.supplierName || 'Legacy purchase',
+        purchaseUnitName: purchase.purchaseUnitName || '',
+        purchaseUnitFactor: purchase.purchaseUnitFactor || 1,
+        purchaseUnitQuantity: purchase.purchaseUnitQuantity || 0,
+        purchaseUnitCost: purchase.purchaseUnitCost || 0,
+        baseUnitName: purchase.baseUnitName || 'piece',
         receivedAt: purchase.createdAt || new Date(),
         session
       });

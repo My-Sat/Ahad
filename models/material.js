@@ -20,6 +20,15 @@ const MaterialSchema = new mongoose.Schema({
   // We won't rely on this for displayed 'Stocked' once stocked exists.
   stock: { type: Number, default: 0 },
 
+  // Stock counting units. factor = how many smallest/base units are in this unit.
+  // Example: baseUnitName=sheets, stockUnits=[{name:'sheets',factor:1}, {name:'ream',factor:500}].
+  baseUnitName: { type: String, default: 'piece', trim: true },
+  stockUnits: [{
+    name: { type: String, required: true, trim: true },
+    factor: { type: Number, required: true, min: 0.000001 },
+    isBase: { type: Boolean, default: false }
+  }],
+
   createdBy: { type: String },
 }, { timestamps: true });
 
@@ -35,6 +44,21 @@ MaterialSchema.pre('validate', function (next) {
   if ((this.stocked === undefined || this.stocked === null) && typeof this.stock === 'number' && !isNaN(this.stock)) {
     this.stocked = Math.max(0, Math.floor(this.stock));
   }
+
+  const base = String(this.baseUnitName || 'piece').trim() || 'piece';
+  const seen = new Set([base.toLowerCase()]);
+  const units = [{ name: base, factor: 1, isBase: true }];
+  (Array.isArray(this.stockUnits) ? this.stockUnits : []).forEach(unit => {
+    const name = String(unit && unit.name || '').trim();
+    const factor = Number(unit && unit.factor || 0);
+    if (!name || !isFinite(factor) || factor <= 1) return;
+    const key = name.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    units.push({ name, factor: Number(factor.toFixed(6)), isBase: false });
+  });
+  this.baseUnitName = base;
+  this.stockUnits = units.sort((a, b) => Number(a.factor || 0) - Number(b.factor || 0));
   next();
 });
 

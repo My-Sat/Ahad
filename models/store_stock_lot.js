@@ -20,6 +20,11 @@ const StoreStockLotSchema = new mongoose.Schema({
   remainingQuantity: { type: Number, required: true, min: 0, index: true },
   unitCost: { type: Number, required: true, min: 0 },
   totalCost: { type: Number, default: 0, min: 0 },
+  purchaseUnitName: { type: String, default: '' },
+  purchaseUnitFactor: { type: Number, default: 1, min: 0.000001 },
+  purchaseUnitQuantity: { type: Number, default: 0, min: 0 },
+  purchaseUnitCost: { type: Number, default: 0, min: 0 },
+  baseUnitName: { type: String, default: 'piece' },
   receivedAt: { type: Date, default: Date.now, index: true },
   active: { type: Boolean, default: true, index: true }
 }, { timestamps: true });

@@ -33,8 +33,10 @@ function initStoreStockPage() {
   const purchaseForm = document.getElementById('purchase-stock-form');
   const purchaseSupplierSelect = document.getElementById('purchaseSupplierSelect');
   const purchaseCatalogueSelect = document.getElementById('purchaseCatalogueSelect');
+  const purchaseUnitSelect = document.getElementById('purchaseUnitSelect');
   const purchaseQty = document.getElementById('purchaseQty');
   const purchaseUnitCost = document.getElementById('purchaseUnitCost');
+  const purchaseBaseUnitHint = document.getElementById('purchaseBaseUnitHint');
   const purchasePaymentType = document.getElementById('purchasePaymentType');
   const purchaseCashBookWrap = document.getElementById('purchaseCashBookWrap');
   const purchaseCashBook = document.getElementById('purchaseCashBook');
@@ -195,6 +197,51 @@ function initStoreStockPage() {
     purchaseTotal.value = Number((qty * unitCost).toFixed(2)).toFixed(2);
   }
 
+  function parseJsonAttr(raw, fallback) {
+    try { return JSON.parse(raw || ''); } catch (e) { return fallback; }
+  }
+
+  function selectedPurchaseUnit() {
+    const opt = purchaseUnitSelect?.selectedOptions?.[0];
+    return {
+      name: String(opt?.value || opt?.textContent || 'piece').trim() || 'piece',
+      factor: Math.max(1, numOr(opt?.dataset?.factor || 1, 1))
+    };
+  }
+
+  function populatePurchaseUnits() {
+    if (!purchaseCatalogueSelect || !purchaseUnitSelect) return;
+    const opt = purchaseCatalogueSelect.selectedOptions && purchaseCatalogueSelect.selectedOptions[0];
+    const baseUnit = String(opt?.dataset?.baseUnit || 'piece').trim() || 'piece';
+    const units = parseJsonAttr(opt?.dataset?.units, [{ name: baseUnit, factor: 1, isBase: true }]);
+    const current = purchaseUnitSelect.value;
+
+    purchaseUnitSelect.innerHTML = '';
+    (Array.isArray(units) && units.length ? units : [{ name: baseUnit, factor: 1 }])
+      .sort((a, b) => Number(a.factor || 0) - Number(b.factor || 0))
+      .forEach(unit => {
+        const name = String(unit.name || baseUnit).trim() || baseUnit;
+        const factor = Math.max(1, numOr(unit.factor || 1, 1));
+        const item = document.createElement('option');
+        item.value = name;
+        item.dataset.factor = String(factor);
+        item.textContent = factor === 1 ? `${name} (base)` : `${name} = ${factor} ${baseUnit}`;
+        purchaseUnitSelect.appendChild(item);
+      });
+
+    if (current && Array.from(purchaseUnitSelect.options).some(o => o.value === current)) {
+      purchaseUnitSelect.value = current;
+    }
+
+    const selected = selectedPurchaseUnit();
+    if (purchaseBaseUnitHint) {
+      purchaseBaseUnitHint.textContent = selected.factor > 1
+        ? `Cost per ${baseUnit}: unit cost / ${selected.factor}`
+        : `Cost is per ${baseUnit}`;
+    }
+    updatePurchaseTotal();
+  }
+
   function togglePurchaseCashBook() {
     const type = String(purchasePaymentType ? purchasePaymentType.value : 'cash').toLowerCase();
     const isCredit = type === 'credit';
@@ -331,10 +378,21 @@ function initStoreStockPage() {
     }
   }
 
+  populatePurchaseUnits();
   updatePurchaseTotal();
   togglePurchaseCashBook();
   loadCashBooksForPurchase();
   loadSuppliers();
+
+  if (purchaseCatalogueSelect && purchaseCatalogueSelect.dataset.unitsBound !== '1') {
+    purchaseCatalogueSelect.dataset.unitsBound = '1';
+    purchaseCatalogueSelect.addEventListener('change', populatePurchaseUnits);
+  }
+
+  if (purchaseUnitSelect && purchaseUnitSelect.dataset.bound !== '1') {
+    purchaseUnitSelect.dataset.bound = '1';
+    purchaseUnitSelect.addEventListener('change', populatePurchaseUnits);
+  }
 
   if (purchaseQty && purchaseQty.dataset.bound !== '1') {
     purchaseQty.dataset.bound = '1';
@@ -367,6 +425,7 @@ function initStoreStockPage() {
       const materialId = String(purchaseCatalogueSelect?.value || '').trim();
       const quantity = Math.floor(numOr(purchaseQty ? purchaseQty.value : 0, 0));
       const unitCost = numOr(purchaseUnitCost ? purchaseUnitCost.value : 0, 0);
+      const purchaseUnit = selectedPurchaseUnit();
       const paymentType = String(purchasePaymentType?.value || 'cash').toLowerCase() === 'credit' ? 'credit' : 'cash';
       const cashBookId = String(purchaseCashBook?.value || '').trim();
 
@@ -386,6 +445,8 @@ function initStoreStockPage() {
         body.append('materialId', materialId);
         body.append('quantity', String(quantity));
         body.append('unitCost', String(unitCost));
+        body.append('purchaseUnitName', purchaseUnit.name);
+        body.append('purchaseUnitFactor', String(purchaseUnit.factor));
         body.append('paymentType', paymentType);
         body.append('note', String(purchaseNote?.value || '').trim());
         if (paymentType === 'cash') {

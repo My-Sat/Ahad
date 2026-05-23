@@ -89,13 +89,13 @@ block content
                             = labels.join(' + ')
                       else
                         span.text-muted-light (missing material)
-                    td.text-center.text-muted-light.stocked-cell= stocked
-                    td.text-center.text-muted-light.used-cell= used
+                    td.text-center.text-muted-light.stocked-cell= ss.stockedDisplay || stocked
+                    td.text-center.text-muted-light.used-cell= ss.usedDisplay || used
                     td.text-center.remaining-cell(class=hasLotBreakdown ? 'stock-lot-cell' : '')
                       if hasLotBreakdown
                         .stock-lot-wrap
                           button.stock-lot-trigger(type='button' aria-expanded='false' aria-label='Show lot breakdown')
-                            span.stock-lot-number(class=remaining < 0 ? 'text-danger' : '') #{remaining}
+                            span.stock-lot-number(class=remaining < 0 ? 'text-danger' : '') #{ss.remainingDisplay || remaining}
                             span.stock-lot-badge #{lotBreakdown.length} lots
                           .stock-lot-breakdown(role='dialog' aria-label='Lot breakdown')
                             .stock-lot-breakdown-title Lot breakdown
@@ -107,17 +107,19 @@ block content
                                   strong= lot.lotCode || ('Lot ' + (idx + 1))
                                   if lot.sourceRef
                                     small= lot.sourceRef
+                                  if lot.purchaseUnitName && lot.purchaseUnitQuantity
+                                    small Purchased: #{lot.purchaseUnitQuantity} #{lot.purchaseUnitName} @ GH₵#{Number(lot.purchaseUnitCost || 0).toFixed(2)}
                                 .stock-lot-cost
-                                  span #{lotQty}
-                                  small Unit: GH₵#{lotUnitCost.toFixed(6)}
+                                  span #{lot.displayQuantity || lotQty}
+                                  small #{lot.baseUnitName || 'unit'} cost: GH₵#{lotUnitCost.toFixed(6)}
                             .stock-lot-total
                               span Total remaining
-                              strong #{remaining}
+                              strong #{ss.remainingDisplay || remaining}
                       else
                         if remaining < 0
-                          span.text-danger #{remaining}
+                          span.text-danger #{ss.remainingDisplay || remaining}
                         else
-                          span #{remaining}
+                          span #{ss.remainingDisplay || remaining}
                     td.text-center.text-nowrap
                       .dropdown.d-inline-block
                         button.btn.btn-sm.btn-outline-light-custom(
@@ -180,9 +182,15 @@ block content
             select.form-select#purchaseCatalogueSelect
               if catalogues && catalogues.length
                 each c in catalogues
-                  option(value=c._id)= c.name
+                  - const cUnits = (c.stockUnits && c.stockUnits.length) ? c.stockUnits : [{ name: (c.baseUnitName || 'piece'), factor: 1, isBase: true }];
+                  option(value=c._id data-base-unit=(c.baseUnitName || 'piece') data-units=JSON.stringify(cUnits))= c.name
               else
                 option(value='') No catalogue items yet
+
+          .col-6.col-lg-2
+            label.form-label.text-muted-light(for='purchaseUnitSelect') Unit
+            select.form-select#purchaseUnitSelect
+              option(value='piece' data-factor='1') piece
 
           .col-6.col-lg-2
             label.form-label.text-muted-light(for='purchaseQty') Quantity
@@ -191,6 +199,7 @@ block content
           .col-6.col-lg-2
             label.form-label.text-muted-light(for='purchaseUnitCost') Unit cost
             input.form-control#purchaseUnitCost(type='number', value='0', min='0.000001', step='0.000001')
+            small.text-muted-light#purchaseBaseUnitHint
 
           .col-12.col-lg-2
             label.form-label.text-muted-light(for='purchasePaymentType') Payment

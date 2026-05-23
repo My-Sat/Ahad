@@ -91,6 +91,7 @@ router.get('/catalogue', ensureAdmin, materialsController.cataloguePage);
 // JSON catalogue endpoints (keep same /materials path so existing JS works easily)
 router.get('/materials', ensureAdmin, materialsController.listCatalogues);
 router.post('/materials', ensureAdmin, materialsController.createCatalogue);
+router.put('/materials/:id/units', ensureAdmin, materialsController.updateCatalogueUnits);
 router.delete('/materials/:id', ensureAdmin, materialsController.removeCatalogue);
 
 // Materials for orders page (operational store only)

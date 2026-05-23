@@ -22,6 +22,12 @@ const {
   recalculateAverageCostFromLots
 } = require('../utilities/stock_lots');
 const {
+  formatMaterialQuantity,
+  materialUnits,
+  normalizeStockUnits,
+  unitForPurchase
+} = require('../utilities/material_units');
+const {
   actorFromReq,
   postStockPurchase,
   round2,
@@ -36,6 +42,14 @@ function parseSelections(sels) {
     try { return JSON.parse(sels); } catch (e) { return null; }
   }
   return null;
+}
+
+function parseStockUnits(rawUnits, baseUnitName) {
+  let units = rawUnits;
+  if (typeof units === 'string') {
+    try { units = JSON.parse(units); } catch (e) { units = []; }
+  }
+  return normalizeStockUnits(Array.isArray(units) ? units : [], baseUnitName);
 }
 
 async function getOperationalStoreLean() {
@@ -85,6 +99,8 @@ exports.createCatalogue = async (req, res) => {
   try {
     const { name } = req.body;
     let { selections } = req.body;
+    const baseUnitName = String(req.body.baseUnitName || 'piece').trim() || 'piece';
+    const stockUnits = parseStockUnits(req.body.stockUnits, baseUnitName);
 
     selections = parseSelections(selections);
     if (!Array.isArray(selections) || selections.length === 0) {
@@ -131,7 +147,9 @@ exports.createCatalogue = async (req, res) => {
     const insertDoc = {
       name: String(name).trim(),
       selections: normalized,
-      key
+      key,
+      baseUnitName,
+      stockUnits
     };
 
     // ✅ IMPORTANT:
@@ -195,6 +213,32 @@ exports.removeCatalogue = async (req, res) => {
   } catch (err) {
     console.error('materials.removeCatalogue error', err);
     return res.status(500).json({ error: 'Error deleting catalogue' });
+  }
+};
+
+exports.updateCatalogueUnits = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
+
+    const mat = await Material.findById(id);
+    if (!mat) return res.status(404).json({ error: 'Catalogue not found' });
+
+    const baseUnitName = String(req.body.baseUnitName || 'piece').trim() || 'piece';
+    const stockUnits = parseStockUnits(req.body.stockUnits, baseUnitName);
+
+    mat.baseUnitName = baseUnitName;
+    mat.stockUnits = stockUnits;
+    await mat.save();
+
+    const populated = await Material.findById(mat._id)
+      .populate('selections.unit selections.subUnit')
+      .lean();
+
+    return res.json({ ok: true, material: populated });
+  } catch (err) {
+    console.error('materials.updateCatalogueUnits error', err);
+    return res.status(500).json({ error: err.message || 'Error updating catalogue units' });
   }
 };
 
@@ -395,7 +439,7 @@ exports.stockPage = async (req, res) => {
       const rawStocks = await StoreStock.find({ store: selectedStore._id, active: true })
         .populate({
           path: 'material',
-          select: 'name selections',
+          select: 'name selections baseUnitName stockUnits',
           populate: [
             { path: 'selections.unit', select: 'name' },
             { path: 'selections.subUnit', select: 'name' }
@@ -428,7 +472,7 @@ exports.stockPage = async (req, res) => {
             material: { $in: materialIds },
             remainingQuantity: { $gt: 0.000001 }
           })
-            .select('material lotCode remainingQuantity unitCost sourceType sourceRef receivedAt')
+            .select('material lotCode remainingQuantity unitCost sourceType sourceRef purchaseUnitName purchaseUnitFactor purchaseUnitQuantity purchaseUnitCost baseUnitName receivedAt')
             .sort({ material: 1, receivedAt: 1, createdAt: 1, _id: 1 })
             .lean()
         : [];
@@ -437,17 +481,27 @@ exports.stockPage = async (req, res) => {
       aggDocs.forEach(a => { aggMap[String(a.material)] = Number(a.total || 0); });
 
       const lotMap = {};
+      const preferBaseUnits = !!(selectedStore && selectedStore.isOperational);
       lotDocs.forEach(lot => {
         const mid = String(lot.material || '');
         if (!mid) return;
+        const stockForLot = rawStocks.find(s => s.material?._id && String(s.material._id) === mid);
+        const materialForLot = stockForLot ? stockForLot.material : null;
+        const remainingQty = Number(lot.remainingQuantity || 0);
         if (!lotMap[mid]) lotMap[mid] = [];
         lotMap[mid].push({
           _id: lot._id,
           lotCode: lot.lotCode || '',
-          remainingQuantity: Number(lot.remainingQuantity || 0),
+          remainingQuantity: remainingQty,
+          displayQuantity: formatMaterialQuantity(remainingQty, materialForLot, { preferBase: preferBaseUnits }),
           unitCost: Number(lot.unitCost || 0),
           sourceType: lot.sourceType || '',
           sourceRef: lot.sourceRef || '',
+          purchaseUnitName: lot.purchaseUnitName || '',
+          purchaseUnitFactor: Number(lot.purchaseUnitFactor || 1),
+          purchaseUnitQuantity: Number(lot.purchaseUnitQuantity || 0),
+          purchaseUnitCost: Number(lot.purchaseUnitCost || 0),
+          baseUnitName: lot.baseUnitName || (materialForLot ? materialForLot.baseUnitName : 'piece'),
           receivedAt: lot.receivedAt || null
         });
       });
@@ -457,8 +511,18 @@ exports.stockPage = async (req, res) => {
         const used = mid ? (aggMap[mid] || 0) : 0;
         const stocked = Number(ss.stocked || 0);
         const remaining = Math.max(0, stocked - used);
+        const stockUnits = ss.material ? materialUnits(ss.material) : [];
+        const unitDisplayOpts = { preferBase: preferBaseUnits };
 
-        return Object.assign({}, ss, { used, remaining, lotBreakdown: mid ? (lotMap[mid] || []) : [] });
+        return Object.assign({}, ss, {
+          used,
+          remaining,
+          stockUnits,
+          stockedDisplay: ss.material ? formatMaterialQuantity(stocked, ss.material, unitDisplayOpts) : String(stocked),
+          usedDisplay: ss.material ? formatMaterialQuantity(used, ss.material, unitDisplayOpts) : String(used),
+          remainingDisplay: ss.material ? formatMaterialQuantity(remaining, ss.material, unitDisplayOpts) : String(remaining),
+          lotBreakdown: mid ? (lotMap[mid] || []) : []
+        });
       });
     }
 
@@ -551,17 +615,16 @@ exports.purchaseStock = async (req, res) => {
     const supplierId = req.body.supplierId;
     const paymentType = String(req.body.paymentType || 'cash').toLowerCase().trim() === 'credit' ? 'credit' : 'cash';
     const note = String(req.body.note || '').trim();
-    const qty = Math.floor(Number(req.body.quantity || req.body.qty || 0));
-    const unitCost = Number(req.body.unitCost || 0);
+    const purchaseQty = Math.floor(Number(req.body.quantity || req.body.qty || 0));
+    const purchaseUnitCost = Number(req.body.unitCost || 0);
+    const requestedUnitName = String(req.body.purchaseUnitName || req.body.unitName || '').trim();
+    const requestedUnitFactor = Number(req.body.purchaseUnitFactor || req.body.unitFactor || 0);
 
     if (!mongoose.Types.ObjectId.isValid(storeId)) return res.status(400).json({ error: 'Invalid store id' });
     if (!mongoose.Types.ObjectId.isValid(materialId)) return res.status(400).json({ error: 'Invalid catalogue id' });
     if (!mongoose.Types.ObjectId.isValid(supplierId)) return res.status(400).json({ error: 'Invalid supplier id' });
-    if (!isFinite(qty) || qty <= 0) return res.status(400).json({ error: 'Purchase quantity must be greater than zero' });
-    if (!isFinite(unitCost) || unitCost <= 0) return res.status(400).json({ error: 'Unit cost must be greater than zero' });
-
-    const preciseUnitCost = roundUnitCost(unitCost);
-    const totalCost = round2(qty * preciseUnitCost);
+    if (!isFinite(purchaseQty) || purchaseQty <= 0) return res.status(400).json({ error: 'Purchase quantity must be greater than zero' });
+    if (!isFinite(purchaseUnitCost) || purchaseUnitCost <= 0) return res.status(400).json({ error: 'Unit cost must be greater than zero' });
 
     session = await mongoose.startSession();
     let result = null;
@@ -588,6 +651,14 @@ exports.purchaseStock = async (req, res) => {
         e.statusCode = 404;
         throw e;
       }
+
+      const selectedPurchaseUnit = unitForPurchase(material, requestedUnitName, requestedUnitFactor);
+      const purchaseUnitFactor = Number(selectedPurchaseUnit.factor || 1);
+      const purchaseUnitName = selectedPurchaseUnit.name || material.baseUnitName || 'piece';
+      const baseUnitName = material.baseUnitName || 'piece';
+      const qty = Number((purchaseQty * purchaseUnitFactor).toFixed(6));
+      const preciseUnitCost = roundUnitCost(purchaseUnitCost / purchaseUnitFactor);
+      const totalCost = round2(purchaseQty * purchaseUnitCost);
 
       let cashBookContext = { cashBook: null, meta: {} };
       if (paymentType === 'cash') {
@@ -653,6 +724,11 @@ exports.purchaseStock = async (req, res) => {
         quantity: qty,
         unitCost: preciseUnitCost,
         totalCost,
+        purchaseUnitName,
+        purchaseUnitFactor,
+        purchaseUnitQuantity: purchaseQty,
+        purchaseUnitCost,
+        baseUnitName,
         paymentType,
         cashBook: cashBookContext.cashBook ? cashBookContext.cashBook._id : null,
         cashBookName: cashBookContext.cashBook ? (cashBookContext.cashBook.name || '') : '',
@@ -674,6 +750,11 @@ exports.purchaseStock = async (req, res) => {
         sourceType: 'purchase',
         sourceId: purchase._id,
         sourceRef: supplier.name || 'Supplier',
+        purchaseUnitName,
+        purchaseUnitFactor,
+        purchaseUnitQuantity: purchaseQty,
+        purchaseUnitCost,
+        baseUnitName,
         receivedAt: purchase.createdAt || new Date(),
         session
       });
@@ -713,7 +794,12 @@ exports.purchaseStock = async (req, res) => {
             storeId: String(store._id),
             materialId: String(material._id),
             quantity: qty,
-            unitCost: preciseUnitCost
+            unitCost: preciseUnitCost,
+            purchaseUnitName,
+            purchaseUnitFactor,
+            purchaseUnitQuantity: purchaseQty,
+            purchaseUnitCost,
+            baseUnitName
           }),
           recordedBy,
           recordedByName,
@@ -748,7 +834,12 @@ exports.purchaseStock = async (req, res) => {
           quantity: qty,
           unitCost: preciseUnitCost,
           totalCost,
-          paymentType
+          paymentType,
+          purchaseUnitName,
+          purchaseUnitFactor,
+          purchaseUnitQuantity: purchaseQty,
+          purchaseUnitCost,
+          baseUnitName
         },
         stock: {
           _id: updatedStock._id,

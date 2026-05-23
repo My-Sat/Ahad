@@ -19,10 +19,13 @@ block content
           thead
             tr
               th.text-white Material
+              th.text-muted-light Stock units
               th.text-center.text-muted-light Actions
           tbody
             if materials && materials.length
               each m in materials
+                - const mUnits = (m.stockUnits && m.stockUnits.length) ? m.stockUnits : [{ name: (m.baseUnitName || 'piece'), factor: 1, isBase: true }];
+                - const unitSummary = mUnits.map(u => Number(u.factor || 1) === 1 ? `${u.name} (base)` : `${u.name} = ${u.factor} ${m.baseUnitName || 'piece'}`).join(' | ');
                 tr(data-id=m._id)
                   td
                     strong.text-white= m.name
@@ -31,11 +34,21 @@ block content
                       small.text-muted-light
                         - const labels = m.selections.map(s => (s.unit && s.unit.name ? s.unit.name + ': ' + (s.subUnit && s.subUnit.name ? s.subUnit.name : s.subUnit) : '')).filter(Boolean);
                         = labels.join(' + ')
+                  td
+                    small.text-muted-light.catalogue-unit-summary= unitSummary
                   td.text-center
-                    button.btn.btn-sm.btn-outline-danger.delete-catalogue-btn(data-id=m._id type='button') Delete
+                    .d-inline-flex.gap-2.justify-content-center.flex-wrap
+                      button.btn.btn-sm.btn-outline-light-custom.configure-units-btn(
+                        data-id=m._id
+                        data-name=m.name
+                        data-base-unit=(m.baseUnitName || 'piece')
+                        data-units=JSON.stringify(mUnits)
+                        type='button'
+                      ) Units
+                      button.btn.btn-sm.btn-outline-danger.delete-catalogue-btn(data-id=m._id type='button') Delete
             else
               tr
-                td.text-muted(colspan='2') No catalogue items defined.
+                td.text-muted(colspan='3') No catalogue items defined.
 
   // Create Catalogue
   .card.mb-4.dark-surface
@@ -48,6 +61,26 @@ block content
 
         .col-12
           small.text-muted-light.mb-2 Select one sub-unit per unit to form the tracked selection set.
+
+        .col-12.col-md-4
+          label.form-label(for='baseUnitName') Smallest stock unit
+          input.form-control(type='text', id='baseUnitName', value='piece', placeholder='e.g. sheet, ml, piece' required)
+          small.text-muted-light Orders consume stock in this smallest unit.
+
+        .col-12.col-md-8
+          label.form-label Stock purchase units
+          .table-responsive
+            table.table.table-sm.align-middle.mb-2#stockUnitsTable
+              thead
+                tr
+                  th Unit name
+                  th Equals how many smallest units
+                  th.text-end
+              tbody
+          button.btn.btn-sm.btn-outline-light-custom(type='button', id='addStockUnitRowBtn')
+            i.bi.bi-plus-circle.me-1
+            | Add unit
+          small.text-muted-light.d-block.mt-1 Example: ream = 500 sheets, box/carton = 2500 sheets.
 
         .col-12
           .accordion#catalogueUnitsAccordion.dark-surface
@@ -85,5 +118,35 @@ block content
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-outline-danger(type='button', id='confirmDeleteBtn') Yes, delete
+
+  // Unit config modal
+  .modal.fade(id='unitConfigModal', tabindex='-1', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered.modal-lg
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title.text-white Configure stock units
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          input(type='hidden', id='unitMaterialId')
+          .mb-3
+            label.form-label.text-muted-light(for='unitBaseName') Smallest stock unit
+            input.form-control#unitBaseName(type='text', value='piece', required)
+            small.text-muted-light#unitMaterialName
+          .table-responsive
+            table.table.table-sm.align-middle#unitConfigTable
+              thead
+                tr
+                  th Unit name
+                  th Equals how many smallest units
+                  th.text-end
+              tbody#unitConfigRows
+          button.btn.btn-sm.btn-outline-light-custom(type='button', id='addUnitConfigRowBtn')
+            i.bi.bi-plus-circle.me-1
+            | Add unit
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
+          button.btn.btn-primary(type='button', id='saveUnitConfigBtn')
+            span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='saveUnitConfigSpinner')
+            | Save units
   // Keep Catalogue page scripts inside #main-content so dashboard_nav AJAX loads them
   script(src='/javascripts/catalogue.js')
