@@ -92,7 +92,9 @@ function initStoreStockPage() {
   const transferModalEl = document.getElementById('transferModal');
   const transferStockId = document.getElementById('transferStockId');
   const transferToStore = document.getElementById('transferToStore');
+  const transferUnitSelect = document.getElementById('transferUnitSelect');
   const transferQty = document.getElementById('transferQty');
+  const transferUnitHint = document.getElementById('transferUnitHint');
   const confirmTransferBtn = document.getElementById('confirmTransferBtn');
   const transferSpinner = document.getElementById('transferSpinner');
 
@@ -207,6 +209,40 @@ function initStoreStockPage() {
       name: String(opt?.value || opt?.textContent || 'piece').trim() || 'piece',
       factor: Math.max(1, numOr(opt?.dataset?.factor || 1, 1))
     };
+  }
+
+  function selectedTransferUnit() {
+    const opt = transferUnitSelect?.selectedOptions?.[0];
+    return {
+      name: String(opt?.value || opt?.textContent || 'piece').trim() || 'piece',
+      factor: Math.max(1, numOr(opt?.dataset?.factor || 1, 1))
+    };
+  }
+
+  function populateTransferUnitsFromButton(btn) {
+    if (!transferUnitSelect) return;
+    const baseUnit = String(btn?.dataset?.baseUnit || 'piece').trim() || 'piece';
+    const units = parseJsonAttr(btn?.dataset?.units, [{ name: baseUnit, factor: 1, isBase: true }]);
+
+    transferUnitSelect.innerHTML = '';
+    (Array.isArray(units) && units.length ? units : [{ name: baseUnit, factor: 1 }])
+      .sort((a, b) => Number(a.factor || 0) - Number(b.factor || 0))
+      .forEach(unit => {
+        const name = String(unit.name || baseUnit).trim() || baseUnit;
+        const factor = Math.max(1, numOr(unit.factor || 1, 1));
+        const item = document.createElement('option');
+        item.value = name;
+        item.dataset.factor = String(factor);
+        item.textContent = factor === 1 ? `${name} (base)` : `${name} = ${factor} ${baseUnit}`;
+        transferUnitSelect.appendChild(item);
+      });
+
+    if (transferUnitHint) {
+      const selected = selectedTransferUnit();
+      transferUnitHint.textContent = selected.factor > 1
+        ? `Transfers ${selected.factor} ${baseUnit} per ${selected.name}.`
+        : `Transfers in ${baseUnit}.`;
+    }
   }
 
   function populatePurchaseUnits() {
@@ -392,6 +428,15 @@ function initStoreStockPage() {
   if (purchaseUnitSelect && purchaseUnitSelect.dataset.bound !== '1') {
     purchaseUnitSelect.dataset.bound = '1';
     purchaseUnitSelect.addEventListener('change', populatePurchaseUnits);
+  }
+
+  if (transferUnitSelect && transferUnitSelect.dataset.bound !== '1') {
+    transferUnitSelect.dataset.bound = '1';
+    transferUnitSelect.addEventListener('change', function () {
+      const opt = transferUnitSelect.selectedOptions && transferUnitSelect.selectedOptions[0];
+      const text = opt ? opt.textContent : '';
+      if (transferUnitHint) transferUnitHint.textContent = text ? `Selected: ${text}` : '';
+    });
   }
 
   if (purchaseQty && purchaseQty.dataset.bound !== '1') {
@@ -1005,6 +1050,7 @@ function initStoreStockPage() {
     const stockId = btn.dataset.stockId;
     transferStockId.value = stockId;
     transferQty.value = '1';
+    populateTransferUnitsFromButton(btn);
 
     bsShow(transferModalEl);
   };
@@ -1020,6 +1066,7 @@ function initStoreStockPage() {
       const stockId = transferStockId ? transferStockId.value : '';
       const toStoreId = transferToStore ? transferToStore.value : '';
       let qty = numOr(transferQty ? transferQty.value : 0, 0);
+      const transferUnit = selectedTransferUnit();
 
       qty = Math.floor(qty);
       if (!storeId || !stockId || !toStoreId) return alert('Select destination store');
@@ -1032,6 +1079,8 @@ function initStoreStockPage() {
         const body = new URLSearchParams();
         body.append('toStoreId', toStoreId);
         body.append('qty', String(qty));
+        body.append('transferUnitName', transferUnit.name);
+        body.append('transferUnitFactor', String(transferUnit.factor));
 
         const res = await fetch(
           `/admin/stores/${encodeURIComponent(storeId)}/stocks/${encodeURIComponent(stockId)}/transfer`,

@@ -956,7 +956,9 @@ exports.transferStoreStock = async (req, res) => {
   try {
     const { storeId, stockId } = req.params;
     const toStoreId = req.body.toStoreId;
-    let qty = Number(req.body.qty || 0);
+    const transferUnitQty = Math.floor(Number(req.body.qty || 0));
+    const requestedTransferUnitName = String(req.body.transferUnitName || req.body.unitName || '').trim();
+    const requestedTransferUnitFactor = Number(req.body.transferUnitFactor || req.body.unitFactor || 0);
 
     if (!mongoose.Types.ObjectId.isValid(storeId)) return res.status(400).json({ error: 'Invalid from store id' });
     if (!mongoose.Types.ObjectId.isValid(stockId)) return res.status(400).json({ error: 'Invalid stock id' });
@@ -964,8 +966,7 @@ exports.transferStoreStock = async (req, res) => {
 
     if (String(storeId) === String(toStoreId)) return res.status(400).json({ error: 'Destination store must be different' });
 
-    qty = Math.floor(qty);
-    if (!isFinite(qty) || qty <= 0) return res.status(400).json({ error: 'Transfer quantity must be greater than 0' });
+    if (!isFinite(transferUnitQty) || transferUnitQty <= 0) return res.status(400).json({ error: 'Transfer quantity must be greater than 0' });
 
     session = await mongoose.startSession();
     let result = null;
@@ -987,7 +988,7 @@ exports.transferStoreStock = async (req, res) => {
       }
 
       const fromStock = await StoreStock.findById(stockId)
-        .populate('material', 'name selections')
+        .populate('material', 'name selections baseUnitName stockUnits')
         .session(session)
         .lean();
       if (!fromStock) {
@@ -1002,6 +1003,11 @@ exports.transferStoreStock = async (req, res) => {
       }
 
       const materialId = fromStock.material._id;
+      const selectedTransferUnit = unitForPurchase(fromStock.material, requestedTransferUnitName, requestedTransferUnitFactor);
+      const transferUnitFactor = Number(selectedTransferUnit.factor || 1);
+      const transferUnitName = selectedTransferUnit.name || fromStock.material.baseUnitName || 'piece';
+      const qty = Number((transferUnitQty * transferUnitFactor).toFixed(6));
+
       const agg = await MaterialAggregate.findOne({ store: storeId, material: materialId }).session(session).lean();
       const used = agg ? Number(agg.total || 0) : 0;
       const stocked = Number(fromStock.stocked || 0);
@@ -1060,6 +1066,9 @@ exports.transferStoreStock = async (req, res) => {
         fromStock: updatedFrom._id,
         toStock: updatedTo._id,
         qty,
+        transferUnitName,
+        transferUnitFactor,
+        transferUnitQuantity: transferUnitQty,
         actor: (req.user && req.user._id) ? new mongoose.Types.ObjectId(req.user._id) : null
       }], { session });
       const transfer = transferDocs[0];

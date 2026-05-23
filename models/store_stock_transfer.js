@@ -11,7 +11,12 @@ const StoreStockTransferSchema = new mongoose.Schema({
   fromStock: { type: mongoose.Schema.Types.ObjectId, ref: 'StoreStock', index: true },
   toStock: { type: mongoose.Schema.Types.ObjectId, ref: 'StoreStock', index: true },
 
+  // qty is stored in the material's base unit. These fields preserve the unit
+  // Admin selected in the transfer form.
   qty: { type: Number, required: true, min: 1 },
+  transferUnitName: { type: String, default: '' },
+  transferUnitFactor: { type: Number, default: 1, min: 0.000001 },
+  transferUnitQuantity: { type: Number, default: 0, min: 0 },
   createdAt: { type: Date, default: Date.now },
   actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 });

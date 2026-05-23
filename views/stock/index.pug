@@ -136,7 +136,12 @@ block content
                               i.bi.bi-sliders.me-2
                               | Adjust
                           li
-                            a.dropdown-item.transfer-stock-btn(href='#' data-stock-id=ss._id)
+                            a.dropdown-item.transfer-stock-btn(
+                              href='#'
+                              data-stock-id=ss._id
+                              data-base-unit=(ss.material && ss.material.baseUnitName ? ss.material.baseUnitName : 'piece')
+                              data-units=JSON.stringify(ss.stockUnits && ss.stockUnits.length ? ss.stockUnits : [{ name: (ss.material && ss.material.baseUnitName ? ss.material.baseUnitName : 'piece'), factor: 1, isBase: true }])
+                            )
                               i.bi.bi-arrow-left-right.me-2
                               | Transfer
                           li
@@ -469,8 +474,13 @@ block content
                   if !selectedStore || String(s._id) !== String(selectedStore._id)
                     option(value=s._id)= s.name
           .mb-3
+            label.form-label.text-muted-light(for='transferUnitSelect') Unit
+            select.form-select#transferUnitSelect
+              option(value='piece' data-factor='1') piece
+          .mb-3
             label.form-label.text-muted-light(for='transferQty') Quantity
             input.form-control#transferQty(type='number', min='1', step='1', value='1')
+            small.text-muted-light#transferUnitHint
 
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
