@@ -9,10 +9,18 @@ const Store = require('../models/store');
 const StoreStock = require('../models/store_stock');
 const StoreStockTransfer = require('../models/store_stock_transfer');
 const StoreStockAdjustment = require('../models/store_stock_adjustment');
+const StoreStockLot = require('../models/store_stock_lot');
 const Supplier = require('../models/supplier');
 const SupplierAccountTxn = require('../models/supplier_account_txn');
 const StockPurchase = require('../models/stock_purchase');
 const { resolvePaymentCashBookContext, recordCashBookMovement } = require('../utilities/cash_books');
+const {
+  createStockLot,
+  consumeStockLots,
+  ensureLotsForStock,
+  reconcileLotsToRemaining,
+  recalculateAverageCostFromLots
+} = require('../utilities/stock_lots');
 const {
   actorFromReq,
   postStockPurchase,
@@ -313,6 +321,9 @@ exports.deleteStore = async (req, res) => {
     try {
       await MaterialAggregate.deleteMany({ store: id });
     } catch (e) {}
+    try {
+      await StoreStockLot.deleteMany({ store: id });
+    } catch (e) {}
 
     // ✅ delete the store stock rows
     await StoreStock.deleteMany({ store: id });
@@ -398,8 +409,48 @@ exports.stockPage = async (req, res) => {
         ? await MaterialAggregate.find({ store: selectedStore._id, material: { $in: materialIds } }).lean()
         : [];
 
+      await Promise.all(rawStocks.map(async ss => {
+        if (!ss || !ss._id || !ss.material || !ss.material._id) return;
+        try {
+          await ensureLotsForStock({
+            store: selectedStore._id,
+            stock: ss._id,
+            material: ss.material._id
+          });
+        } catch (e) {
+          console.error('materials.stockPage ensure lots failed', e);
+        }
+      }));
+
+      const lotDocs = materialIds.length
+        ? await StoreStockLot.find({
+            store: selectedStore._id,
+            material: { $in: materialIds },
+            remainingQuantity: { $gt: 0.000001 }
+          })
+            .select('material lotCode remainingQuantity unitCost sourceType sourceRef receivedAt')
+            .sort({ material: 1, receivedAt: 1, createdAt: 1, _id: 1 })
+            .lean()
+        : [];
+
       const aggMap = {};
       aggDocs.forEach(a => { aggMap[String(a.material)] = Number(a.total || 0); });
+
+      const lotMap = {};
+      lotDocs.forEach(lot => {
+        const mid = String(lot.material || '');
+        if (!mid) return;
+        if (!lotMap[mid]) lotMap[mid] = [];
+        lotMap[mid].push({
+          _id: lot._id,
+          lotCode: lot.lotCode || '',
+          remainingQuantity: Number(lot.remainingQuantity || 0),
+          unitCost: Number(lot.unitCost || 0),
+          sourceType: lot.sourceType || '',
+          sourceRef: lot.sourceRef || '',
+          receivedAt: lot.receivedAt || null
+        });
+      });
 
       stocks = rawStocks.map(ss => {
         const mid = ss.material?._id ? String(ss.material._id) : null;
@@ -407,7 +458,7 @@ exports.stockPage = async (req, res) => {
         const stocked = Number(ss.stocked || 0);
         const remaining = Math.max(0, stocked - used);
 
-        return Object.assign({}, ss, { used, remaining });
+        return Object.assign({}, ss, { used, remaining, lotBreakdown: mid ? (lotMap[mid] || []) : [] });
       });
     }
 
@@ -553,7 +604,17 @@ exports.purchaseStock = async (req, res) => {
         .session(session)
         .lean();
       const used = agg ? Number(agg.total || 0) : 0;
-      const existingStock = await StoreStock.findOne({ store: store._id, material: material._id }).session(session);
+      let existingStock = await StoreStock.findOne({ store: store._id, material: material._id }).session(session);
+      if (existingStock) {
+        await ensureLotsForStock({
+          store: store._id,
+          stock: existingStock._id,
+          material: material._id,
+          session
+        });
+        existingStock = await StoreStock.findOne({ store: store._id, material: material._id }).session(session);
+      }
+
       const oldStocked = existingStock ? Number(existingStock.stocked || 0) : 0;
       const oldAverageUnitCost = existingStock ? Number(existingStock.averageUnitCost || 0) : 0;
       const oldRemaining = Math.max(0, oldStocked - used);
@@ -603,6 +664,26 @@ exports.purchaseStock = async (req, res) => {
       }], { session });
 
       const purchase = purchaseDocs[0];
+
+      await createStockLot({
+        store: store._id,
+        stock: updatedStock._id,
+        material: material._id,
+        quantity: qty,
+        unitCost: preciseUnitCost,
+        sourceType: 'purchase',
+        sourceId: purchase._id,
+        sourceRef: supplier.name || 'Supplier',
+        receivedAt: purchase.createdAt || new Date(),
+        session
+      });
+
+      await recalculateAverageCostFromLots({
+        store: store._id,
+        stock: updatedStock._id,
+        material: material._id,
+        session
+      });
 
       await StoreStockAdjustment.create([{
         stock: updatedStock._id,
@@ -733,11 +814,14 @@ exports.adjustStoreStock = async (req, res) => {
     const used = agg ? Number(agg.total || 0) : 0;
     const remaining = Math.max(0, Number(updated.stocked || 0) - used);
 
-    // ✅ log adjustment as a snapshot event
+    let stockForResponse = updated;
+
+    // Keep lots aligned with manual adjustments so future order costs use the
+    // exact remaining stock layers.
 try {
   const deltaVal = (mode === 'delta') ? Math.floor(Number(valRaw) || 0) : 0;
 
-  await StoreStockAdjustment.create({
+  const adjustmentDoc = await StoreStockAdjustment.create({
     stock: updated._id,
     store: new mongoose.Types.ObjectId(storeId),
     material: updated.material._id,
@@ -749,12 +833,25 @@ try {
     note: (mode === 'absolute') ? 'Absolute set (used reset)' : 'Delta adjust',
     actor: (req.user && req.user._id) ? new mongoose.Types.ObjectId(req.user._id) : null
   });
+
+  const lotBalance = await reconcileLotsToRemaining({
+    store: new mongoose.Types.ObjectId(storeId),
+    stock: updated._id,
+    material: updated.material._id,
+    targetRemaining: remaining,
+    unitCost: roundUnitCost(updated.averageUnitCost || updated.lastPurchaseUnitCost || 0),
+    sourceType: 'adjustment',
+    sourceId: adjustmentDoc._id,
+    sourceRef: (mode === 'absolute') ? 'Absolute stock adjustment' : 'Stock delta adjustment'
+  });
+
+  stockForResponse = Object.assign({}, updated, { averageUnitCost: lotBalance.averageUnitCost });
 } catch (e) {
   console.error('adjustStoreStock adjustment log failed', e);
 }
 
 
-    return res.json({ ok: true, stock: Object.assign({}, updated, { used, remaining }) });
+    return res.json({ ok: true, stock: Object.assign({}, stockForResponse, { used, remaining }) });
   } catch (err) {
     console.error('materials.adjustStoreStock error', err);
     return res.status(500).json({ error: 'Error adjusting stock' });
@@ -763,6 +860,8 @@ try {
 
 // Transfer stock between stores (JSON)
 exports.transferStoreStock = async (req, res) => {
+  let session = null;
+
   try {
     const { storeId, stockId } = req.params;
     const toStoreId = req.body.toStoreId;
@@ -777,89 +876,153 @@ exports.transferStoreStock = async (req, res) => {
     qty = Math.floor(qty);
     if (!isFinite(qty) || qty <= 0) return res.status(400).json({ error: 'Transfer quantity must be greater than 0' });
 
-    const fromStore = await Store.findById(storeId).lean();
-    const toStore = await Store.findById(toStoreId).lean();
-    if (!fromStore) return res.status(404).json({ error: 'From store not found' });
-    if (!toStore) return res.status(404).json({ error: 'Destination store not found' });
+    session = await mongoose.startSession();
+    let result = null;
 
-    const fromStock = await StoreStock.findById(stockId).populate('material', 'name selections').lean();
-    if (!fromStock) return res.status(404).json({ error: 'Stock not found' });
-    if (String(fromStock.store) !== String(storeId)) return res.status(403).json({ error: 'Stock does not belong to selected store' });
+    await session.withTransaction(async () => {
+      const [fromStore, toStore] = await Promise.all([
+        Store.findById(storeId).session(session).lean(),
+        Store.findById(toStoreId).session(session).lean()
+      ]);
+      if (!fromStore) {
+        const e = new Error('From store not found');
+        e.statusCode = 404;
+        throw e;
+      }
+      if (!toStore) {
+        const e = new Error('Destination store not found');
+        e.statusCode = 404;
+        throw e;
+      }
 
-    // compute remaining in source store
-    const agg = await MaterialAggregate.findOne({ store: storeId, material: fromStock.material._id }).lean();
-    const used = agg ? Number(agg.total || 0) : 0;
-    const stocked = Number(fromStock.stocked || 0);
-    const remaining = Math.max(0, stocked - used);
+      const fromStock = await StoreStock.findById(stockId)
+        .populate('material', 'name selections')
+        .session(session)
+        .lean();
+      if (!fromStock) {
+        const e = new Error('Stock not found');
+        e.statusCode = 404;
+        throw e;
+      }
+      if (String(fromStock.store) !== String(storeId)) {
+        const e = new Error('Stock does not belong to selected store');
+        e.statusCode = 403;
+        throw e;
+      }
 
-    if (qty > remaining) {
-      return res.status(409).json({ error: `Insufficient remaining stock to transfer. Remaining: ${remaining}` });
-    }
+      const materialId = fromStock.material._id;
+      const agg = await MaterialAggregate.findOne({ store: storeId, material: materialId }).session(session).lean();
+      const used = agg ? Number(agg.total || 0) : 0;
+      const stocked = Number(fromStock.stocked || 0);
+      const remaining = Math.max(0, stocked - used);
 
-    const sourceUnitCost = roundUnitCost(fromStock.averageUnitCost || 0);
+      if (qty > remaining) {
+        const e = new Error(`Insufficient remaining stock to transfer. Remaining: ${remaining}`);
+        e.statusCode = 409;
+        throw e;
+      }
 
-    // deduct from source stock
-    const newFromStocked = Math.max(0, stocked - qty);
-    const updatedFrom = await StoreStock.findByIdAndUpdate(
-      stockId,
-      { $set: { stocked: newFromStocked } },
-      { new: true }
-    ).populate('material', 'name selections').lean();
+      const consumedLots = await consumeStockLots({
+        store: fromStore._id,
+        stock: fromStock._id,
+        material: materialId,
+        quantity: qty,
+        sourceRef: `Transfer to ${toStore.name || 'store'}`,
+        session
+      });
 
-    const existingDestStock = await StoreStock.findOne({ store: toStoreId, material: fromStock.material._id }).lean();
-    const destAgg = await MaterialAggregate.findOne({ store: toStoreId, material: fromStock.material._id }).lean();
-    const destUsed = destAgg ? Number(destAgg.total || 0) : 0;
-    const destStocked = existingDestStock ? Number(existingDestStock.stocked || 0) : 0;
-    const destRemaining = Math.max(0, destStocked - destUsed);
-    const destAverageCost = existingDestStock ? Number(existingDestStock.averageUnitCost || 0) : 0;
-    const destValue = destRemaining * destAverageCost;
-    const transferValue = qty * sourceUnitCost;
-    const newDestRemaining = destRemaining + qty;
-    const newDestAverageCost = newDestRemaining > 0 ? roundUnitCost((destValue + transferValue) / newDestRemaining) : roundUnitCost(destAverageCost);
+      const newFromStocked = Math.max(0, stocked - qty);
+      const updatedFrom = await StoreStock.findByIdAndUpdate(
+        stockId,
+        { $set: { stocked: newFromStocked } },
+        { new: true, session }
+      ).populate('material', 'name selections').lean();
 
-    // add to destination stock (upsert)
-    const updatedTo = await StoreStock.findOneAndUpdate(
-      { store: toStoreId, material: fromStock.material._id },
-      {
-        $set: {
-          active: true,
-          averageUnitCost: newDestAverageCost,
-          lastPurchaseUnitCost: sourceUnitCost,
-          lastPurchaseAt: new Date()
+      const transferUnitCost = consumedLots.weightedUnitCost || roundUnitCost(fromStock.averageUnitCost || 0);
+      const existingToStock = await StoreStock.findOne({ store: toStoreId, material: materialId }).session(session);
+      if (existingToStock) {
+        await ensureLotsForStock({
+          store: toStore._id,
+          stock: existingToStock._id,
+          material: materialId,
+          session
+        });
+      }
+
+      const updatedTo = await StoreStock.findOneAndUpdate(
+        { store: toStoreId, material: materialId },
+        {
+          $set: {
+            active: true,
+            lastPurchaseUnitCost: transferUnitCost,
+            lastPurchaseAt: new Date()
+          },
+          $inc: { stocked: qty }
         },
-        $inc: { stocked: qty }
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    ).populate('material', 'name selections').lean();
+        { upsert: true, new: true, setDefaultsOnInsert: true, session }
+      ).populate('material', 'name selections').lean();
 
-    // transfer log
-    try {
-      await StoreStockTransfer.create({
-        material: fromStock.material._id,
+      const transferDocs = await StoreStockTransfer.create([{
+        material: materialId,
         fromStore: fromStore._id,
         toStore: toStore._id,
-        fromStock: updatedFrom._id,   // ✅ NEW
-        toStock: updatedTo._id,       // ✅ NEW
+        fromStock: updatedFrom._id,
+        toStock: updatedTo._id,
         qty,
         actor: (req.user && req.user._id) ? new mongoose.Types.ObjectId(req.user._id) : null
+      }], { session });
+      const transfer = transferDocs[0];
+
+      for (const lot of (consumedLots.lots || [])) {
+        await createStockLot({
+          store: toStore._id,
+          stock: updatedTo._id,
+          material: materialId,
+          quantity: lot.quantity,
+          unitCost: lot.unitCost,
+          sourceType: 'transfer',
+          sourceId: transfer._id,
+          sourceRef: `Transfer from ${fromStore.name || 'store'}`,
+          parentLot: lot.lot,
+          session
+        });
+      }
+
+      const sourceBalance = await recalculateAverageCostFromLots({
+        store: fromStore._id,
+        stock: updatedFrom._id,
+        material: materialId,
+        session
       });
-    } catch (logErr) {
-      console.error('Transfer log failed', logErr);
-    }
+      const destBalance = await recalculateAverageCostFromLots({
+        store: toStore._id,
+        stock: updatedTo._id,
+        material: materialId,
+        session
+      });
 
-    // attach totals for source row
-    const agg2 = await MaterialAggregate.findOne({ store: storeId, material: fromStock.material._id }).lean();
-    const used2 = agg2 ? Number(agg2.total || 0) : 0;
-    const remaining2 = Math.max(0, Number(updatedFrom.stocked || 0) - used2);
+      const agg2 = await MaterialAggregate.findOne({ store: storeId, material: materialId }).session(session).lean();
+      const used2 = agg2 ? Number(agg2.total || 0) : 0;
+      const remaining2 = Math.max(0, Number(updatedFrom.stocked || 0) - used2);
 
-    return res.json({
-      ok: true,
-      from: Object.assign({}, updatedFrom, { used: used2, remaining: remaining2 }),
-      to: updatedTo
+      result = {
+        ok: true,
+        from: Object.assign({}, updatedFrom, {
+          used: used2,
+          remaining: remaining2,
+          averageUnitCost: sourceBalance.averageUnitCost
+        }),
+        to: Object.assign({}, updatedTo, { averageUnitCost: destBalance.averageUnitCost })
+      };
     });
+
+    return res.json(result || { ok: true });
   } catch (err) {
     console.error('materials.transferStoreStock error', err);
+    if (err && err.statusCode) return res.status(err.statusCode).json({ error: err.message });
     return res.status(500).json({ error: 'Error transferring stock' });
+  } finally {
+    try { if (session) session.endSession(); } catch (e) {}
   }
 };
 
@@ -883,6 +1046,7 @@ exports.removeStockFromStore = async (req, res) => {
     // ✅ delete operational logs + aggregate for this store/material (so re-adding starts clean)
     await MaterialUsage.deleteMany({ store: storeId, material: materialId });
     await MaterialAggregate.deleteMany({ store: storeId, material: materialId });
+    await StoreStockLot.deleteMany({ store: storeId, material: materialId });
 
     // ✅ delete the stock item itself (no soft remove)
     await StoreStock.findByIdAndDelete(stockId);

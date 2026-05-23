@@ -57,7 +57,7 @@ block content
       if !selectedStore
         p.text-muted-light.small No store selected. Create a store first.
       else
-        .table-responsive
+        .table-responsive#stockTableWrap
           table.table.table-striped.table-hover.table-sm
             thead
               tr
@@ -72,6 +72,8 @@ block content
                   - const used = (typeof ss.used === 'number') ? ss.used : 0;
                   - const stocked = (typeof ss.stocked === 'number') ? ss.stocked : 0;
                   - const remaining = (typeof ss.remaining === 'number') ? ss.remaining : Math.max(0, stocked - used);
+                  - const lotBreakdown = Array.isArray(ss.lotBreakdown) ? ss.lotBreakdown : [];
+                  - const hasLotBreakdown = lotBreakdown.length > 1;
                   tr(data-stock-id=ss._id data-material-id=(ss.material && ss.material._id ? ss.material._id : '') data-stocked=stocked)
                     td
                       if ss.material
@@ -89,11 +91,33 @@ block content
                         span.text-muted-light (missing material)
                     td.text-center.text-muted-light.stocked-cell= stocked
                     td.text-center.text-muted-light.used-cell= used
-                    td.text-center.remaining-cell
-                      if remaining < 0
-                        span.text-danger #{remaining}
+                    td.text-center.remaining-cell(class=hasLotBreakdown ? 'stock-lot-cell' : '')
+                      if hasLotBreakdown
+                        .stock-lot-wrap
+                          button.stock-lot-trigger(type='button' aria-expanded='false' aria-label='Show lot breakdown')
+                            span.stock-lot-number(class=remaining < 0 ? 'text-danger' : '') #{remaining}
+                            span.stock-lot-badge #{lotBreakdown.length} lots
+                          .stock-lot-breakdown(role='dialog' aria-label='Lot breakdown')
+                            .stock-lot-breakdown-title Lot breakdown
+                            each lot, idx in lotBreakdown
+                              - const lotQty = Number(lot.remainingQuantity || 0);
+                              - const lotUnitCost = Number(lot.unitCost || 0);
+                              .stock-lot-row
+                                .stock-lot-main
+                                  strong= lot.lotCode || ('Lot ' + (idx + 1))
+                                  if lot.sourceRef
+                                    small= lot.sourceRef
+                                .stock-lot-cost
+                                  span #{lotQty}
+                                  small Unit: GH₵#{lotUnitCost.toFixed(6)}
+                            .stock-lot-total
+                              span Total remaining
+                              strong #{remaining}
                       else
-                        span #{remaining}
+                        if remaining < 0
+                          span.text-danger #{remaining}
+                        else
+                          span #{remaining}
                     td.text-center.text-nowrap
                       .dropdown.d-inline-block
                         button.btn.btn-sm.btn-outline-light-custom(

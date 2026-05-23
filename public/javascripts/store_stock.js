@@ -817,7 +817,35 @@ function initStoreStockPage() {
     try { document.removeEventListener('click', h.onTransferClick); } catch (e) {}
     try { document.removeEventListener('click', h.onViewActivityClick); } catch (e) {}
     try { document.removeEventListener('click', h.onRemoveStockClick); } catch (e) {}
+    try { document.removeEventListener('click', h.onLotBreakdownClick); } catch (e) {}
   }
+
+  function closeLotBreakdowns(exceptWrap) {
+    document.querySelectorAll('.stock-lot-wrap.is-open').forEach(function (wrap) {
+      if (exceptWrap && wrap === exceptWrap) return;
+      wrap.classList.remove('is-open');
+      const trigger = wrap.querySelector('.stock-lot-trigger');
+      if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  const onLotBreakdownClick = function (e) {
+    const trigger = e.target.closest && e.target.closest('.stock-lot-trigger');
+    if (!trigger) {
+      if (!(e.target.closest && e.target.closest('.stock-lot-wrap'))) closeLotBreakdowns(null);
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const wrap = trigger.closest('.stock-lot-wrap');
+    if (!wrap) return;
+    const shouldOpen = !wrap.classList.contains('is-open');
+    closeLotBreakdowns(wrap);
+    wrap.classList.toggle('is-open', shouldOpen);
+    trigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  };
 
   // Open adjust modal
   const onAdjustClick = function (e) {
@@ -1056,9 +1084,11 @@ function initStoreStockPage() {
     onAdjustClick,
     onTransferClick,
     onViewActivityClick,
-    onRemoveStockClick
+    onRemoveStockClick,
+    onLotBreakdownClick
   };
 
+  document.addEventListener('click', onLotBreakdownClick);
   document.addEventListener('click', onAdjustClick);
   document.addEventListener('click', onTransferClick);
   document.addEventListener('click', onViewActivityClick);

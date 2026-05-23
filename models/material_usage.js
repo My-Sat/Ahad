@@ -10,6 +10,13 @@ const MaterialUsageSchema = new mongoose.Schema({
   count: { type: Number, required: true, min: 0 },
   unitCostSnapshot: { type: Number, default: 0, min: 0 },
   totalCost: { type: Number, default: 0, min: 0 },
+  lots: [{
+    lot: { type: mongoose.Schema.Types.ObjectId, ref: 'StoreStockLot' },
+    lotCode: { type: String, default: '' },
+    quantity: { type: Number, default: 0, min: 0 },
+    unitCost: { type: Number, default: 0, min: 0 },
+    totalCost: { type: Number, default: 0, min: 0 }
+  }],
   createdAt: { type: Date, default: Date.now }
 });
 

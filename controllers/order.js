@@ -23,6 +23,7 @@ const {
   resolvePaymentCashBookContext,
   recordCashBookMovement
 } = require('../utilities/cash_books');
+const { consumeStockLots } = require('../utilities/stock_lots');
 const {
   actorFromReq,
   postOrderRevenue,
@@ -1341,8 +1342,17 @@ try {
           : 1;
 
         const count = (Math.max(0, baseCount) + Math.max(0, spoiled)) * factorMul;
-        const unitCostSnapshot = await resolveMaterialUnitCostSnapshot(st, opStore._id, m._id);
-        const totalCost = round2(count * unitCostSnapshot);
+        if (count <= 0) continue;
+
+        const lotCost = await consumeStockLots({
+          store: opStore._id,
+          stock: st._id,
+          material: m._id,
+          quantity: count,
+          sourceRef: order.orderId
+        });
+        const unitCostSnapshot = lotCost.weightedUnitCost;
+        const totalCost = lotCost.totalCost;
 
         const usage = await MaterialUsage.create({
           store: opStore._id,
@@ -1352,7 +1362,8 @@ try {
           itemIndex: idx,
           count,
           unitCostSnapshot,
-          totalCost
+          totalCost,
+          lots: lotCost.lots || []
         });
 
         try {
