@@ -151,6 +151,7 @@ router.get('/discounts/customer-search', ensureAdmin, discountsController.apiSea
 router.get('/cash-books/api', cashBooksController.apiList);
 router.get('/cash-books', ensureAdmin, cashBooksController.page);
 router.post('/cash-books', ensureAdmin, cashBooksController.apiCreate);
+router.get('/cash-books/:id/ledger', ensureAdmin, cashBooksController.apiLedger);
 router.patch('/cash-books/:id/archive', ensureAdmin, cashBooksController.apiArchive);
 router.patch('/cash-books/:id/restore', ensureAdmin, cashBooksController.apiRestore);
 router.put('/cash-books/:id', ensureAdmin, cashBooksController.apiUpdate);

@@ -1,5 +1,6 @@
 const CashBook = require('../models/cash_book');
 const CashBookTxn = require('../models/cash_book_txn');
+const mongoose = require('mongoose');
 const { normalizeCashBookKind } = require('../utilities/cash_books');
 
 function isAdmin(req) {
@@ -56,6 +57,80 @@ exports.apiList = async (req, res) => {
   } catch (err) {
     console.error('cashBooks.apiList error', err);
     return res.status(500).json({ ok: false, error: 'Failed to load cash books' });
+  }
+};
+
+exports.apiLedger = async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ ok: false, error: 'Invalid cash book id' });
+    }
+
+    const cashBook = await CashBook.findById(id).lean();
+    if (!cashBook) return res.status(404).json({ ok: false, error: 'Cash book not found' });
+
+    const limitRaw = Number(req.query.limit || 100);
+    const pageRaw = Number(req.query.page || 1);
+    const limit = Math.min(100, Math.max(1, isFinite(limitRaw) ? Math.floor(limitRaw) : 100));
+    const page = Math.max(1, isFinite(pageRaw) ? Math.floor(pageRaw) : 1);
+
+    const txns = await CashBookTxn.find({ cashBook: cashBook._id })
+      .sort({ createdAt: 1, _id: 1 })
+      .lean();
+
+    let runningBalance = 0;
+    let totalDebit = 0;
+    let totalCredit = 0;
+    const chronological = (txns || []).map(txn => {
+      const amount = Number(txn.amount || 0);
+      const isDebit = String(txn.type || '').toLowerCase() === 'inflow';
+      const debit = isDebit ? amount : 0;
+      const credit = isDebit ? 0 : amount;
+      totalDebit = Number((totalDebit + debit).toFixed(2));
+      totalCredit = Number((totalCredit + credit).toFixed(2));
+      runningBalance = Number((runningBalance + debit - credit).toFixed(2));
+
+      return {
+        _id: String(txn._id),
+        createdAt: txn.createdAt,
+        entry: txn.note || txn.sourceRef || txn.sourceType || txn.type,
+        sourceType: txn.sourceType || '',
+        sourceRef: txn.sourceRef || '',
+        debit,
+        credit,
+        runningBalance,
+        recordedByName: txn.recordedByName || ''
+      };
+    });
+
+    const entriesDesc = chronological.slice().reverse();
+    const count = entriesDesc.length;
+    const skip = (page - 1) * limit;
+    const entries = entriesDesc.slice(skip, skip + limit);
+
+    return res.json({
+      ok: true,
+      cashBook: serializeBook(cashBook),
+      entries,
+      count,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(count / limit)),
+      hasPrev: page > 1,
+      hasMore: (skip + entries.length) < count,
+      from: entries.length ? skip + 1 : 0,
+      to: skip + entries.length,
+      totals: {
+        debit: totalDebit,
+        credit: totalCredit,
+        ledgerBalance: Number((totalDebit - totalCredit).toFixed(2)),
+        currentBalance: Number(cashBook.balance || 0)
+      }
+    });
+  } catch (err) {
+    console.error('cashBooks.apiLedger error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load cash book ledger' });
   }
 };
 

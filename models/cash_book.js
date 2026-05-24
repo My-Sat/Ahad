@@ -8,7 +8,7 @@ const CashBookSchema = new mongoose.Schema({
     default: 'cash',
     index: true
   },
-  balance: { type: Number, default: 0 },
+  balance: { type: Number, default: 0, min: 0 },
   active: { type: Boolean, default: true, index: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }

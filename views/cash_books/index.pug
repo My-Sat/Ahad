@@ -70,6 +70,7 @@ block content
                                     span.badge.bg-success Active
                                 td.text-end
                                   .btn-group.btn-group-sm
+                                    button.btn.btn-outline-info.ledger-cash-book(type='button') Ledger
                                     button.btn.btn-outline-light-custom.edit-cash-book(type='button') Edit
                                     if book.active === false
                                       button.btn.btn-outline-success.toggle-cash-book(type='button', data-action='restore') Restore
@@ -78,5 +79,41 @@ block content
                           else
                             tr
                               td.text-muted(colspan='5') No cash books yet.
+
+  .modal.fade(id='cashBookLedgerModal', tabindex='-1', aria-hidden='true')
+    .modal-dialog.modal-xl.modal-dialog-centered.modal-dialog-scrollable
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title.text-white#cashBookLedgerTitle Cash Book Ledger
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          .d-flex.justify-content-between.align-items-center.mb-3
+            div
+              div.small.text-muted-light#cashBookLedgerMeta Select a cash book to view transactions.
+              div.small.text-muted-light
+                | Debit increases cash book balance. Credit decreases it.
+            .btn-group.btn-group-sm
+              button.btn.btn-outline-light-custom#cashBookLedgerPrevBtn(type='button', disabled)
+                i.bi.bi-chevron-left.me-1
+                | Previous
+              button.btn.btn-outline-light-custom#cashBookLedgerNextBtn(type='button', disabled)
+                | Next
+                i.bi.bi-chevron-right.ms-1
+          .table-responsive
+            table.table.table-sm.table-hover.align-middle
+              thead
+                tr
+                  th Date
+                  th Entry
+                  th Source
+                  th.text-end Debit
+                  th.text-end Credit
+                  th.text-end Balance
+                  th Recorded By
+              tbody#cashBookLedgerTbody
+                tr
+                  td.text-muted(colspan='7') Select Ledger from a cash book.
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
   script(src='/javascripts/cash_books.js')

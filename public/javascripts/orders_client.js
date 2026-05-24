@@ -2389,7 +2389,7 @@ function renderOrdersList(orders) {
     const isOutsourcedRow = !!options.outsourcedKey;
     const viewHref = '/orders/view/' + encodeURIComponent(orderId);
     const artistId = String(options.artistId || o.artistId || '').trim();
-    const accountAction = isOutsourcedRow && artistId
+    const accountAction = isOutsourcedRow && artistId && options.showAccount !== false
       ? `<a class="btn btn-sm btn-outline-info ms-1 outsourced-artist-account-link" href="/customers/${encodeURIComponent(artistId)}/account" data-ajax="true">Account</a>`
       : '';
 
@@ -2483,7 +2483,8 @@ function renderOrdersList(orders) {
           statusText: o.status,
           totalOverride: o.total,
           outsourcedKey: o.outsourcedKey,
-          artistId: o.artistId
+          artistId: o.artistId,
+          showAccount: false
         });
       });
     });

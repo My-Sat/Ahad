@@ -96,14 +96,31 @@ async function recordCashBookMovement(options) {
   const inc = type === 'outflow' ? -amount : amount;
   const session = opts.session || null;
   const cashBookId = cashBook._id || cashBook;
+  const updateFilter = { _id: cashBookId };
+  if (type === 'outflow') {
+    updateFilter.balance = { $gte: amount };
+  }
 
   const updated = await CashBook.findOneAndUpdate(
-    { _id: cashBookId },
+    updateFilter,
     { $inc: { balance: inc } },
     { new: true, session }
   );
 
   if (!updated) {
+    const currentQuery = CashBook.findById(cashBookId);
+    if (session) currentQuery.session(session);
+    const current = await currentQuery.lean();
+    if (type === 'outflow' && current) {
+      const available = Number(current.balance || 0);
+      const e = new Error(
+        `Insufficient balance in "${current.name || 'Cash book'}". Available: GH\u20B5 ${available.toFixed(2)}, requested: GH\u20B5 ${amount.toFixed(2)}`
+      );
+      e.statusCode = 400;
+      e.code = 'INSUFFICIENT_CASH_BOOK_BALANCE';
+      throw e;
+    }
+
     const e = new Error('Unable to update cash book balance');
     e.statusCode = 400;
     throw e;

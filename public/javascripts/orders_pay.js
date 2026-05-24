@@ -2356,7 +2356,7 @@ if (dailyOrdersSelect) {
       const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : (o.createdAt || '');
       const isOutsourcedRow = !!options.outsourcedKey;
       const artistId = String(options.artistId || o.artistId || '').trim();
-      const accountAction = isOutsourcedRow && artistId
+      const accountAction = isOutsourcedRow && artistId && options.showAccount !== false
         ? `<a class="btn btn-sm btn-outline-info ms-1 outsourced-artist-account-link" href="/customers/${encodeURIComponent(artistId)}/account" data-ajax="true">Account</a>`
         : '';
 
@@ -2450,7 +2450,8 @@ if (dailyOrdersSelect) {
             statusText: o.status,
             totalOverride: o.total,
             outsourcedKey: o.outsourcedKey,
-            artistId: o.artistId
+            artistId: o.artistId,
+            showAccount: false
           });
         });
       });
