@@ -14,6 +14,15 @@ const {
   postOrderPayment
 } = require('../utilities/accounting');
 
+function customerDisplayName(customer) {
+  if (!customer) return '';
+  const category = String(customer.category || '').toLowerCase();
+  if ((category === 'artist' || category === 'organisation') && customer.businessName) {
+    return String(customer.businessName).trim();
+  }
+  return String(customer.firstName || customer.businessName || '').trim();
+}
+
 /**
  * Render front desk page
  */
@@ -384,6 +393,7 @@ exports.accountPage = async (req, res) => {
   try {
     const customer = await Customer.findById(req.params.id).lean();
     if (!customer) return res.status(404).send('Customer not found');
+    customer.displayName = customerDisplayName(customer);
 
     const txns = await CustomerAccountTxn.find({ customer: customer._id })
       .sort({ createdAt: -1 })
@@ -425,7 +435,13 @@ exports.apiGetAccount = async (req, res) => {
 
     return res.json({
       ok: true,
-      customer: { _id: customer._id, accountBalance: Number(customer.accountBalance || 0) },
+      customer: {
+        _id: customer._id,
+        displayName: customerDisplayName(customer),
+        phone: customer.phone || '',
+        category: customer.category || '',
+        accountBalance: Number(customer.accountBalance || 0)
+      },
       txns,
       accountSettledOrderIds
     });

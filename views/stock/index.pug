@@ -165,9 +165,13 @@ block content
         div
           h5.mb-1.text-white Purchase stock from supplier
           p.text-muted-light.small.mb-0 Cash purchases debit the selected cash book. Credit purchases credit the supplier account.
-        button.btn.btn-outline-light-custom.btn-sm(type='button', id='openSuppliersBtnInline')
-          i.bi.bi-plus-circle.me-1
-          | Manage suppliers
+        .d-flex.flex-wrap.gap-2.justify-content-end
+          button.btn.btn-outline-info.btn-sm(type='button', id='openPurchaseHistoryBtn', disabled=(!selectedStore))
+            i.bi.bi-clock-history.me-1
+            | Purchase History
+          button.btn.btn-outline-light-custom.btn-sm(type='button', id='openSuppliersBtnInline')
+            i.bi.bi-plus-circle.me-1
+            | Manage suppliers
       if !selectedStore
         p.text-muted-light.small Create/select a store first.
       else
@@ -249,33 +253,6 @@ block content
             button.btn.btn-primary#recordPurchaseBtn(type='button')
               span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='recordPurchaseSpinner')
               | Record Purchase
-
-  // Add catalogue to selected store
-  .card.mb-4.dark-surface
-    .card-body.dark-card-body
-      h5.mb-3.text-white Add catalogue to store
-      p.text-muted-light.small Use this only to make a catalogue item available in the selected store. Stock increases should be recorded as supplier purchases.
-      if !selectedStore
-        p.text-muted-light.small Create/select a store first.
-      else
-        form#add-to-store-form(class='row g-3' novalidate data-store-id=(selectedStore ? selectedStore._id : ''))
-          .col-12.col-md-7
-            label.form-label.text-muted-light(for='catalogueSelect') Catalogue item
-            select.form-select#catalogueSelect
-              if catalogues && catalogues.length
-                each c in catalogues
-                  option(value=c._id)= c.name
-              else
-                option(value='') No catalogue items yet
-
-          .col-12.col-md-3
-            label.form-label.text-muted-light(for='initialStockInput') Stock Initial
-            input.form-control#initialStockInput(type='number', value='0', min='0', step='1')
-
-          .col-12.col-md-2.d-grid
-            button.btn.btn-primary#addToStoreBtn(type='button')
-              span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='addToStoreSpinner')
-              | Add
 
   // Create Store Modal
   .modal.fade(id='createStoreModal', tabindex='-1', aria-hidden='true')
@@ -386,6 +363,68 @@ block content
         .modal-footer
           button.btn.btn-secondary#resetSupplierBtn(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary#saveSupplierBtn(type='button') Save supplier
+
+  // Stock Purchase History Modal
+  .modal.fade(id='purchaseHistoryModal', tabindex='-1', aria-hidden='true')
+    .modal-dialog.modal-xl.modal-dialog-centered.modal-dialog-scrollable
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title.text-white Stock purchase history
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          .row.g-2.align-items-end.mb-3
+            .col-12.col-md-4
+              label.form-label.text-muted-light(for='purchaseHistoryMaterialFilter') Catalogue item
+              select.form-select#purchaseHistoryMaterialFilter
+                option(value='') All catalogue items
+                if catalogues && catalogues.length
+                  each c in catalogues
+                    option(value=c._id)= c.name
+            .col-12.col-md-3
+              label.form-label.text-muted-light(for='purchaseHistorySupplierFilter') Supplier
+              select.form-select#purchaseHistorySupplierFilter
+                option(value='') All suppliers
+                if suppliers && suppliers.length
+                  each sup in suppliers
+                    option(value=sup._id)= sup.name
+            .col-12.col-md-3
+              label.form-label.text-muted-light(for='purchaseHistoryPaymentFilter') Payment
+              select.form-select#purchaseHistoryPaymentFilter
+                option(value='') All payments
+                option(value='cash') Cash
+                option(value='credit') Credit
+            .col-12.col-md-2.d-grid
+              button.btn.btn-outline-light-custom#refreshPurchaseHistoryBtn(type='button')
+                i.bi.bi-arrow-clockwise.me-1
+                | Refresh
+          .d-flex.justify-content-between.align-items-center.mb-2
+            div#purchaseHistoryMeta.text-muted-light.small Select filters to view purchase records.
+            .btn-group.btn-group-sm
+              button.btn.btn-outline-light-custom#purchaseHistoryPrevBtn(type='button' disabled)
+                i.bi.bi-chevron-left.me-1
+                | Previous
+              button.btn.btn-outline-light-custom#purchaseHistoryNextBtn(type='button' disabled)
+                | Next
+                i.bi.bi-chevron-right.ms-1
+          .table-responsive
+            table.table.table-sm.table-hover.align-middle
+              thead
+                tr
+                  th.text-muted-light Date
+                  th.text-muted-light Material
+                  th.text-muted-light Supplier
+                  th.text-muted-light Purchased
+                  th.text-muted-light Base unit QTY
+                  th.text-end.text-muted-light Unit cost
+                  th.text-end.text-muted-light Total
+                  th.text-muted-light Payment
+                  th.text-muted-light Recorded by
+                  th.text-muted-light Note
+              tbody#purchaseHistoryTbody
+                tr
+                  td.text-muted(colspan='10') Click "Purchase History" to load records.
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
   // Manage Store Modal
   .modal.fade(id='manageStoreModal', tabindex='-1', aria-hidden='true')

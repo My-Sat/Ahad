@@ -716,6 +716,10 @@ let outsourcedTotal = 0;
 if (isOutSourcedCategory) {
   const rawQty = Number(it.outsourcedQty);
   const rawAmount = Number(it.outsourcedAmount);
+  const customerRequestedQty = Math.max(
+    1,
+    Math.floor(Number(svcRequiresPrinter ? it.factor : it.pages) || 1)
+  );
   const hasOutsourcedInput =
     (it.outsourcedArtistId && String(it.outsourcedArtistId).trim()) ||
     (it.outsourcedArtistName && String(it.outsourcedArtistName).trim()) ||
@@ -738,11 +742,11 @@ if (isOutSourcedCategory) {
     outsourcedArtistName = String(
       artist.businessName || artist.firstName || artist.phone || it.outsourcedArtistName || ''
     ).trim();
-    outsourcedQty = Math.max(0, Math.floor(rawQty || 0));
+    outsourcedQty = customerRequestedQty;
     outsourcedAmount = Math.max(0, Number(rawAmount || 0));
 
     if (outsourcedQty <= 0 || outsourcedAmount <= 0) {
-      return res.status(400).json({ error: 'Enter valid outsourced QTY and Amount for outsourced service.' });
+      return res.status(400).json({ error: 'Enter valid outsourced Amount for outsourced service.' });
     }
 
     outsourcedTotal = Number((outsourcedQty * outsourcedAmount).toFixed(2));
@@ -2704,7 +2708,7 @@ exports.apiListOrders = async (req, res) => {
 
     const orders = await Order.find(q)
       .populate('customer', 'firstName businessName category phone')
-      .populate('items.outsourcedArtist', 'businessName firstName phone category')
+      .populate('items.outsourcedArtist', 'businessName firstName phone category accountBalance')
       .sort({ createdAt: -1 })
       .limit(1000)
       .lean();
@@ -2750,9 +2754,14 @@ const out = orders.map(o => {
         (artistDoc && (artistDoc.businessName || artistDoc.firstName || artistDoc.phone)) ||
         'Artist'
       ).trim();
+      const artistId = artistDoc && artistDoc._id
+        ? String(artistDoc._id)
+        : (item.outsourcedArtist ? String(item.outsourcedArtist) : '');
 
       return {
+        artistId,
         artistName,
+        artistAccountBalance: artistDoc ? Number(artistDoc.accountBalance || 0) : null,
         selectionLabel: String(item.selectionLabel || '').trim(),
         qty: Number(item.outsourcedQty || 0),
         amount: Number(item.outsourcedAmount || 0),

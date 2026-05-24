@@ -112,6 +112,7 @@ router.delete('/stores/:id', ensureAdmin, materialsController.deleteStore);
 // store stock
 router.post('/stores/:storeId/stocks', ensureAdmin, materialsController.addStockToStore);
 router.post('/stores/:storeId/stocks/purchase', ensureAdmin, materialsController.purchaseStock);
+router.get('/stores/:storeId/stocks/purchases', ensureAdmin, materialsController.stockPurchaseHistory);
 router.post('/stores/:storeId/stocks/:stockId/adjust', ensureAdmin, materialsController.adjustStoreStock);
 router.post('/stores/:storeId/stocks/:stockId/transfer', ensureAdmin, materialsController.transferStoreStock);
 router.delete('/stores/:storeId/stocks/:stockId', ensureAdmin, materialsController.removeStockFromStore);

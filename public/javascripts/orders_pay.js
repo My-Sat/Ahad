@@ -2232,6 +2232,8 @@ if (dailyOrdersSelect) {
     const ordersTo = document.getElementById('ordersTo');
     const fetchBtn = document.getElementById('ordersFetchBtn');
     const toggleOutsourcedBtn = document.getElementById('ordersToggleOutsourcedBtn');
+    const outsourcedBalanceFilterWrap = document.getElementById('ordersOutsourcedBalanceFilterWrap');
+    const outsourcedBalanceFilter = document.getElementById('ordersOutsourcedBalanceFilter');
     const presetToday = document.getElementById('ordersPresetToday');
     const presetYesterday = document.getElementById('ordersPresetYesterday');
     const presetThisWeek = document.getElementById('ordersPresetThisWeek');
@@ -2305,6 +2307,7 @@ if (dailyOrdersSelect) {
       toggleOutsourcedBtn.style.width = '106px';
       toggleOutsourcedBtn.style.whiteSpace = 'nowrap';
       toggleOutsourcedBtn.setAttribute('aria-pressed', outsourced ? 'true' : 'false');
+      if (outsourcedBalanceFilterWrap) outsourcedBalanceFilterWrap.style.display = outsourced ? '' : 'none';
     }
 
     async function fetchOrdersList(from, to) {
@@ -2352,6 +2355,10 @@ if (dailyOrdersSelect) {
       const statusText = options.statusText !== undefined ? options.statusText : (o.status || '');
       const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : (o.createdAt || '');
       const isOutsourcedRow = !!options.outsourcedKey;
+      const artistId = String(options.artistId || o.artistId || '').trim();
+      const accountAction = isOutsourcedRow && artistId
+        ? `<a class="btn btn-sm btn-outline-info ms-1 outsourced-artist-account-link" href="/customers/${encodeURIComponent(artistId)}/account" data-ajax="true">Account</a>`
+        : '';
 
       const tr = document.createElement('tr');
       if (options.groupId) {
@@ -2375,6 +2382,7 @@ if (dailyOrdersSelect) {
             ${isOutsourcedRow ? `data-outsourced-key="${escapeHtml(options.outsourcedKey)}"` : ''}>
             View
           </button>
+          ${accountAction}
         </td>
       `;
       tbody.appendChild(tr);
@@ -2397,7 +2405,8 @@ if (dailyOrdersSelect) {
             noteHtml: only && only.noteHtml,
             statusText: only && only.status,
             totalOverride: only && only.total,
-            outsourcedKey: only && only.outsourcedKey
+            outsourcedKey: only && only.outsourcedKey,
+            artistId: only && only.artistId
           });
           return;
         }
@@ -2405,6 +2414,10 @@ if (dailyOrdersSelect) {
         const groupId = `orders-group-${groupIndex++}`;
         const safeName = escapeHtml(nameRaw || 'Walk-in');
         const groupTotal = items.reduce((s, it) => s + Number(it.total || 0), 0);
+        const groupArtistId = String((items.find(it => it && it.artistId) || {}).artistId || '').trim();
+        const groupAccountAction = groupArtistId
+          ? `<a class="btn btn-sm btn-outline-info ms-2 outsourced-artist-account-link" href="/customers/${encodeURIComponent(groupArtistId)}/account" data-ajax="true">Account</a>`
+          : '';
         const latestCreated = items
           .map(it => it && it.createdAt ? new Date(it.createdAt) : null)
           .filter(d => d && !isNaN(d.getTime()))
@@ -2425,7 +2438,7 @@ if (dailyOrdersSelect) {
           <td class="text-end">${money(groupTotal)}</td>
           <td>${options.statusText || 'Grouped'}</td>
           <td>${latestCreated ? escapeHtml(formatDateTimeForDisplay(latestCreated.toISOString())) : '-'}</td>
-          <td class="text-center"><span class="text-muted">Expand</span></td>
+          <td class="text-center"><span class="text-muted">Expand</span>${groupAccountAction}</td>
         `;
         tbody.appendChild(groupTr);
 
@@ -2436,7 +2449,8 @@ if (dailyOrdersSelect) {
             noteHtml: o.noteHtml,
             statusText: o.status,
             totalOverride: o.total,
-            outsourcedKey: o.outsourcedKey
+            outsourcedKey: o.outsourcedKey,
+            artistId: o.artistId
           });
         });
       });
@@ -2450,25 +2464,43 @@ if (dailyOrdersSelect) {
 
         details.forEach(detail => {
           const artistName = String(detail.artistName || 'Out-Sourced Artist').trim() || 'Out-Sourced Artist';
-          if (!groupedByArtist[artistName]) groupedByArtist[artistName] = [];
-          groupedByArtist[artistName].push(detail);
+          const artistId = String(detail.artistId || '').trim();
+          const key = artistId || artistName;
+          if (!groupedByArtist[key]) {
+            groupedByArtist[key] = {
+              artistId,
+              artistName,
+              artistAccountBalance: Number(detail.artistAccountBalance || 0),
+              details: []
+            };
+          }
+          groupedByArtist[key].details.push(detail);
         });
 
         if (!Object.keys(groupedByArtist).length && Number(order.outsourcedTotal || 0) > 0) {
-          groupedByArtist['Out-Sourced Artist'] = [{
+          groupedByArtist['Out-Sourced Artist'] = {
+            artistId: '',
             artistName: 'Out-Sourced Artist',
-            selectionLabel: 'Out-sourced work',
-            qty: 0,
-            amount: 0,
-            total: Number(order.outsourcedTotal || 0)
-          }];
+            artistAccountBalance: 0,
+            details: [{
+              artistName: 'Out-Sourced Artist',
+              selectionLabel: 'Out-sourced work',
+              qty: 0,
+              amount: 0,
+              total: Number(order.outsourcedTotal || 0)
+            }]
+          };
         }
 
-        Object.entries(groupedByArtist).forEach(([artistName, artistDetails], index) => {
+        Object.values(groupedByArtist).forEach((artistGroup, index) => {
+          const artistName = artistGroup.artistName || 'Out-Sourced Artist';
+          const artistDetails = Array.isArray(artistGroup.details) ? artistGroup.details : [];
           const total = artistDetails.reduce((s, d) => s + Number(d.total || 0), 0);
-          const key = `${String(order.orderId || order._id || '')}::${index}::${artistName}`;
+          const key = `${String(order.orderId || order._id || '')}::${index}::${artistGroup.artistId || artistName}`;
           const cleanDetails = artistDetails.map(d => ({
+            artistId: artistGroup.artistId || String(d.artistId || '').trim(),
             artistName,
+            artistAccountBalance: Number(artistGroup.artistAccountBalance || d.artistAccountBalance || 0),
             selectionLabel: String(d.selectionLabel || '').trim(),
             qty: Number(d.qty || 0),
             amount: Number(d.amount || 0),
@@ -2479,6 +2511,8 @@ if (dailyOrdersSelect) {
             _id: order._id,
             orderId: order.orderId,
             name: artistName,
+            artistId: artistGroup.artistId || '',
+            artistAccountBalance: Number(artistGroup.artistAccountBalance || 0),
             jobNote: String(order.jobNote || '').trim(),
             total: Number(total.toFixed(2)),
             status: 'Creditor',
@@ -2507,14 +2541,24 @@ if (dailyOrdersSelect) {
       tbody.innerHTML = '';
 
       if (ordersExplorerMode === 'outsourced') {
-        const outsourcedRows = buildOutsourcedEntries(sourceOrders);
+        const balanceFilter = String(outsourcedBalanceFilter ? outsourcedBalanceFilter.value : 'all');
+        const outsourcedRowsAll = buildOutsourcedEntries(sourceOrders);
+        const outsourcedRows = outsourcedRowsAll.filter(row => {
+          const bal = Number(row.artistAccountBalance || 0);
+          if (balanceFilter === 'credit') return bal > 0;
+          if (balanceFilter === 'no_credit') return bal <= 0;
+          return true;
+        });
         if (!outsourcedRows.length) {
-          tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No outsourced orders in this range.</td></tr>';
+          tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No outsourced orders match this filter.</td></tr>';
           if (countEl) countEl.textContent = '0 outsourced results';
           return;
         }
         appendGroupedRows(tbody, outsourcedRows, { statusText: 'Creditor' });
-        if (countEl) countEl.textContent = `${outsourcedRows.length} outsourced result${outsourcedRows.length > 1 ? 's' : ''}`;
+        if (countEl) {
+          const suffix = outsourcedRowsAll.length !== outsourcedRows.length ? ` of ${outsourcedRowsAll.length}` : '';
+          countEl.textContent = `${outsourcedRows.length}${suffix} outsourced result${outsourcedRows.length > 1 ? 's' : ''}`;
+        }
         return;
       }
 
@@ -2553,7 +2597,7 @@ if (dailyOrdersSelect) {
             <thead>
               <tr>
                 <th>Selection</th>
-                <th class="text-center">Artist QTY</th>
+                <th class="text-center">QTY</th>
                 <th class="text-end">Artist Amount</th>
                 <th class="text-end">Total</th>
               </tr>
@@ -2564,6 +2608,7 @@ if (dailyOrdersSelect) {
         <div class="mt-3" style="font-size:1rem;line-height:1.65;color:#111827;font-weight:500;">
           <div>Order ID: ${escapeHtml(entry.orderId || '')}</div>
           <div>Customer: ${escapeHtml(entry.name || 'Out-Sourced Artist')}</div>
+          <div>Artist Credit Balance: ${money(entry.artistAccountBalance || 0)}</div>
           <div>Out-Sourced Cost: ${money(total)}</div>
           ${entry.jobNote ? `<div>Note / Job Type: ${escapeHtml(entry.jobNote)}</div>` : ''}
           <div>Created: ${escapeHtml(created)}</div>
@@ -2577,6 +2622,7 @@ if (dailyOrdersSelect) {
     // open modal and auto-fetch
     openBtn.addEventListener('click', function () {
       ordersExplorerMode = 'normal';
+      if (outsourcedBalanceFilter) outsourcedBalanceFilter.value = 'all';
       updateExplorerModeButton();
       setDefaultRangeToToday();
       if (modal) modal.show();
@@ -2591,6 +2637,11 @@ if (dailyOrdersSelect) {
         ordersExplorerMode = ordersExplorerMode === 'outsourced' ? 'normal' : 'outsourced';
         updateExplorerModeButton();
         renderOrdersList(lastOrdersList);
+      });
+    }
+    if (outsourcedBalanceFilter) {
+      outsourcedBalanceFilter.addEventListener('change', function () {
+        if (ordersExplorerMode === 'outsourced') renderOrdersList(lastOrdersList);
       });
     }
 
@@ -2628,6 +2679,9 @@ if (dailyOrdersSelect) {
 
     // delegate clicks inside table: anchor -> native navigation; view button -> navigate or show outsourced details
     table.addEventListener('click', function (ev) {
+      const accountLink = ev.target.closest('.outsourced-artist-account-link');
+      if (accountLink) return;
+
       const toggleRow = ev.target.closest('.orders-group-toggle');
       if (toggleRow) {
         const target = toggleRow.dataset.target;

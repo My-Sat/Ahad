@@ -15,9 +15,14 @@ block content
                 button.btn.btn-outline-light-custom.btn-sm#openCustomerOrdersBtn(type='button')
                   | Customer's Orders
 
-            p.text-muted-light.mb-2
-              strong.text-white Customer:
-              |  #{customer.displayName || customer.phone}
+            .mb-2
+              .text-muted-light
+                strong.text-white Customer:
+                |  #{customer.displayName || 'Unnamed customer'}
+              if customer.phone
+                .text-muted-light
+                  strong.text-white Phone:
+                  |  #{customer.phone}
 
             .mb-3
               span.small.text-muted-light Current balance:

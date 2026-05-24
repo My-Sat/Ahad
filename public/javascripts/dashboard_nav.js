@@ -120,6 +120,26 @@ function reExecuteScripts(newRoot, targetRoot) {
     document.querySelectorAll('.nav-link.is-loading, .dropdown-item.is-loading').forEach(el => setTabLoading(el, false));
   }
 
+  function cleanupModalState() {
+    try {
+      document.querySelectorAll('.modal.show').forEach(modalEl => {
+        if (window.bootstrap && window.bootstrap.Modal) {
+          const inst = window.bootstrap.Modal.getInstance(modalEl) || window.bootstrap.Modal.getOrCreateInstance(modalEl);
+          try { inst.hide(); } catch (e) {}
+        }
+        modalEl.classList.remove('show');
+        modalEl.setAttribute('aria-hidden', 'true');
+        modalEl.style.display = 'none';
+      });
+      document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+      document.body.classList.remove('modal-open');
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('padding-right');
+    } catch (err) {
+      console.warn('Modal cleanup failed', err);
+    }
+  }
+
   // fetch a URL and replace #main-content with its #main-content fragment
 // fetch a URL and replace #main-content with its #main-content fragment
 async function loadPage(url, push = true, sourceEl = null) {
@@ -177,6 +197,7 @@ async function loadPage(url, push = true, sourceEl = null) {
     }
 
     // Replace content
+    cleanupModalState();
     main.innerHTML = newMain.innerHTML;
 
     // Re-run scripts found inside the returned fragment
@@ -378,6 +399,7 @@ function setActiveTabByUrl(url) {
     const href = a.getAttribute('href');
     if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
     e.preventDefault();
+    cleanupModalState();
     setTabsLoadingFor(a, true);
     loadPage(href, true, a);
   });

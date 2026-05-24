@@ -21,12 +21,6 @@ function initStoreStockPage() {
   const createStoreBtn = document.getElementById('createStoreBtn');
   const createStoreSpinner = document.getElementById('createStoreSpinner');
 
-  const addForm = document.getElementById('add-to-store-form');
-  const catalogueSelect = document.getElementById('catalogueSelect');
-  const initialStockInput = document.getElementById('initialStockInput');
-  const addToStoreBtn = document.getElementById('addToStoreBtn');
-  const addToStoreSpinner = document.getElementById('addToStoreSpinner');
-
   // ----------------------------
   // Supplier purchase
   // ----------------------------
@@ -50,6 +44,16 @@ function initStoreStockPage() {
   const purchaseTotal = document.getElementById('purchaseTotal');
   const recordPurchaseBtn = document.getElementById('recordPurchaseBtn');
   const recordPurchaseSpinner = document.getElementById('recordPurchaseSpinner');
+  const openPurchaseHistoryBtn = document.getElementById('openPurchaseHistoryBtn');
+  const purchaseHistoryModalEl = document.getElementById('purchaseHistoryModal');
+  const purchaseHistoryMaterialFilter = document.getElementById('purchaseHistoryMaterialFilter');
+  const purchaseHistorySupplierFilter = document.getElementById('purchaseHistorySupplierFilter');
+  const purchaseHistoryPaymentFilter = document.getElementById('purchaseHistoryPaymentFilter');
+  const refreshPurchaseHistoryBtn = document.getElementById('refreshPurchaseHistoryBtn');
+  const purchaseHistoryMeta = document.getElementById('purchaseHistoryMeta');
+  const purchaseHistoryPrevBtn = document.getElementById('purchaseHistoryPrevBtn');
+  const purchaseHistoryNextBtn = document.getElementById('purchaseHistoryNextBtn');
+  const purchaseHistoryTbody = document.getElementById('purchaseHistoryTbody');
 
   // ----------------------------
   // Suppliers modal
@@ -74,6 +78,8 @@ function initStoreStockPage() {
   const suppliersTable = document.getElementById('suppliersTable');
   let activeCashBooks = [];
   let suppliersCache = [];
+  let purchaseHistoryPage = 1;
+  const purchaseHistoryLimit = 100;
 
   // ----------------------------
   // Adjust
@@ -139,7 +145,6 @@ function initStoreStockPage() {
   // Helpers
   // ----------------------------
   const selectedStoreId = () => (
-    (addForm ? addForm.dataset.storeId : '') ||
     (purchaseForm ? purchaseForm.dataset.storeId : '') ||
     ''
   );
@@ -329,6 +334,123 @@ function initStoreStockPage() {
       activeCashBooks = [];
     }
     populatePurchaseCashBooks();
+  }
+
+  function formatDateTime(value) {
+    if (!value) return '-';
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? '-' : d.toLocaleString();
+  }
+
+  function paymentBadge(row) {
+    const type = String(row.paymentType || '').toLowerCase();
+    if (type === 'credit') return '<span class="badge bg-warning text-dark">Credit</span>';
+    return '<span class="badge bg-success">Cash</span>';
+  }
+
+  function paymentDetail(row) {
+    const type = String(row.paymentType || '').toLowerCase();
+    if (type === 'credit') return 'Supplier account';
+    const book = String(row.cashBookName || '').trim();
+    const kind = String(row.cashBookKind || '').trim();
+    if (!book) return 'Cash book';
+    return kind ? `${book} (${kindLabel(kind)})` : book;
+  }
+
+  function renderPurchaseHistory(rows, summary) {
+    if (!purchaseHistoryTbody) return;
+
+    if (purchaseHistoryMeta) {
+      const total = fmtMoney(summary?.totalCost || 0);
+      const count = Number(summary?.count || 0);
+      const shown = Array.isArray(rows) ? rows.length : 0;
+      const from = Number(summary?.from || 0);
+      const to = Number(summary?.to || 0);
+      const range = shown ? `Showing ${from}-${to} of ${count}` : 'Showing 0 records';
+      purchaseHistoryMeta.textContent = `${range} | Total purchases: ${total}`;
+    }
+    if (purchaseHistoryPrevBtn) purchaseHistoryPrevBtn.disabled = !summary?.hasPrev;
+    if (purchaseHistoryNextBtn) purchaseHistoryNextBtn.disabled = !summary?.hasMore;
+
+    if (!Array.isArray(rows) || !rows.length) {
+      purchaseHistoryTbody.innerHTML = '<tr><td class="text-muted" colspan="10">No stock purchases match these filters.</td></tr>';
+      return;
+    }
+
+    purchaseHistoryTbody.innerHTML = rows.map(row => {
+      const purchasedQty = row.displayPurchaseQuantity || `${Number(row.purchaseUnitQuantity || row.quantity || 0)} ${row.purchaseUnitName || row.baseUnitName || ''}`;
+      const baseQty = row.displayQuantity || `${Number(row.quantity || 0)} ${row.baseUnitName || ''}`.trim();
+      const purchaseUnit = row.purchaseUnitName || row.baseUnitName || 'unit';
+      const baseUnit = row.baseUnitName || 'unit';
+      const unitCost = `${fmtMoney(row.purchaseUnitCost || row.unitCost || 0)} / ${purchaseUnit}`;
+      const baseCost = `${fmtMoney(row.unitCost || 0)} / ${baseUnit}`;
+      const note = String(row.note || '').trim() || '-';
+      const by = String(row.createdByName || '').trim() || '-';
+
+      return `
+        <tr>
+          <td class="text-muted-light">${escapeHtml(formatDateTime(row.createdAt))}</td>
+          <td class="fw-semibold text-white">${escapeHtml(row.materialName || 'Unknown material')}</td>
+          <td class="text-muted-light">${escapeHtml(row.supplierName || 'Unknown supplier')}</td>
+          <td class="text-muted-light">${escapeHtml(purchasedQty)}</td>
+          <td class="text-muted-light">${escapeHtml(baseQty)}</td>
+          <td class="text-end">
+            <div class="text-white">${escapeHtml(unitCost)}</div>
+            <small class="text-muted-light">${escapeHtml(baseCost)}</small>
+          </td>
+          <td class="text-end text-white">${escapeHtml(fmtMoney(row.totalCost || 0))}</td>
+          <td>
+            ${paymentBadge(row)}
+            <div><small class="text-muted-light">${escapeHtml(paymentDetail(row))}</small></div>
+          </td>
+          <td class="text-muted-light">${escapeHtml(by)}</td>
+          <td class="text-muted-light">${escapeHtml(note)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  async function loadPurchaseHistory(page) {
+    const storeId = selectedStoreId();
+    if (!storeId) return alert('Select a store first');
+
+    purchaseHistoryPage = Math.max(1, Math.floor(numOr(page || purchaseHistoryPage, 1)));
+    if (purchaseHistoryMeta) purchaseHistoryMeta.textContent = 'Loading stock purchase records...';
+    if (purchaseHistoryTbody) purchaseHistoryTbody.innerHTML = '<tr><td class="text-muted" colspan="10">Loading...</td></tr>';
+    if (purchaseHistoryPrevBtn) purchaseHistoryPrevBtn.disabled = true;
+    if (purchaseHistoryNextBtn) purchaseHistoryNextBtn.disabled = true;
+
+    const params = new URLSearchParams();
+    params.set('limit', String(purchaseHistoryLimit));
+    params.set('page', String(purchaseHistoryPage));
+    const materialId = String(purchaseHistoryMaterialFilter?.value || '').trim();
+    const supplierId = String(purchaseHistorySupplierFilter?.value || '').trim();
+    const paymentType = String(purchaseHistoryPaymentFilter?.value || '').trim();
+    if (materialId) params.set('materialId', materialId);
+    if (supplierId) params.set('supplierId', supplierId);
+    if (paymentType) params.set('paymentType', paymentType);
+
+    if (refreshPurchaseHistoryBtn) refreshPurchaseHistoryBtn.disabled = true;
+    if (openPurchaseHistoryBtn) openPurchaseHistoryBtn.disabled = true;
+
+    try {
+      const res = await fetch(`/admin/stores/${encodeURIComponent(storeId)}/stocks/purchases?${params.toString()}`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin',
+        cache: 'no-store'
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j || !j.ok) throw new Error(j?.error || 'Failed to load stock purchase history');
+      purchaseHistoryPage = Number(j.page || purchaseHistoryPage);
+      renderPurchaseHistory(Array.isArray(j.purchases) ? j.purchases : [], j);
+    } catch (err) {
+      console.error('loadPurchaseHistory error', err);
+      if (purchaseHistoryMeta) purchaseHistoryMeta.textContent = err.message || 'Failed to load stock purchase history';
+      if (purchaseHistoryTbody) purchaseHistoryTbody.innerHTML = '<tr><td class="text-danger" colspan="10">Failed to load stock purchase history.</td></tr>';
+    } finally {
+      if (refreshPurchaseHistoryBtn) refreshPurchaseHistoryBtn.disabled = false;
+      if (openPurchaseHistoryBtn) openPurchaseHistoryBtn.disabled = false;
+    }
   }
 
   function resetSupplierForm() {
@@ -527,6 +649,49 @@ function initStoreStockPage() {
       }
     });
   }
+
+  if (openPurchaseHistoryBtn && openPurchaseHistoryBtn.dataset.bound !== '1') {
+    openPurchaseHistoryBtn.dataset.bound = '1';
+    openPurchaseHistoryBtn.addEventListener('click', function (ev) {
+      ev && ev.preventDefault && ev.preventDefault();
+      bsShow(purchaseHistoryModalEl);
+      loadPurchaseHistory(1);
+    });
+  }
+
+  if (refreshPurchaseHistoryBtn && refreshPurchaseHistoryBtn.dataset.bound !== '1') {
+    refreshPurchaseHistoryBtn.dataset.bound = '1';
+    refreshPurchaseHistoryBtn.addEventListener('click', function (ev) {
+      ev && ev.preventDefault && ev.preventDefault();
+      loadPurchaseHistory(purchaseHistoryPage);
+    });
+  }
+
+  if (purchaseHistoryPrevBtn && purchaseHistoryPrevBtn.dataset.bound !== '1') {
+    purchaseHistoryPrevBtn.dataset.bound = '1';
+    purchaseHistoryPrevBtn.addEventListener('click', function (ev) {
+      ev && ev.preventDefault && ev.preventDefault();
+      loadPurchaseHistory(Math.max(1, purchaseHistoryPage - 1));
+    });
+  }
+
+  if (purchaseHistoryNextBtn && purchaseHistoryNextBtn.dataset.bound !== '1') {
+    purchaseHistoryNextBtn.dataset.bound = '1';
+    purchaseHistoryNextBtn.addEventListener('click', function (ev) {
+      ev && ev.preventDefault && ev.preventDefault();
+      loadPurchaseHistory(purchaseHistoryPage + 1);
+    });
+  }
+
+  [purchaseHistoryMaterialFilter, purchaseHistorySupplierFilter, purchaseHistoryPaymentFilter].forEach(filter => {
+    if (!filter || filter.dataset.bound === '1') return;
+    filter.dataset.bound = '1';
+    filter.addEventListener('change', function () {
+      if (purchaseHistoryModalEl && purchaseHistoryModalEl.classList.contains('show')) {
+        loadPurchaseHistory(1);
+      }
+    });
+  });
 
   function openSuppliersModal() {
     loadSuppliers();
@@ -857,58 +1022,6 @@ function initStoreStockPage() {
       } finally {
         createStoreBtn.disabled = false;
         if (createStoreSpinner) createStoreSpinner.style.display = 'none';
-      }
-    });
-  }
-
-  // ----------------------------
-  // Add catalogue to store
-  // ----------------------------
-  if (addToStoreBtn && addToStoreBtn.dataset.bound !== '1') {
-    addToStoreBtn.dataset.bound = '1';
-
-    addToStoreBtn.addEventListener('click', async function (ev) {
-      ev && ev.preventDefault && ev.preventDefault();
-
-      const storeId = selectedStoreId();
-      if (!storeId) return alert('No store selected');
-
-      const materialId = catalogueSelect ? catalogueSelect.value : '';
-      if (!materialId) return alert('Select a catalogue item');
-
-      let stockInitial = numOr(initialStockInput ? initialStockInput.value : 0, 0);
-      stockInitial = Math.floor(Math.max(0, stockInitial));
-
-      addToStoreBtn.disabled = true;
-      if (addToStoreSpinner) addToStoreSpinner.style.display = 'inline-block';
-
-      try {
-        const body = new URLSearchParams();
-        body.append('materialId', materialId);
-        body.append('stockInitial', String(stockInitial));
-
-        const res = await fetch(`/admin/stores/${encodeURIComponent(storeId)}/stocks`, {
-          method: 'POST',
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-          },
-          body: body.toString()
-        });
-
-        const j = await res.json().catch(() => null);
-        if (res.status === 201) {
-          showToast('Added to store', 1200);
-          window.location.reload();
-        } else {
-          alert((j && j.error) ? j.error : 'Failed to add to store');
-        }
-      } catch (err) {
-        console.error(err);
-        alert('Failed to add to store');
-      } finally {
-        addToStoreBtn.disabled = false;
-        if (addToStoreSpinner) addToStoreSpinner.style.display = 'none';
       }
     });
   }

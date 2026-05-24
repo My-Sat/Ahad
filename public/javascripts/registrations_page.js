@@ -54,6 +54,10 @@
       return String(s || '').replace(/[&<>"'`=\/]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; });
     }
 
+    function categoryDisplayName(name) {
+      return String(name || '').trim().toUpperCase();
+    }
+
     function customerName(c) {
       if (!c) return '';
       const cat = String(c.category || '').toLowerCase();
@@ -116,7 +120,7 @@
           col.innerHTML = `
             <div class="form-check">
               <input class="form-check-input secretary-cat-check" type="checkbox" value="${escapeHtml(cat._id)}" id="secCat_${escapeHtml(cat._id)}">
-              <label class="form-check-label" for="secCat_${escapeHtml(cat._id)}">${escapeHtml(cat.name)}</label>
+              <label class="form-check-label" for="secCat_${escapeHtml(cat._id)}">${escapeHtml(categoryDisplayName(cat.name))}</label>
             </div>
           `;
           categoriesBox.appendChild(col);
@@ -150,7 +154,7 @@
           tr.innerHTML = `
             <td>${escapeHtml(r.displayName || '')}</td>
             <td>${escapeHtml(r.phone || '-')}</td>
-            <td>${escapeHtml((r.categories || []).map(c => c.name).join(', ') || '-')}</td>
+            <td>${escapeHtml((r.categories || []).map(c => categoryDisplayName(c.name)).join(', ') || '-')}</td>
             <td>${statusHtml}</td>
             <td>${new Date(r.createdAt).toLocaleString([], { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
             <td class="text-end">${actionHtml}</td>

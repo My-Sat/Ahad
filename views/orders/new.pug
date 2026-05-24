@@ -200,6 +200,11 @@ block content
                 button.btn.btn-outline-light-custom.btn-sm#presetThisWeek(type='button') This Week
               button.btn.btn-primary.btn-sm.ms-2.flex-shrink-0#fetchOrdersBtn(type='button') Refresh
               button.btn.btn-outline-info.btn-sm.ms-2.flex-shrink-0#toggleOutsourcedOrdersBtn(type='button', style='width: 106px; white-space: nowrap;') Outsourced
+            .col-auto#outsourcedArtistBalanceFilterWrap(style='display:none;')
+              select.form-select.form-select-sm.form-select-dark#outsourcedArtistBalanceFilter
+                option(value='all') All Artists
+                option(value='credit') With Credit Balance
+                option(value='no_credit') Without Credit Balance
             .col-auto.text-end
               small.text-muted-light#ordersCount -- results
 

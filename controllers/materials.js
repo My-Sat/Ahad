@@ -860,6 +860,124 @@ exports.purchaseStock = async (req, res) => {
   }
 };
 
+// Stock purchase records/history for the selected store (JSON)
+exports.stockPurchaseHistory = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(storeId)) {
+      return res.status(400).json({ ok: false, error: 'Invalid store id' });
+    }
+
+    const store = await Store.findById(storeId).lean();
+    if (!store) return res.status(404).json({ ok: false, error: 'Store not found' });
+
+    const query = { store: store._id };
+    const materialId = String(req.query.materialId || '').trim();
+    const supplierId = String(req.query.supplierId || '').trim();
+    const paymentType = String(req.query.paymentType || '').trim().toLowerCase();
+
+    if (materialId) {
+      if (!mongoose.Types.ObjectId.isValid(materialId)) {
+        return res.status(400).json({ ok: false, error: 'Invalid catalogue id' });
+      }
+      query.material = new mongoose.Types.ObjectId(materialId);
+    }
+    if (supplierId) {
+      if (!mongoose.Types.ObjectId.isValid(supplierId)) {
+        return res.status(400).json({ ok: false, error: 'Invalid supplier id' });
+      }
+      query.supplier = new mongoose.Types.ObjectId(supplierId);
+    }
+    if (paymentType === 'cash' || paymentType === 'credit') query.paymentType = paymentType;
+
+    const limitRaw = Number(req.query.limit || 100);
+    const pageRaw = Number(req.query.page || 1);
+    const limit = Math.min(100, Math.max(1, isFinite(limitRaw) ? Math.floor(limitRaw) : 100));
+    const page = Math.max(1, isFinite(pageRaw) ? Math.floor(pageRaw) : 1);
+    const skip = (page - 1) * limit;
+
+    const [records, count, totalsAgg] = await Promise.all([
+      StockPurchase.find(query)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      StockPurchase.countDocuments(query),
+      StockPurchase.aggregate([
+        { $match: query },
+        { $group: { _id: null, totalCost: { $sum: '$totalCost' } } }
+      ])
+    ]);
+
+    const materialIds = records.map(p => p.material).filter(Boolean);
+    const materials = materialIds.length
+      ? await Material.find({ _id: { $in: materialIds } })
+          .select('name baseUnitName stockUnits')
+          .lean()
+      : [];
+    const materialMap = {};
+    materials.forEach(m => { materialMap[String(m._id)] = m; });
+
+    const purchases = records.map(p => {
+      const mat = p.material ? materialMap[String(p.material)] : null;
+      const baseUnitName = p.baseUnitName || mat?.baseUnitName || 'piece';
+      const purchaseUnitName = p.purchaseUnitName || baseUnitName;
+      const purchaseUnitQuantity = Number(p.purchaseUnitQuantity || 0);
+      const purchaseUnitCost = Number(p.purchaseUnitCost || 0);
+      const quantity = Number(p.quantity || 0);
+
+      return {
+        _id: p._id,
+        createdAt: p.createdAt,
+        materialId: p.material,
+        materialName: p.materialName || mat?.name || 'Unknown material',
+        supplierId: p.supplier,
+        supplierName: p.supplierName || 'Unknown supplier',
+        storeId: p.store,
+        storeName: p.storeName || store.name || '',
+        quantity,
+        unitCost: Number(p.unitCost || 0),
+        totalCost: Number(p.totalCost || 0),
+        baseUnitName,
+        displayQuantity: mat
+          ? formatMaterialQuantity(quantity, mat, { preferBase: true })
+          : `${quantity} ${baseUnitName}`,
+        purchaseUnitName,
+        purchaseUnitFactor: Number(p.purchaseUnitFactor || 1),
+        purchaseUnitQuantity,
+        purchaseUnitCost,
+        displayPurchaseQuantity: purchaseUnitQuantity > 0
+          ? `${purchaseUnitQuantity} ${purchaseUnitName}`
+          : `${quantity} ${baseUnitName}`,
+        paymentType: p.paymentType || '',
+        cashBookName: p.cashBookName || '',
+        cashBookKind: p.cashBookKind || '',
+        cashMeta: p.cashMeta || {},
+        note: p.note || '',
+        createdByName: p.createdByName || ''
+      };
+    });
+
+    return res.json({
+      ok: true,
+      store: { _id: store._id, name: store.name },
+      purchases,
+      count,
+      limit,
+      page,
+      totalPages: Math.max(1, Math.ceil(count / limit)),
+      hasPrev: page > 1,
+      hasMore: (skip + purchases.length) < count,
+      from: purchases.length ? skip + 1 : 0,
+      to: skip + purchases.length,
+      totalCost: Number(totalsAgg?.[0]?.totalCost || 0)
+    });
+  } catch (err) {
+    console.error('materials.stockPurchaseHistory error', err);
+    return res.status(500).json({ ok: false, error: 'Error loading stock purchase history' });
+  }
+};
+
 // Adjust store stock (delta/absolute) (JSON)
 exports.adjustStoreStock = async (req, res) => {
   try {

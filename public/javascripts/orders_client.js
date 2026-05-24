@@ -205,6 +205,8 @@
   const ordersToEl = document.getElementById('ordersTo');
   const fetchOrdersBtn = document.getElementById('fetchOrdersBtn');
   const toggleOutsourcedOrdersBtn = document.getElementById('toggleOutsourcedOrdersBtn');
+  const outsourcedArtistBalanceFilterWrap = document.getElementById('outsourcedArtistBalanceFilterWrap');
+  const outsourcedArtistBalanceFilter = document.getElementById('outsourcedArtistBalanceFilter');
   const presetTodayBtn = document.getElementById('presetToday');
   const presetYesterdayBtn = document.getElementById('presetYesterday');
   const presetThisWeekBtn = document.getElementById('presetThisWeek');
@@ -989,15 +991,6 @@ function renderPrices(bookMode = false) {
     }
 
     if (selectedServiceCategoryIsOutsourced) {
-      const outQty = document.createElement('input');
-      outQty.type = 'number';
-      outQty.min = '1';
-      outQty.step = '1';
-      outQty.placeholder = 'Artist QTY';
-      outQty.className = 'form-control form-control-sm outsourced-qty-input';
-      outQty.style.width = '90px';
-      mid.appendChild(outQty);
-
       const outAmt = document.createElement('input');
       outAmt.type = 'number';
       outAmt.min = '0.01';
@@ -1749,21 +1742,20 @@ function addToCart({
     let outsourcedAmount = 0;
 
     if (selectedServiceCategoryIsOutsourced) {
-      const outQtyInput = row ? row.querySelector('.outsourced-qty-input') : null;
       const outAmtInput = row ? row.querySelector('.outsourced-amount-input') : null;
       const outArtistLookup = row ? row.querySelector('.outsourced-artist-lookup') : null;
       const outArtistId = row ? row.querySelector('.outsourced-artist-id') : null;
       const outArtistName = row ? row.querySelector('.outsourced-artist-name') : null;
 
-      outsourcedQty = Math.max(0, Math.floor(Number(outQtyInput && outQtyInput.value ? outQtyInput.value : 0)));
+      outsourcedQty = Math.max(1, Math.floor(Number(serviceRequiresPrinter ? factor : pages) || 1));
       outsourcedAmount = Math.max(0, Number(outAmtInput && outAmtInput.value ? outAmtInput.value : 0));
       outsourcedArtistId = String(outArtistId && outArtistId.value ? outArtistId.value : '').trim();
       outsourcedArtistName = String(outArtistName && outArtistName.value ? outArtistName.value : '').trim();
 
-      const hasOutData = outsourcedQty > 0 || outsourcedAmount > 0 || String((outArtistLookup && outArtistLookup.value) || '').trim();
+      const hasOutData = outsourcedAmount > 0 || String((outArtistLookup && outArtistLookup.value) || '').trim();
       if (hasOutData) {
-        if (outsourcedQty <= 0 || outsourcedAmount <= 0) {
-          showAlertModal('For Out-Sourced service, enter valid Artist QTY and Artist Amount.', 'Out-Sourced');
+        if (outsourcedAmount <= 0) {
+          showAlertModal('For Out-Sourced service, enter valid Artist Amount.', 'Out-Sourced');
           return;
         }
 
@@ -1786,6 +1778,8 @@ function addToCart({
           if (outArtistName) outArtistName.value = outsourcedArtistName;
           if (outArtistLookup) outArtistLookup.value = outsourcedArtistName;
         }
+      } else {
+        outsourcedQty = 0;
       }
     }
 
@@ -1897,12 +1891,10 @@ function addToCart({
       const printerSelect = row ? row.querySelector('.printer-select') : null;
       if (printerSelect) { printerSelect.selectedIndex = 0; }
       if (spoiledInput) spoiledInput.value = '';
-      const outQtyInput = row ? row.querySelector('.outsourced-qty-input') : null;
       const outAmtInput = row ? row.querySelector('.outsourced-amount-input') : null;
       const outArtistLookup = row ? row.querySelector('.outsourced-artist-lookup') : null;
       const outArtistId = row ? row.querySelector('.outsourced-artist-id') : null;
       const outArtistName = row ? row.querySelector('.outsourced-artist-name') : null;
-      if (outQtyInput) outQtyInput.value = '';
       if (outAmtInput) outAmtInput.value = '';
       if (outArtistLookup) outArtistLookup.value = '';
       if (outArtistId) outArtistId.value = '';
@@ -2257,6 +2249,7 @@ async function placeOrderFlow() {
   if (openOrdersExplorerBtn) {
     openOrdersExplorerBtn.addEventListener('click', function () {
       ordersExplorerMode = 'normal';
+      if (outsourcedArtistBalanceFilter) outsourcedArtistBalanceFilter.value = 'all';
       updateOrdersExplorerModeButton();
       // set default today range
       const today = new Date();
@@ -2310,6 +2303,11 @@ async function placeOrderFlow() {
       renderOrdersList(lastOrdersList);
     });
   }
+  if (outsourcedArtistBalanceFilter) {
+    outsourcedArtistBalanceFilter.addEventListener('change', function () {
+      if (ordersExplorerMode === 'outsourced') renderOrdersList(lastOrdersList);
+    });
+  }
 
   function updateOrdersExplorerModeButton() {
     if (!toggleOutsourcedOrdersBtn) return;
@@ -2321,6 +2319,7 @@ async function placeOrderFlow() {
     toggleOutsourcedOrdersBtn.style.width = '106px';
     toggleOutsourcedOrdersBtn.style.whiteSpace = 'nowrap';
     toggleOutsourcedOrdersBtn.setAttribute('aria-pressed', outsourced ? 'true' : 'false');
+    if (outsourcedArtistBalanceFilterWrap) outsourcedArtistBalanceFilterWrap.style.display = outsourced ? '' : 'none';
   }
 
   // ---------- Fetch orders list used by explorer ----------
@@ -2389,6 +2388,10 @@ function renderOrdersList(orders) {
     const created = o.createdAt ? formatDateTimeForDisplay(o.createdAt) : (o.createdAt || '');
     const isOutsourcedRow = !!options.outsourcedKey;
     const viewHref = '/orders/view/' + encodeURIComponent(orderId);
+    const artistId = String(options.artistId || o.artistId || '').trim();
+    const accountAction = isOutsourcedRow && artistId
+      ? `<a class="btn btn-sm btn-outline-info ms-1 outsourced-artist-account-link" href="/customers/${encodeURIComponent(artistId)}/account" data-ajax="true">Account</a>`
+      : '';
 
     const tr = document.createElement('tr');
     if (options.groupId) {
@@ -2413,6 +2416,7 @@ function renderOrdersList(orders) {
           ${isOutsourcedRow ? `data-outsourced-key="${escapeHtml(options.outsourcedKey)}"` : ''}>
           View
         </button>
+        ${accountAction}
       </td>
     `;
     tbody.appendChild(tr);
@@ -2434,7 +2438,8 @@ function renderOrdersList(orders) {
           noteHtml: only && only.noteHtml,
           statusText: only && only.status,
           totalOverride: only && only.total,
-          outsourcedKey: only && only.outsourcedKey
+          outsourcedKey: only && only.outsourcedKey,
+          artistId: only && only.artistId
         });
         return;
       }
@@ -2442,6 +2447,10 @@ function renderOrdersList(orders) {
       const groupId = `orders-group-${groupIndex++}`;
       const safeName = escapeHtml(nameRaw || 'Walk-in');
       const groupTotal = items.reduce((s, it) => s + Number(it.total || 0), 0);
+      const groupArtistId = String((items.find(it => it && it.artistId) || {}).artistId || '').trim();
+      const groupAccountAction = groupArtistId
+        ? `<a class="btn btn-sm btn-outline-info ms-2 outsourced-artist-account-link" href="/customers/${encodeURIComponent(groupArtistId)}/account" data-ajax="true">Account</a>`
+        : '';
       const latestCreated = items
         .map(it => it && it.createdAt ? new Date(it.createdAt) : null)
         .filter(d => d && !isNaN(d.getTime()))
@@ -2462,7 +2471,7 @@ function renderOrdersList(orders) {
         <td class="text-end">GH\u20b5 ${formatMoney(groupTotal)}</td>
         <td>${options.statusText || 'Grouped'}</td>
         <td>${latestCreated ? escapeHtml(formatDateTimeForDisplay(latestCreated.toISOString())) : '-'}</td>
-        <td class="text-center"><span class="text-muted">Expand</span></td>
+        <td class="text-center"><span class="text-muted">Expand</span>${groupAccountAction}</td>
       `;
       tbody.appendChild(groupTr);
 
@@ -2473,7 +2482,8 @@ function renderOrdersList(orders) {
           noteHtml: o.noteHtml,
           statusText: o.status,
           totalOverride: o.total,
-          outsourcedKey: o.outsourcedKey
+          outsourcedKey: o.outsourcedKey,
+          artistId: o.artistId
         });
       });
     });
@@ -2487,25 +2497,43 @@ function renderOrdersList(orders) {
 
       details.forEach(detail => {
         const artistName = String(detail.artistName || 'Out-Sourced Artist').trim() || 'Out-Sourced Artist';
-        if (!groupedByArtist[artistName]) groupedByArtist[artistName] = [];
-        groupedByArtist[artistName].push(detail);
+        const artistId = String(detail.artistId || '').trim();
+        const key = artistId || artistName;
+        if (!groupedByArtist[key]) {
+          groupedByArtist[key] = {
+            artistId,
+            artistName,
+            artistAccountBalance: Number(detail.artistAccountBalance || 0),
+            details: []
+          };
+        }
+        groupedByArtist[key].details.push(detail);
       });
 
       if (!Object.keys(groupedByArtist).length && Number(order.outsourcedTotal || 0) > 0) {
-        groupedByArtist['Out-Sourced Artist'] = [{
+        groupedByArtist['Out-Sourced Artist'] = {
+          artistId: '',
           artistName: 'Out-Sourced Artist',
-          selectionLabel: 'Out-sourced work',
-          qty: 0,
-          amount: 0,
-          total: Number(order.outsourcedTotal || 0)
-        }];
+          artistAccountBalance: 0,
+          details: [{
+            artistName: 'Out-Sourced Artist',
+            selectionLabel: 'Out-sourced work',
+            qty: 0,
+            amount: 0,
+            total: Number(order.outsourcedTotal || 0)
+          }]
+        };
       }
 
-      Object.entries(groupedByArtist).forEach(([artistName, artistDetails], index) => {
+      Object.values(groupedByArtist).forEach((artistGroup, index) => {
+        const artistName = artistGroup.artistName || 'Out-Sourced Artist';
+        const artistDetails = Array.isArray(artistGroup.details) ? artistGroup.details : [];
         const total = artistDetails.reduce((s, d) => s + Number(d.total || 0), 0);
-        const key = `${String(order.orderId || order._id || '')}::${index}::${artistName}`;
+        const key = `${String(order.orderId || order._id || '')}::${index}::${artistGroup.artistId || artistName}`;
         const cleanDetails = artistDetails.map(d => ({
+          artistId: artistGroup.artistId || String(d.artistId || '').trim(),
           artistName,
+          artistAccountBalance: Number(artistGroup.artistAccountBalance || d.artistAccountBalance || 0),
           selectionLabel: String(d.selectionLabel || '').trim(),
           qty: Number(d.qty || 0),
           amount: Number(d.amount || 0),
@@ -2516,6 +2544,8 @@ function renderOrdersList(orders) {
           _id: order._id,
           orderId: order.orderId,
           name: artistName,
+          artistId: artistGroup.artistId || '',
+          artistAccountBalance: Number(artistGroup.artistAccountBalance || 0),
           originalCustomerName: order.name || 'Walk-in',
           jobNote: String(order.jobNote || '').trim(),
           total: Number(total.toFixed(2)),
@@ -2532,14 +2562,24 @@ function renderOrdersList(orders) {
   }
 
   if (ordersExplorerMode === 'outsourced') {
-    const outsourcedRows = buildOutsourcedEntries(sourceOrders);
+    const balanceFilter = String(outsourcedArtistBalanceFilter ? outsourcedArtistBalanceFilter.value : 'all');
+    const outsourcedRowsAll = buildOutsourcedEntries(sourceOrders);
+    const outsourcedRows = outsourcedRowsAll.filter(row => {
+      const bal = Number(row.artistAccountBalance || 0);
+      if (balanceFilter === 'credit') return bal > 0;
+      if (balanceFilter === 'no_credit') return bal <= 0;
+      return true;
+    });
     if (!outsourcedRows.length) {
-      tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No outsourced orders in this range.</td></tr>';
+      tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No outsourced orders match this filter.</td></tr>';
       if (ordersCountEl) ordersCountEl.textContent = '0 outsourced results';
       return;
     }
     appendGroupedRows(outsourcedRows, { statusText: 'Creditor' });
-    if (ordersCountEl) ordersCountEl.textContent = `${outsourcedRows.length} outsourced result${outsourcedRows.length > 1 ? 's' : ''}`;
+    if (ordersCountEl) {
+      const suffix = outsourcedRowsAll.length !== outsourcedRows.length ? ` of ${outsourcedRowsAll.length}` : '';
+      ordersCountEl.textContent = `${outsourcedRows.length}${suffix} outsourced result${outsourcedRows.length > 1 ? 's' : ''}`;
+    }
     return;
   }
 
@@ -2658,7 +2698,7 @@ function renderOrdersList(orders) {
           <thead>
             <tr>
               <th>Selection</th>
-              <th class="text-center">Artist QTY</th>
+              <th class="text-center">QTY</th>
               <th class="text-end">Artist Amount</th>
               <th class="text-end">Total</th>
             </tr>
@@ -2669,6 +2709,7 @@ function renderOrdersList(orders) {
       <div class="mt-3" style="font-size:1rem;line-height:1.65;color:#111827;font-weight:500;">
         <div>Order ID: ${escapeHtml(entry.orderId || '')}</div>
         <div>Customer: ${escapeHtml(entry.name || 'Out-Sourced Artist')}</div>
+        <div>Artist Credit Balance: GH\u20b5 ${formatMoney(entry.artistAccountBalance || 0)}</div>
         <div>Out-Sourced Cost: GH₵ ${formatMoney(total)}</div>
         ${entry.jobNote ? `<div>Note / Job Type: ${escapeHtml(entry.jobNote)}</div>` : ''}
         <div>Created: ${escapeHtml(created)}</div>
@@ -2682,6 +2723,9 @@ function renderOrdersList(orders) {
   // Orders table click delegation (view button)
   if (ordersTable) {
     ordersTable.addEventListener('click', function (ev) {
+      const accountLink = ev.target.closest('.outsourced-artist-account-link');
+      if (accountLink) return;
+
       const toggleRow = ev.target.closest('.orders-group-toggle');
       if (toggleRow) {
         const target = toggleRow.dataset.target;
@@ -2835,6 +2879,3 @@ if (serviceSelect) {
     initOrdersClient();
   });
 })();
-
-
-
