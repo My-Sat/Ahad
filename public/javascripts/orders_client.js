@@ -823,7 +823,7 @@ async function loadServicesForCategory(catId) {
         </style>
         </head><body>
         <div class="wrap">
-          <img class="logo" src="/public/images/AHAD LOGO.png" alt="AHAD" />
+          <img class="logo" src="/public/images/AHAD LOGO1.jpeg" alt="AHAD" />
           <h1>Order Created</h1>
           <div class="details">
             <p><strong>Order ID:</strong> ${escapeHtml(idText)}</p>
@@ -2779,7 +2779,7 @@ function renderOrdersList(orders) {
         <meta name="viewport" content="width=device-width,initial-scale=1">
         <style>body{font-family:Arial,Helvetica,sans-serif;padding:22px;color:#111}pre{white-space:pre-wrap;background:#f8f9fa;padding:12px;border-radius:6px}table{width:100%;border-collapse:collapse}td,th{padding:6px;border-bottom:1px solid #eee}</style>
         </head><body>
-        <div><img src="/public/images/AHAD LOGO.png" style="max-height:60px"/></div>
+        <div><img src="/public/images/AHAD LOGO1.jpeg" style="max-height:60px"/></div>
         <h2>Order</h2><p>${escapeHtml(meta || '')}</p>
         <div>${html || '<p>No details</p>'}</div>
         </body></html>`);
