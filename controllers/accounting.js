@@ -97,24 +97,44 @@ function depreciationExpenseAccountForAsset(asset) {
 const FIXED_ASSET_CODE_LENGTH = 4;
 const FIXED_ASSET_CODE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const FIXED_ASSET_CODE_DIGITS = '0123456789';
+const FIXED_ASSET_CODE_PATTERN = /^[A-Z]{2}-[A-Z]{2}\d{2}$/;
 
-function fixedAssetCodeFromId(id, attempt = 0) {
+function fixedAssetPrefixFromName(name) {
+  const words = String(name || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const letterWords = words
+    .map(word => word.replace(/[^A-Z]/g, ''))
+    .filter(Boolean);
+
+  if (letterWords.length >= 2) return `${letterWords[0][0]}${letterWords[1][0]}`;
+  if (letterWords.length === 1) return letterWords[0].slice(0, 2).padEnd(2, 'X');
+  return 'AS';
+}
+
+function fixedAssetCodeFromId(id, name, attempt = 0) {
   const hash = crypto
     .createHash('sha1')
     .update(`${id}:${attempt}`)
     .digest();
 
-  return [
+  const suffix = [
     FIXED_ASSET_CODE_LETTERS[hash[0] % FIXED_ASSET_CODE_LETTERS.length],
     FIXED_ASSET_CODE_LETTERS[hash[1] % FIXED_ASSET_CODE_LETTERS.length],
     FIXED_ASSET_CODE_DIGITS[hash[2] % FIXED_ASSET_CODE_DIGITS.length],
     FIXED_ASSET_CODE_DIGITS[hash[3] % FIXED_ASSET_CODE_DIGITS.length]
   ].join('').slice(0, FIXED_ASSET_CODE_LENGTH);
+
+  return `${fixedAssetPrefixFromName(name)}-${suffix}`;
 }
 
-async function uniqueFixedAssetCodeForId(id, session = null, excludeId = null) {
+async function uniqueFixedAssetCodeForId(id, name, session = null, excludeId = null) {
   for (let attempt = 0; attempt < 256; attempt += 1) {
-    const code = fixedAssetCodeFromId(id, attempt);
+    const code = fixedAssetCodeFromId(id, name, attempt);
     const filter = { code };
     if (excludeId) filter._id = { $ne: excludeId };
     const query = FixedAsset.exists(filter);
@@ -128,35 +148,46 @@ async function uniqueFixedAssetCodeForId(id, session = null, excludeId = null) {
   throw e;
 }
 
-async function newFixedAssetIdentity(session = null) {
+async function newFixedAssetIdentity(name, session = null) {
   const _id = new mongoose.Types.ObjectId();
   return {
     _id,
-    code: await uniqueFixedAssetCodeForId(_id, session)
+    code: await uniqueFixedAssetCodeForId(_id, name, session)
   };
 }
 
 async function ensureFixedAssetCodes() {
-  const needsCode = await FixedAsset.find({
+  const candidates = await FixedAsset.find({
     $or: [
       { code: { $exists: false } },
       { code: null },
       { code: '' },
       { code: /^FA-/i },
-      { code: { $not: /^[A-Z0-9]{4}$/ } },
+      { code: { $not: FIXED_ASSET_CODE_PATTERN } },
       { code: { $not: /[A-Z]/ } },
       { code: { $not: /\d/ } }
     ]
-  }).select('_id').limit(500);
+  }).select('_id name code').limit(500);
 
-  for (const asset of needsCode) {
-    const code = await uniqueFixedAssetCodeForId(asset._id, null, asset._id);
+  for (const asset of candidates) {
+    const code = await uniqueFixedAssetCodeForId(asset._id, asset.name, null, asset._id);
     await FixedAsset.updateOne(
       {
         _id: asset._id
       },
       { $set: { code } }
     );
+  }
+
+  const prefixCandidates = await FixedAsset.find({ code: FIXED_ASSET_CODE_PATTERN })
+    .select('_id name code')
+    .limit(500);
+
+  for (const asset of prefixCandidates) {
+    const expectedPrefix = fixedAssetPrefixFromName(asset.name);
+    if (String(asset.code || '').startsWith(`${expectedPrefix}-`)) continue;
+    const code = await uniqueFixedAssetCodeForId(asset._id, asset.name, null, asset._id);
+    await FixedAsset.updateOne({ _id: asset._id }, { $set: { code } });
   }
 }
 
@@ -901,7 +932,7 @@ exports.apiCreateEquityTransaction = async (req, res) => {
           }
         }
 
-        const fixedAssetIdentity = await newFixedAssetIdentity(session);
+        const fixedAssetIdentity = await newFixedAssetIdentity(fixedAssetName, session);
         const fixedAssetDocs = await FixedAsset.create([{
           _id: fixedAssetIdentity._id,
           name: fixedAssetName,
@@ -1449,7 +1480,7 @@ exports.apiCreateFixedAsset = async (req, res) => {
         : { cashBook: null, meta: {} };
 
       const actor = actorFromReq(req);
-      const fixedAssetIdentity = await newFixedAssetIdentity(session);
+      const fixedAssetIdentity = await newFixedAssetIdentity(name, session);
       const docs = await FixedAsset.create([{
         _id: fixedAssetIdentity._id,
         name,

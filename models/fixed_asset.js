@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const FixedAssetSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
-  code: { type: String, trim: true, uppercase: true, minlength: 4, maxlength: 4, match: /^(?=.*[A-Z])(?=.*\d)[A-Z0-9]{4}$/, unique: true, sparse: true, index: true },
+  code: { type: String, trim: true, uppercase: true, minlength: 7, maxlength: 7, match: /^[A-Z]{2}-[A-Z]{2}\d{2}$/, unique: true, sparse: true, index: true },
   assetType: { type: String, trim: true, default: 'printer', index: true },
   printer: { type: mongoose.Schema.Types.ObjectId, ref: 'Printer', default: null, index: true },
   purchaseDate: { type: Date, default: Date.now, index: true },
