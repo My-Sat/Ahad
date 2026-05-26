@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const AccountingAccount = require('../models/accounting_account');
 const JournalEntry = require('../models/journal_entry');
 const ExpenseCategory = require('../models/expense_category');
@@ -91,6 +92,72 @@ function depreciationExpenseAccountForAsset(asset) {
   return asset && asset.printer
     ? ACCOUNTS.PRINTER_DEPRECIATION
     : ACCOUNTS.FIXED_ASSET_DEPRECIATION;
+}
+
+const FIXED_ASSET_CODE_LENGTH = 4;
+const FIXED_ASSET_CODE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const FIXED_ASSET_CODE_DIGITS = '0123456789';
+
+function fixedAssetCodeFromId(id, attempt = 0) {
+  const hash = crypto
+    .createHash('sha1')
+    .update(`${id}:${attempt}`)
+    .digest();
+
+  return [
+    FIXED_ASSET_CODE_LETTERS[hash[0] % FIXED_ASSET_CODE_LETTERS.length],
+    FIXED_ASSET_CODE_LETTERS[hash[1] % FIXED_ASSET_CODE_LETTERS.length],
+    FIXED_ASSET_CODE_DIGITS[hash[2] % FIXED_ASSET_CODE_DIGITS.length],
+    FIXED_ASSET_CODE_DIGITS[hash[3] % FIXED_ASSET_CODE_DIGITS.length]
+  ].join('').slice(0, FIXED_ASSET_CODE_LENGTH);
+}
+
+async function uniqueFixedAssetCodeForId(id, session = null, excludeId = null) {
+  for (let attempt = 0; attempt < 256; attempt += 1) {
+    const code = fixedAssetCodeFromId(id, attempt);
+    const filter = { code };
+    if (excludeId) filter._id = { $ne: excludeId };
+    const query = FixedAsset.exists(filter);
+    if (session) query.session(session);
+    const exists = await query;
+    if (!exists) return code;
+  }
+
+  const e = new Error('Unable to generate a unique fixed asset code');
+  e.statusCode = 500;
+  throw e;
+}
+
+async function newFixedAssetIdentity(session = null) {
+  const _id = new mongoose.Types.ObjectId();
+  return {
+    _id,
+    code: await uniqueFixedAssetCodeForId(_id, session)
+  };
+}
+
+async function ensureFixedAssetCodes() {
+  const needsCode = await FixedAsset.find({
+    $or: [
+      { code: { $exists: false } },
+      { code: null },
+      { code: '' },
+      { code: /^FA-/i },
+      { code: { $not: /^[A-Z0-9]{4}$/ } },
+      { code: { $not: /[A-Z]/ } },
+      { code: { $not: /\d/ } }
+    ]
+  }).select('_id').limit(500);
+
+  for (const asset of needsCode) {
+    const code = await uniqueFixedAssetCodeForId(asset._id, null, asset._id);
+    await FixedAsset.updateOne(
+      {
+        _id: asset._id
+      },
+      { $set: { code } }
+    );
+  }
 }
 
 async function repairFixedAssetDepreciationAccounts() {
@@ -515,6 +582,7 @@ exports.page = async (req, res) => {
     await ensureDefaultExpenseCategories();
     await postDueStraightLineDepreciation(new Date(), actorFromReq(req));
     await postDuePrepaidReleases(new Date(), actorFromReq(req));
+    await ensureFixedAssetCodes();
     const [categories, cashBooks, printers, accounts, assets, expenses, accruedExpenses, accruedPayments, prepaids, prepaidReleases, equityTransactions, entries] = await Promise.all([
       ExpenseCategory.find({ active: true }).sort({ name: 1 }).lean(),
       CashBook.find({ active: true }).sort({ name: 1 }).lean(),
@@ -833,8 +901,11 @@ exports.apiCreateEquityTransaction = async (req, res) => {
           }
         }
 
+        const fixedAssetIdentity = await newFixedAssetIdentity(session);
         const fixedAssetDocs = await FixedAsset.create([{
+          _id: fixedAssetIdentity._id,
           name: fixedAssetName,
+          code: fixedAssetIdentity.code,
           assetType: printer ? 'printer' : 'asset',
           printer: printer ? printer._id : null,
           purchaseDate: date,
@@ -1378,8 +1449,11 @@ exports.apiCreateFixedAsset = async (req, res) => {
         : { cashBook: null, meta: {} };
 
       const actor = actorFromReq(req);
+      const fixedAssetIdentity = await newFixedAssetIdentity(session);
       const docs = await FixedAsset.create([{
+        _id: fixedAssetIdentity._id,
         name,
+        code: fixedAssetIdentity.code,
         assetType: printer ? 'printer' : String(req.body.assetType || 'asset').trim() || 'asset',
         printer: printer ? printer._id : null,
         purchaseDate,

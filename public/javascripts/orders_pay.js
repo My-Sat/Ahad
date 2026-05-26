@@ -1256,6 +1256,136 @@ function renderCashiersStatus(rows) {
   const myCashTodayEl = document.getElementById('myCashToday');
   const myPrevBalanceEl = document.getElementById('myPrevBalance');
   const myCashierNameEl = document.getElementById('myCashierName');
+  const myCashBreakdownModalEl = document.getElementById('myCashBreakdownModal');
+  const myCashBreakdownModal = (window.bootstrap && myCashBreakdownModalEl) ? new bootstrap.Modal(myCashBreakdownModalEl) : null;
+  const myCashBreakdownMeta = document.getElementById('myCashBreakdownMeta');
+  const myCashBreakdownTotal = document.getElementById('myCashBreakdownTotal');
+  const myCashBreakdownContent = document.getElementById('myCashBreakdownContent');
+  const myCashBreakdownRefreshBtn = document.getElementById('myCashBreakdownRefreshBtn');
+
+function cashBookKindLabel(kind) {
+  const k = String(kind || '').toLowerCase();
+  if (k === 'momo') return 'MoMo';
+  if (k === 'bank') return 'Bank';
+  return 'Cash';
+}
+
+function paymentMethodLabel(method) {
+  const m = String(method || '').toLowerCase();
+  if (m === 'momo') return 'MoMo';
+  if (m === 'bank') return 'Bank';
+  if (m === 'cheque') return 'Cheque';
+  if (m === 'cash') return 'Cash';
+  return m ? m.toUpperCase() : '-';
+}
+
+function formatDateTime(value) {
+  if (!value) return '-';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? '-' : d.toLocaleString();
+}
+
+function transactionExtraDetails(txn) {
+  const details = [];
+  if (txn.momoNumber) details.push(`MoMo Number: ${escapeHtml(txn.momoNumber)}`);
+  if (txn.momoTxId) details.push(`Transaction ID: ${escapeHtml(txn.momoTxId)}`);
+  if (txn.chequeNumber) details.push(`Cheque: ${escapeHtml(txn.chequeNumber)}`);
+  if (txn.depositDetails) details.push(`Deposit: ${escapeHtml(txn.depositDetails)}`);
+  if (Number(txn.creditExcess || 0) > 0) details.push(`Credited to customer account: ${formatCedi(txn.creditExcess)}`);
+  if (Number(txn.appliedAmount || 0) > 0 && Number(txn.appliedAmount || 0) !== Number(txn.amount || 0)) {
+    details.push(`Applied to order: ${formatCedi(txn.appliedAmount)}`);
+  }
+  return details.length ? `<div class="small text-muted-light mt-1">${details.join(' | ')}</div>` : '';
+}
+
+function renderMyCashBreakdown(data) {
+  const books = Array.isArray(data && data.cashBooks) ? data.cashBooks : [];
+  if (myCashBreakdownTotal) myCashBreakdownTotal.textContent = formatCedi(data?.totalCashRecordedToday || 0);
+  if (myCashBreakdownMeta) {
+    const from = data?.from ? formatDateTime(data.from) : '-';
+    const to = data?.to ? formatDateTime(data.to) : '-';
+    myCashBreakdownMeta.textContent = `Current period: ${from} to ${to}`;
+  }
+
+  if (!myCashBreakdownContent) return;
+  if (!books.length) {
+    myCashBreakdownContent.innerHTML = '<p class="text-muted-light mb-0">No payments recorded in the current cashier period.</p>';
+    return;
+  }
+
+  myCashBreakdownContent.innerHTML = books.map((book, index) => {
+    const transactions = Array.isArray(book.transactions) ? book.transactions : [];
+    const rows = transactions.length
+      ? transactions.map(txn => `
+          <tr>
+            <td class="text-nowrap">${escapeHtml(formatDateTime(txn.createdAt))}</td>
+            <td>
+              <div class="fw-semibold text-white">${escapeHtml(txn.orderId || '-')}</div>
+              <div class="small text-muted-light">${escapeHtml(txn.customerName || 'Walk-in / Unknown')}</div>
+            </td>
+            <td>${escapeHtml(paymentMethodLabel(txn.method))}${transactionExtraDetails(txn)}</td>
+            <td>${escapeHtml(txn.note || '')}</td>
+            <td class="text-end text-success fw-semibold">${formatCedi(txn.amount || 0)}</td>
+          </tr>
+        `).join('')
+      : '<tr><td class="text-muted-light" colspan="5">No transactions.</td></tr>';
+
+    return `
+      <div class="card dark-surface border-secondary mb-3">
+        <div class="card-body dark-card-body">
+          <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+            <div>
+              <h6 class="text-white mb-1">${escapeHtml(book.cashBookName || 'Cash Book')}</h6>
+              <div class="small text-muted-light">${cashBookKindLabel(book.cashBookKind)} | ${Number(book.count || 0)} transaction${Number(book.count || 0) === 1 ? '' : 's'}</div>
+            </div>
+            <div class="text-end">
+              <div class="small text-muted-light">Subtotal</div>
+              <strong class="text-success">${formatCedi(book.total || 0)}</strong>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Order / Customer</th>
+                  <th>Payment Details</th>
+                  <th>Note</th>
+                  <th class="text-end">Amount</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function fetchMyCashBreakdown() {
+  if (!myCashBreakdownContent) return;
+  if (myCashBreakdownModal) myCashBreakdownModal.show();
+  myCashBreakdownContent.innerHTML = '<p class="text-muted-light mb-0">Loading breakdown...</p>';
+  if (myCashBreakdownMeta) myCashBreakdownMeta.textContent = 'Loading...';
+  if (myCashBreakdownRefreshBtn) myCashBreakdownRefreshBtn.disabled = true;
+
+  try {
+    const res = await fetch('/cashiers/my-cash-breakdown', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+    const j = await res.json().catch(() => null);
+    if (!res.ok || !j || !j.ok) throw new Error(j?.error || 'Failed to load cash breakdown');
+    renderMyCashBreakdown(j);
+  } catch (err) {
+    if (myCashBreakdownMeta) myCashBreakdownMeta.textContent = 'Unable to load breakdown';
+    myCashBreakdownContent.innerHTML = `<p class="text-danger mb-0">${escapeHtml(err.message || 'Failed to load cash breakdown')}</p>`;
+  } finally {
+    if (myCashBreakdownRefreshBtn) myCashBreakdownRefreshBtn.disabled = false;
+  }
+}
 
 // -------------------------
 // Cashier self-status UI (for logged-in cashiers)
@@ -1282,8 +1412,8 @@ async function fetchMyCashierStatus() {
     const todayPayments = Number(j.totalCashRecordedToday || 0);
 
     // Show the currently uncollected cash (resets to 0.00 after collection)
-    if (myCashTodayEl) myCashTodayEl.textContent = Number(todayPayments).toFixed(2);
-    if (myPrevBalanceEl) myPrevBalanceEl.textContent = Number(j.previousBalance || 0).toFixed(2);
+    if (myCashTodayEl) myCashTodayEl.textContent = formatCedi(todayPayments);
+    if (myPrevBalanceEl) myPrevBalanceEl.textContent = formatCedi(j.previousBalance || 0);
     return j;
   } catch (err) {
     console.error('fetchMyCashierStatus err', err);
@@ -1302,6 +1432,20 @@ async function fetchMyCashierStatus() {
       // store poll handle if you want to clear later
     } catch (e) {}
   })();
+
+  if (myCashTodayEl) {
+    myCashTodayEl.addEventListener('click', fetchMyCashBreakdown);
+    myCashTodayEl.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        fetchMyCashBreakdown();
+      }
+    });
+  }
+
+  if (myCashBreakdownRefreshBtn) {
+    myCashBreakdownRefreshBtn.addEventListener('click', fetchMyCashBreakdown);
+  }
 
   // ensure we refresh cashier status after successful payment
   // wrap existing fetchOrderById() resolution and payNowBtn flow to call fetchMyCashierStatus()

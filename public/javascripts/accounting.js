@@ -136,9 +136,12 @@
       const printerName = asset.printer && typeof asset.printer === 'object'
         ? asset.printer.name
         : fallbackPrinterName;
+      const assetCode = asset.code
+        ? `<span class="badge bg-info text-dark ms-2">${escapeHtml(asset.code)}</span>`
+        : '';
       prependTableRow('fixedAssetsTable', `
         <tr>
-          <td>${escapeHtml(asset.name || '')}</td>
+          <td><span>${escapeHtml(asset.name || '')}</span>${assetCode}</td>
           <td>${escapeHtml(printerName || '-')}</td>
           <td>${escapeHtml(asset.depreciationMethod || '')}</td>
           <td class="text-end">${fmt(asset.purchaseCost)}</td>

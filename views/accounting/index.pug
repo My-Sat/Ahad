@@ -657,7 +657,10 @@ block content
                           if assets && assets.length
                             each a in assets
                               tr
-                                td= a.name
+                                td
+                                  span= a.name
+                                  if a.code
+                                    span.badge.bg-info.text-dark.ms-2= a.code
                                 td= a.printer ? a.printer.name : '-'
                                 td= a.depreciationMethod
                                 td.text-end GH₵ #{Number(a.purchaseCost || 0).toFixed(2)}

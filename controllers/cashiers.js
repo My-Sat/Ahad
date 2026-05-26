@@ -17,6 +17,33 @@ function round2(n) {
   return Number((Number(n || 0)).toFixed(2));
 }
 
+function cashBookKindFromPayment(payment) {
+  const method = String(payment?.method || '').toLowerCase();
+  const meta = payment?.meta || {};
+  const kind = String(payment?.cashBookKind || meta.cashBookKind || '').toLowerCase();
+  if (['cash', 'bank', 'momo'].includes(kind)) return kind;
+  if (method === 'momo') return 'momo';
+  if (method === 'bank' || method === 'cheque') return 'bank';
+  return 'cash';
+}
+
+function cashBookNameFromPayment(payment, kind) {
+  const meta = payment?.meta || {};
+  const explicit = String(payment?.cashBookName || meta.cashBookName || '').trim();
+  if (explicit) return explicit;
+  if (kind === 'momo') return 'MoMo';
+  if (kind === 'bank') return 'Bank';
+  return 'Cash';
+}
+
+function paymentReceivedAmount(payment) {
+  const meta = payment?.meta || {};
+  const raw = meta.receivedAmount !== undefined && meta.receivedAmount !== null
+    ? meta.receivedAmount
+    : payment?.amount;
+  return round2(raw);
+}
+
 async function sumPaymentsForCashier(cashierId, start, end) {
   if (!cashierId || !start || !end) return 0;
   const cashierObjId = new mongoose.Types.ObjectId(String(cashierId));
@@ -30,6 +57,85 @@ async function sumPaymentsForCashier(cashierId, start, end) {
     { $group: { _id: null, total: { $sum: { $ifNull: ['$payments.meta.receivedAmount', '$payments.amount'] } } } }
   ]);
   return Number(((agg && agg.length) ? (agg[0].total || 0) : 0));
+}
+
+async function paymentBreakdownForCashier(cashierId, start, end) {
+  if (!cashierId || !start || !end) return { total: 0, cashBooks: [] };
+
+  const cashierObjId = new mongoose.Types.ObjectId(String(cashierId));
+  const orders = await Order.find({
+    payments: {
+      $elemMatch: {
+        method: { $in: ['cash', 'momo', 'cheque', 'bank'] },
+        createdAt: { $gte: start, $lte: end },
+        recordedBy: cashierObjId
+      }
+    }
+  })
+    .select('orderId customerName total payments')
+    .lean();
+
+  const books = new Map();
+  let total = 0;
+
+  (orders || []).forEach(order => {
+    (order.payments || []).forEach(payment => {
+      if (!payment || !payment.createdAt) return;
+      const createdAt = new Date(payment.createdAt);
+      if (createdAt < start || createdAt > end) return;
+      if (!payment.recordedBy || String(payment.recordedBy) !== String(cashierId)) return;
+
+      const method = String(payment.method || '').toLowerCase();
+      if (!['cash', 'momo', 'cheque', 'bank'].includes(method)) return;
+
+      const amount = paymentReceivedAmount(payment);
+      if (!amount || amount <= 0) return;
+
+      const meta = payment.meta || {};
+      const kind = cashBookKindFromPayment(payment);
+      const cashBookName = cashBookNameFromPayment(payment, kind);
+      const cashBookId = payment.cashBook ? String(payment.cashBook) : '';
+      const key = cashBookId || `legacy:${kind}:${cashBookName}`;
+
+      if (!books.has(key)) {
+        books.set(key, {
+          cashBookId,
+          cashBookName,
+          cashBookKind: kind,
+          total: 0,
+          count: 0,
+          transactions: []
+        });
+      }
+
+      const group = books.get(key);
+      group.total = round2(group.total + amount);
+      group.count += 1;
+      total = round2(total + amount);
+
+      group.transactions.push({
+        orderId: order.orderId || '',
+        customerName: order.customerName || '',
+        createdAt: payment.createdAt,
+        amount,
+        appliedAmount: round2(payment.amount || 0),
+        creditExcess: round2(meta.creditExcess || 0),
+        method,
+        note: payment.note || '',
+        momoNumber: meta.momoNumber || '',
+        momoTxId: meta.momoTxId || '',
+        chequeNumber: meta.chequeNumber || '',
+        depositDetails: meta.depositDetails || ''
+      });
+    });
+  });
+
+  const cashBooks = Array.from(books.values()).map(book => {
+    book.transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return book;
+  }).sort((a, b) => String(a.cashBookName || '').localeCompare(String(b.cashBookName || '')));
+
+  return { total, cashBooks };
 }
 
 async function getLastCloseAtFromCollections(cashierId) {
@@ -186,6 +292,47 @@ exports.my_status = async (req, res) => {
   } catch (err) {
     console.error('GET /cashiers/my-status error', err);
     return res.status(500).json({ error: 'Unable to fetch your cashier status' });
+  }
+};
+
+/**
+ * GET /cashiers/my-cash-breakdown
+ * Returns the logged-in cashier's current uncollected payment breakdown by cash book.
+ */
+exports.my_cash_breakdown = async (req, res) => {
+  try {
+    if (!req.user || !req.user._id) return res.status(401).json({ error: 'Not authenticated' });
+    const cashierId = String(req.user._id);
+    const { start, end } = dayRangeForIso(req.query.date || null);
+    const rangeEnd = req.query.date ? end : new Date();
+
+    let balanceDoc = await CashierBalance.findOne({ cashier: new mongoose.Types.ObjectId(cashierId) });
+    if (!balanceDoc) {
+      const lastCloseAt = await getLastCloseAtFromCollections(cashierId);
+      balanceDoc = await ensureBalanceDoc(cashierId, lastCloseAt || start);
+    } else if (!balanceDoc.lastCloseAt) {
+      const lastCloseAt = await getLastCloseAtFromCollections(cashierId);
+      balanceDoc.lastCloseAt = lastCloseAt || start;
+      balanceDoc.updatedAt = new Date();
+      await balanceDoc.save();
+    }
+
+    await applyAutoDayCloseIfNeeded(balanceDoc, cashierId, start);
+    const lastCloseAt = balanceDoc.lastCloseAt || start;
+    const breakdown = await paymentBreakdownForCashier(cashierId, lastCloseAt, rangeEnd);
+
+    return res.json({
+      ok: true,
+      cashierId,
+      name: req.user.name || req.user.username || '',
+      from: lastCloseAt,
+      to: rangeEnd,
+      totalCashRecordedToday: breakdown.total,
+      cashBooks: breakdown.cashBooks
+    });
+  } catch (err) {
+    console.error('GET /cashiers/my-cash-breakdown error', err);
+    return res.status(500).json({ error: 'Unable to fetch cash breakdown' });
   }
 };
 
