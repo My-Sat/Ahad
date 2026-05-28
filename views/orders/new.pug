@@ -147,7 +147,7 @@ block content
                       th.text-center Actions
                   tbody#cartTbody
                     tr
-                      td.text-muted-light(colspan='5') Cart is empty.
+                      td.text-muted-light(colspan='7') Cart is empty.
 
 
                 // ✅ ADMIN-ONLY: discount breakdown rendered under cart totals (only shown when discount is applied)
@@ -170,6 +170,12 @@ block content
 
 
                 .d-flex.justify-content-end.mt-3.gap-2
+                  button.btn.btn-outline-light-custom#printCartInvoiceBtn(type='button', disabled)
+                    i.bi.bi-printer.me-1
+                    | Print Invoice
+                  button.btn.btn-outline-light-custom#shareCartInvoiceBtn(type='button', disabled)
+                    i.bi.bi-share.me-1
+                    | Send / Share PDF
                   button.btn.btn-outline-light-custom#saveDraftBtn(type='button', disabled) Save Draft
                   button.btn.btn-primary#orderNowBtn(type='button', disabled) Order Now
 

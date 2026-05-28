@@ -32,6 +32,8 @@
   const outsourcedCartWrapEl = document.getElementById('outsourcedCartWrap');
   const orderNowBtn = document.getElementById('orderNowBtn');
   const saveDraftBtn = document.getElementById('saveDraftBtn');
+  const printCartInvoiceBtn = document.getElementById('printCartInvoiceBtn');
+  const shareCartInvoiceBtn = document.getElementById('shareCartInvoiceBtn');
   const orderJobNoteEl = document.getElementById('orderJobNote');
   const submittedCustomerSelect = document.getElementById('submittedCustomerSelect');
   const reloadSubmittedCustomersBtn = document.getElementById('reloadSubmittedCustomersBtn');
@@ -106,6 +108,12 @@
     if (!saveDraftBtn) return;
     const hasCustomer = !!getCurrentCustomerId();
     saveDraftBtn.disabled = !(hasCustomer && cart && cart.length);
+  }
+
+  function updateCartInvoiceButtons() {
+    const hasCart = Array.isArray(cart) && cart.length > 0;
+    if (printCartInvoiceBtn) printCartInvoiceBtn.disabled = !hasCart;
+    if (shareCartInvoiceBtn) shareCartInvoiceBtn.disabled = !hasCart;
   }
 
   function loadDraftIntoCart(draft) {
@@ -1315,7 +1323,7 @@ function addToCart({
     cartTbody.innerHTML = '';
   if (!cart.length) {
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td class="text-muted" colspan="5">Cart is empty.</td>';
+    tr.innerHTML = '<td class="text-muted" colspan="7">Cart is empty.</td>';
     cartTbody.appendChild(tr);
     cartTotalEl.textContent = 'GH₵ 0.00';
     const outsourcedTotalNodeEmpty = document.getElementById('outsourcedCartTotal') || outsourcedCartTotalEl;
@@ -1324,6 +1332,7 @@ function addToCart({
     if (outsourcedWrapEmpty) outsourcedWrapEmpty.style.display = 'none';
     orderNowBtn.disabled = true;
     updateSaveDraftBtn();
+    updateCartInvoiceButtons();
 
     // âœ… ensure breakdown under totals is hidden when cart empties
     if (manualDiscountSummary) manualDiscountSummary.style.display = 'none';
@@ -1408,6 +1417,347 @@ function addToCart({
     updateManualDiscountUI(baseTotal);
     orderNowBtn.disabled = false;
     updateSaveDraftBtn();
+    updateCartInvoiceButtons();
+  }
+
+  function cartTotalsSnapshot() {
+    const baseTotal = Number((Array.isArray(cart) ? cart.reduce((sum, it) => sum + Number(it.subtotal || 0), 0) : 0).toFixed(2));
+    const outsourcedCostTotal = Number((Array.isArray(cart) ? cart.reduce((sum, it) => sum + Number(it.outsourcedTotal || 0), 0) : 0).toFixed(2));
+    const adjustmentAmount = (window._isAdmin && manualDiscount) ? computeManualDiscountAmount(baseTotal, manualDiscount) : 0;
+    const isPremium = manualAdjustmentKind() === 'premium';
+    const finalTotal = Number(Math.max(0, baseTotal - (isPremium ? -adjustmentAmount : adjustmentAmount)).toFixed(2));
+    return {
+      baseTotal,
+      outsourcedCostTotal,
+      adjustmentAmount,
+      adjustmentKind: isPremium ? 'premium' : 'discount',
+      finalTotal
+    };
+  }
+
+  function cartLineSnapshot(it) {
+    if (it && it.isBook) {
+      const components = Array.isArray(it.bookItems) && it.bookItems.length
+        ? `Includes: ${it.bookItems.map(bi => bi.selectionLabel || '').filter(Boolean).join(' + ')}`
+        : '';
+      return {
+        description: it.bookName || 'Compound service',
+        service: 'Compound Service',
+        pages: '',
+        qty: String(it.qty || 1),
+        sheets: '',
+        unitPrice: Number(it.unitPrice || 0),
+        subtotal: Number(it.subtotal || 0),
+        note: components
+      };
+    }
+
+    const hasPrinter = !!(it && it.printerId);
+    const f = hasPrinter ? (Number(it.factor || 1) || 1) : 1;
+    const effectiveQty = Number((it && it.pages) || 0) || 0;
+    const sheets = hasPrinter ? Math.max(0, Math.floor(effectiveQty * f)) : '';
+    const outsourcedTotal = Number((it && it.outsourcedTotal) || 0);
+    const noteParts = [];
+    if (it && it.spoiled && Number(it.spoiled) > 0) noteParts.push(`Spoiled: ${Number(it.spoiled)}`);
+    if (outsourcedTotal > 0) {
+      noteParts.push(`Out-Sourced: ${it.outsourcedArtistName || 'Artist'} | QTY ${it.outsourcedQty || 0} | ${formatCediPlain(it.outsourcedAmount || 0)} = ${formatCediPlain(outsourcedTotal)}`);
+    }
+
+    return {
+      description: (it && it.selectionLabel) || '',
+      service: (it && it.serviceName) || '',
+      pages: hasPrinter ? String((it && it.pagesOriginal) || '') : '',
+      qty: hasPrinter ? String(f) : String((it && it.pages) || ''),
+      sheets: sheets === '' ? '' : String(sheets),
+      unitPrice: Number((it && it.unitPrice) || 0),
+      subtotal: Number((it && it.subtotal) || 0),
+      note: noteParts.join(' | ')
+    };
+  }
+
+  function formatCediPlain(n) {
+    return `GH\u20B5 ${formatMoney(n)}`;
+  }
+
+  function selectedCustomerSnapshot() {
+    const name = (document.getElementById('selectedCustomerName')?.textContent || '').trim();
+    const phone = (document.getElementById('selectedCustomerPhone')?.textContent || '').trim();
+    const category = (document.getElementById('selectedCustomerCategory')?.textContent || '').trim();
+    return {
+      name: name || 'Customer',
+      phone,
+      category,
+      jobNote: orderJobNoteEl ? String(orderJobNoteEl.value || '').trim() : ''
+    };
+  }
+
+  function invoiceNumber() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `CART-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  }
+
+  function buildCartInvoiceHtml() {
+    const customer = selectedCustomerSnapshot();
+    const totals = cartTotalsSnapshot();
+    const lines = (cart || []).map(cartLineSnapshot);
+    const now = new Date();
+    const invNo = invoiceNumber();
+    const adjustmentLabel = totals.adjustmentKind === 'premium' ? 'Premium' : 'Discount';
+    const adjustmentSign = totals.adjustmentKind === 'premium' ? '+' : '-';
+    const rows = lines.map((line, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>
+          <strong>${escapeHtml(line.service || '')}</strong>
+          <div>${escapeHtml(line.description || '')}</div>
+          ${line.note ? `<div class="muted">${escapeHtml(line.note)}</div>` : ''}
+        </td>
+        <td>${escapeHtml(line.pages || '')}</td>
+        <td>${escapeHtml(line.qty || '')}</td>
+        <td>${escapeHtml(line.sheets || '')}</td>
+        <td class="right">${formatCediPlain(line.unitPrice)}</td>
+        <td class="right">${formatCediPlain(line.subtotal)}</td>
+      </tr>
+    `).join('');
+
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Cart Invoice ${escapeHtml(invNo)}</title>
+  <style>
+    @page { size: A4; margin: 16mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; font-size: 12px; }
+    .header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; border-bottom: 2px solid #111; padding-bottom: 14px; margin-bottom: 16px; }
+    .logo { max-height: 62px; max-width: 160px; object-fit: contain; }
+    h1 { margin: 0; font-size: 22px; letter-spacing: .03em; }
+    h2 { margin: 0 0 6px; font-size: 15px; }
+    .muted { color: #555; font-size: 11px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 16px; }
+    .box { border: 1px solid #ddd; border-radius: 8px; padding: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border-bottom: 1px solid #ddd; padding: 8px 6px; vertical-align: top; }
+    th { background: #f2f4f7; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    .right { text-align: right; white-space: nowrap; }
+    .totals { margin-left: auto; width: 310px; margin-top: 16px; }
+    .totals div { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; }
+    .totals .grand { font-weight: 700; font-size: 15px; border-bottom: 2px solid #111; }
+    .notice { margin-top: 18px; padding: 10px; background: #fff8e1; border: 1px solid #f0d46a; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <img class="logo" src="/public/images/AHAD LOGO3.jpeg" alt="AHAD">
+      <div class="muted">Cart Invoice / Proforma</div>
+    </div>
+    <div class="right">
+      <h1>CART INVOICE</h1>
+      <div><strong>No:</strong> ${escapeHtml(invNo)}</div>
+      <div><strong>Date:</strong> ${escapeHtml(now.toLocaleString())}</div>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="box">
+      <h2>Customer</h2>
+      <div><strong>${escapeHtml(customer.name)}</strong></div>
+      ${customer.phone ? `<div>Phone: ${escapeHtml(customer.phone)}</div>` : ''}
+      ${customer.category ? `<div>Type: ${escapeHtml(customer.category)}</div>` : ''}
+    </div>
+    <div class="box">
+      <h2>Job Details</h2>
+      <div>${customer.jobNote ? escapeHtml(customer.jobNote) : 'No note provided'}</div>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Selection</th>
+        <th>Pages</th>
+        <th>QTY</th>
+        <th>Sheets</th>
+        <th class="right">Unit</th>
+        <th class="right">Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="totals">
+    <div><span>Subtotal</span><strong>${formatCediPlain(totals.baseTotal)}</strong></div>
+    ${totals.adjustmentAmount > 0 ? `<div><span>${adjustmentLabel}</span><strong>${adjustmentSign} ${formatCediPlain(totals.adjustmentAmount)}</strong></div>` : ''}
+    ${totals.outsourcedCostTotal > 0 ? `<div><span>Out-Sourced Cost Total</span><strong>${formatCediPlain(totals.outsourcedCostTotal)}</strong></div>` : ''}
+    <div class="grand"><span>Total</span><strong>${formatCediPlain(totals.finalTotal)}</strong></div>
+  </div>
+</body>
+</html>`;
+  }
+
+  function printCartInvoice() {
+    if (!cart || !cart.length) return showAlertModal('Add items to cart before printing an invoice.');
+    const w = window.open('', '_blank', 'toolbar=0,location=0,menubar=0');
+    if (!w) return showAlertModal('Unable to open print window. Please allow pop-ups for this site.');
+    w.document.open();
+    w.document.write(buildCartInvoiceHtml());
+    w.document.close();
+    w.focus();
+    setTimeout(() => {
+      try { w.print(); } catch (e) { showAlertModal('Print failed.'); }
+    }, 450);
+  }
+
+  function sanitizePdfText(text) {
+    return String(text || '')
+      .replace(/GH\u20B5/g, 'GHS')
+      .replace(/[\u2013\u2014]/g, '-')
+      .replace(/[^\x20-\x7E]/g, '');
+  }
+
+  function pdfEscape(text) {
+    return sanitizePdfText(text).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  }
+
+  function wrapPdfLine(text, maxLen) {
+    const words = sanitizePdfText(text).split(/\s+/);
+    const lines = [];
+    let current = '';
+    words.forEach(word => {
+      if (!word) return;
+      if ((current + ' ' + word).trim().length > maxLen) {
+        if (current) lines.push(current);
+        current = word;
+      } else {
+        current = (current ? current + ' ' : '') + word;
+      }
+    });
+    if (current) lines.push(current);
+    return lines.length ? lines : [''];
+  }
+
+  function buildCartInvoicePdfBlob() {
+    const customer = selectedCustomerSnapshot();
+    const totals = cartTotalsSnapshot();
+    const lines = [];
+    lines.push('AHADPRINT - CART INVOICE / PROFORMA');
+    lines.push(`Generated: ${new Date().toLocaleString()}`);
+    lines.push(`Invoice No: ${invoiceNumber()}`);
+    lines.push('');
+    lines.push(`Customer: ${customer.name}`);
+    if (customer.phone) lines.push(`Phone: ${customer.phone}`);
+    if (customer.category) lines.push(`Type: ${customer.category}`);
+    if (customer.jobNote) lines.push(`Job Note: ${customer.jobNote}`);
+    lines.push('');
+    lines.push('Items');
+    lines.push('-----');
+    (cart || []).map(cartLineSnapshot).forEach((line, idx) => {
+      lines.push(`${idx + 1}. ${line.service || ''} - ${line.description || ''}`);
+      lines.push(`   Pages: ${line.pages || '-'} | QTY: ${line.qty || '-'} | Sheets: ${line.sheets || '-'} | Unit: GHS ${formatMoney(line.unitPrice)} | Subtotal: GHS ${formatMoney(line.subtotal)}`);
+      if (line.note) lines.push(`   ${line.note.replace(/GH\u20B5/g, 'GHS')}`);
+    });
+    lines.push('');
+    lines.push(`Subtotal: GHS ${formatMoney(totals.baseTotal)}`);
+    if (totals.adjustmentAmount > 0) {
+      lines.push(`${totals.adjustmentKind === 'premium' ? 'Premium' : 'Discount'}: ${totals.adjustmentKind === 'premium' ? '+' : '-'} GHS ${formatMoney(totals.adjustmentAmount)}`);
+    }
+    if (totals.outsourcedCostTotal > 0) lines.push(`Out-Sourced Cost Total: GHS ${formatMoney(totals.outsourcedCostTotal)}`);
+    lines.push(`TOTAL: GHS ${formatMoney(totals.finalTotal)}`);
+
+    const wrapped = [];
+    lines.forEach(line => {
+      wrapPdfLine(line, 92).forEach(w => wrapped.push(w));
+    });
+
+    const pageSize = 48;
+    const pages = [];
+    for (let i = 0; i < wrapped.length; i += pageSize) pages.push(wrapped.slice(i, i + pageSize));
+    if (!pages.length) pages.push(['Cart invoice']);
+
+    const objects = [];
+    const addObj = body => {
+      objects.push(body);
+      return objects.length;
+    };
+
+    const catalogId = addObj(''); // placeholder
+    const pagesId = addObj(''); // placeholder
+    const fontId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+    const pageIds = [];
+
+    pages.forEach(pageLines => {
+      const commands = ['BT', '/F1 10 Tf', '50 790 Td'];
+      pageLines.forEach((line, idx) => {
+        if (idx > 0) commands.push('0 -14 Td');
+        commands.push(`(${pdfEscape(line)}) Tj`);
+      });
+      commands.push('ET');
+      const stream = commands.join('\n');
+      const contentId = addObj(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+      const pageId = addObj(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+      pageIds.push(pageId);
+    });
+
+    objects[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
+    objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
+
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+    objects.forEach((body, idx) => {
+      offsets.push(pdf.length);
+      pdf += `${idx + 1} 0 obj\n${body}\nendobj\n`;
+    });
+    const xref = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    for (let i = 1; i < offsets.length; i += 1) {
+      pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+    }
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    return new Blob([pdf], { type: 'application/pdf' });
+  }
+
+  async function shareCartInvoicePdf() {
+    if (!cart || !cart.length) return showAlertModal('Add items to cart before sharing an invoice.');
+    const originalHtml = shareCartInvoiceBtn ? shareCartInvoiceBtn.innerHTML : '';
+    if (shareCartInvoiceBtn) {
+      shareCartInvoiceBtn.disabled = true;
+      shareCartInvoiceBtn.textContent = 'Preparing...';
+    }
+    try {
+      const blob = buildCartInvoicePdfBlob();
+      const filename = `${invoiceNumber().toLowerCase()}.pdf`;
+      const file = (typeof File !== 'undefined')
+        ? new File([blob], filename, { type: 'application/pdf' })
+        : null;
+
+      if (file && navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+        await navigator.share({
+          title: 'Cart Invoice',
+          text: 'Cart invoice from AHADPRINT',
+          files: [file]
+        });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        showAlertModal('PDF downloaded. You can attach and send it to the customer.', 'Invoice PDF');
+      }
+    } catch (err) {
+      console.error('share cart invoice failed', err);
+      showAlertModal('Failed to prepare the invoice PDF.');
+    } finally {
+      if (shareCartInvoiceBtn) {
+        shareCartInvoiceBtn.disabled = false;
+        shareCartInvoiceBtn.innerHTML = originalHtml || 'Send / Share PDF';
+        updateCartInvoiceButtons();
+      }
+    }
   }
 
   // Admin-only apply discount
@@ -1459,6 +1809,14 @@ function addToCart({
   }
 
   refreshManualAdjustmentButton();
+
+  if (printCartInvoiceBtn) {
+    printCartInvoiceBtn.addEventListener('click', printCartInvoice);
+  }
+
+  if (shareCartInvoiceBtn) {
+    shareCartInvoiceBtn.addEventListener('click', shareCartInvoicePdf);
+  }
 
   async function lookupArtistByTerm(term) {
     const q = String(term || '').trim();
