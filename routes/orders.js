@@ -37,6 +37,12 @@ router.post(
   orderController.apiSaveCartInvoice
 );
 
+router.delete(
+  '/invoices/:id',
+  ensureHasPermission('/orders/new'),
+  orderController.apiRemoveCartInvoice
+);
+
 router.get(
   '/list',
   ensureHasPermission('/orders/list'),

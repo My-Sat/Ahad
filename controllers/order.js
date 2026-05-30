@@ -740,6 +740,30 @@ exports.apiListCartInvoices = async (req, res) => {
   }
 };
 
+exports.apiRemoveCartInvoice = async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid invoice id' });
+    }
+
+    const invoice = await CartInvoice.findOne({
+      _id: new mongoose.Types.ObjectId(id),
+      status: 'open'
+    });
+
+    if (!invoice) return res.status(404).json({ error: 'Open invoice not found' });
+
+    invoice.status = 'cancelled';
+    await invoice.save();
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('apiRemoveCartInvoice error', err);
+    return res.status(500).json({ error: 'Error removing invoice' });
+  }
+};
+
 // API: create order
 // expects body: { items: [{ serviceId, priceRuleId, pages (optional), fb (optional boolean), printerId (optional) } , ...] }
 // Server-authoritative pricing: when items[].fb is true and the price rule has price2, use price2.

@@ -509,7 +509,10 @@ function renderCartInvoices(rows) {
             ${inv.convertedOrderId ? ` · Order ${escapeHtml(inv.convertedOrderId)}` : ''}
           </div>
         </div>
-        <button class="btn btn-sm btn-outline-light-custom load-cart-invoice-btn" type="button" data-invoice-id="${escapeHtml(inv.id || '')}" ${canLoad ? '' : 'disabled'}>Load</button>
+        <div class="d-flex gap-2 flex-shrink-0">
+          <button class="btn btn-sm btn-outline-light-custom load-cart-invoice-btn" type="button" data-invoice-id="${escapeHtml(inv.id || '')}" ${canLoad ? '' : 'disabled'}>Load</button>
+          <button class="btn btn-sm btn-outline-danger remove-cart-invoice-btn" type="button" data-invoice-id="${escapeHtml(inv.id || '')}" ${canLoad ? '' : 'disabled'}>Remove</button>
+        </div>
       </div>
     `;
   }).join('');
@@ -834,6 +837,11 @@ async function loadServicesForCategory(catId) {
 
   if (openCartInvoicesModalBtn) {
     openCartInvoicesModalBtn.addEventListener('click', function () {
+      document.querySelectorAll('body > .cart-invoice-floating-menu.show').forEach(menu => {
+        menu.classList.remove('show');
+        menu.style.display = 'none';
+      });
+      if (cartInvoiceActionsBtn) cartInvoiceActionsBtn.setAttribute('aria-expanded', 'false');
       if (cartInvoicesModal) cartInvoicesModal.show();
       loadCartInvoices(cartInvoiceSearchInput ? cartInvoiceSearchInput.value : '');
       if (cartInvoiceSearchInput) {
@@ -856,6 +864,34 @@ async function loadServicesForCategory(catId) {
 
   if (cartInvoicesList) {
     cartInvoicesList.addEventListener('click', function (ev) {
+      const removeBtn = ev.target.closest('.remove-cart-invoice-btn');
+      if (removeBtn) {
+        const invoiceId = removeBtn.dataset.invoiceId || '';
+        if (!invoiceId) return;
+        if (!confirm('Remove this saved invoice from the list?')) return;
+        removeBtn.disabled = true;
+        removeBtn.textContent = 'Removing...';
+        fetch(`/orders/invoices/${encodeURIComponent(invoiceId)}`, {
+          method: 'DELETE',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+          .then(res => res.json().then(j => ({ ok: res.ok, j })))
+          .then(({ ok, j }) => {
+            if (!ok || !j || !j.ok) throw new Error((j && j.error) || 'Failed to remove invoice');
+            if (getCurrentInvoiceId() === invoiceId) {
+              activeInvoice = null;
+              if (orderInvoiceIdEl) orderInvoiceIdEl.value = '';
+            }
+            loadCartInvoices(cartInvoiceSearchInput ? cartInvoiceSearchInput.value : '');
+          })
+          .catch(err => {
+            console.error('remove invoice failed', err);
+            showAlertModal(err.message || 'Failed to remove invoice.');
+            loadCartInvoices(cartInvoiceSearchInput ? cartInvoiceSearchInput.value : '');
+          });
+        return;
+      }
+
       const btn = ev.target.closest('.load-cart-invoice-btn');
       if (!btn) return;
       const invoiceId = btn.dataset.invoiceId || '';

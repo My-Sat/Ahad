@@ -533,7 +533,7 @@ header .dropdown-menu,
 
 #ordersNewPage .cart-invoice-actions{
   position: relative;
-  z-index: 2050;
+  z-index: 1;
 }
 
 #ordersNewPage .cart-invoice-actions .dropdown-menu{
@@ -548,7 +548,7 @@ header .dropdown-menu,
 
 body > .cart-invoice-floating-menu{
   position: fixed !important;
-  z-index: 5000 !important;
+  z-index: 1040 !important;
   margin: 0 !important;
   transform: none !important;
   filter: none !important;
