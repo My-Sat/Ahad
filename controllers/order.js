@@ -17,6 +17,7 @@ const StockPurchase = require('../models/stock_purchase');
 const StoreStockAdjustment = require('../models/store_stock_adjustment');
 const StoreStockTransfer = require('../models/store_stock_transfer');
 const RegistrationSubmission = require('../models/registration_submission');
+const CartInvoice = require('../models/cart_invoice');
 const User = require('../models/user');
 const Book = require('../models/book');
 const {
@@ -355,6 +356,19 @@ function computeDiscountAmount(baseTotal, rule) {
   return 0;
 }
 
+function computeTaxAmount(taxableTotal, tax) {
+  if (!tax) return 0;
+  const base = Math.max(0, Number(taxableTotal || 0));
+  const value = Number(tax.value || 0);
+  if (!isFinite(value) || value <= 0) return 0;
+  if (tax.mode === 'amount') return Number(Math.max(0, value).toFixed(2));
+  if (tax.mode === 'percent') {
+    const pct = Math.max(0, Math.min(100, value));
+    return Number((base * (pct / 100)).toFixed(2));
+  }
+  return 0;
+}
+
 // Choose best single discount among applicable rules
   async function pickBestDiscount({ baseTotal, customerId, customerCategory, serviceIds, serviceCategoryIds }) {
   const rules = await getActiveDiscountRules();
@@ -416,6 +430,35 @@ function computeDiscountAmount(baseTotal, rule) {
 function makeOrderId() {
   // short, human-readable id: 8 chars base36
   return (Date.now().toString(36) + crypto.randomBytes(3).toString('hex')).slice(-10).toUpperCase();
+}
+
+function makeInvoiceNo() {
+  return (Date.now().toString(36) + crypto.randomBytes(2).toString('hex')).replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase();
+}
+
+function invoicePayload(inv) {
+  if (!inv) return null;
+  return {
+    id: String(inv._id),
+    invoiceNo: inv.invoiceNo,
+    customerId: inv.customer ? String(inv.customer._id || inv.customer) : '',
+    customerName: inv.customerName || '',
+    customerPhone: inv.customerPhone || '',
+    customerCategory: inv.customerCategory || '',
+    categories: (inv.categories || []).map(c => ({
+      id: c.id ? String(c.id._id || c.id) : '',
+      name: c.name || ''
+    })).filter(c => c.id),
+    cart: inv.cart || [],
+    manualDiscount: inv.manualDiscount || null,
+    manualTax: inv.manualTax || null,
+    jobNote: inv.jobNote || '',
+    totals: inv.totals || {},
+    status: inv.status || 'open',
+    convertedOrderId: inv.convertedOrderId || '',
+    createdAt: inv.createdAt,
+    updatedAt: inv.updatedAt
+  };
 }
 
 function currentUtcDayKey() {
@@ -594,6 +637,109 @@ exports.payPage = async (req, res) => {
   }
 };
 
+exports.apiSaveCartInvoice = async (req, res) => {
+  try {
+    const body = req.body || {};
+    const cart = Array.isArray(body.cart) ? body.cart.slice(0, 100) : [];
+    if (!cart.length) return res.status(400).json({ error: 'Invoice cart is empty' });
+
+    const invoiceId = String(body.invoiceId || '').trim();
+    const submissionId = String(body.submissionId || '').trim();
+    const jobNote = String(body.jobNote || '').trim().slice(0, 140);
+    const manualDiscount = body.manualDiscount && typeof body.manualDiscount === 'object' ? body.manualDiscount : null;
+    const manualTax = body.manualTax && typeof body.manualTax === 'object' ? body.manualTax : null;
+    const totals = body.totals && typeof body.totals === 'object' ? body.totals : {};
+
+    let invoice = null;
+    let source = null;
+
+    if (invoiceId && mongoose.Types.ObjectId.isValid(invoiceId)) {
+      invoice = await CartInvoice.findOne({ _id: new mongoose.Types.ObjectId(invoiceId), status: 'open' });
+      if (!invoice) return res.status(404).json({ error: 'Open invoice not found' });
+    } else {
+      if (!submissionId || !mongoose.Types.ObjectId.isValid(submissionId)) {
+        return res.status(400).json({ error: 'Select a submitted customer/walk-in before saving an invoice.' });
+      }
+
+      source = await RegistrationSubmission.findOne({
+        _id: new mongoose.Types.ObjectId(submissionId),
+        status: 'pending'
+      })
+        .populate('customer', '_id firstName businessName phone category')
+        .populate('categories', '_id name')
+        .lean();
+
+      if (!source) return res.status(409).json({ error: 'Selected submission is no longer available. Refresh and try again.' });
+    }
+
+    if (!invoice) {
+      const customerDoc = source && source.customer && typeof source.customer === 'object' ? source.customer : null;
+      const customerName = customerDoc
+        ? String(customerDoc.businessName || customerDoc.firstName || customerDoc.phone || source.displayName || '').trim()
+        : String(source.displayName || '').trim();
+
+      invoice = new CartInvoice({
+        invoiceNo: makeInvoiceNo(),
+        customer: customerDoc && customerDoc._id ? customerDoc._id : null,
+        customerName,
+        customerPhone: String((customerDoc && customerDoc.phone) || source.phone || '').trim(),
+        customerCategory: String((customerDoc && customerDoc.category) || '').trim(),
+        sourceSubmission: source._id,
+        categories: (source.categories || []).map(c => ({ id: c._id, name: c.name || '' })),
+        createdBy: req.user?._id || null,
+        createdByName: req.user?.name || req.user?.username || ''
+      });
+    }
+
+    invoice.cart = cart;
+    invoice.manualDiscount = manualDiscount;
+    invoice.manualTax = manualTax;
+    invoice.jobNote = jobNote;
+    invoice.totals = totals;
+    await invoice.save();
+
+    return res.json({ ok: true, invoice: invoicePayload(invoice) });
+  } catch (err) {
+    console.error('apiSaveCartInvoice error', err);
+    if (err && err.code === 11000) return res.status(409).json({ error: 'Invoice number collision. Try again.' });
+    return res.status(500).json({ error: 'Error saving invoice' });
+  }
+};
+
+exports.apiListCartInvoices = async (req, res) => {
+  try {
+    const qRaw = String(req.query.q || '').trim();
+    const invoiceId = String(req.query.invoiceId || '').trim();
+    const filter = {};
+
+    if (invoiceId) {
+      if (!mongoose.Types.ObjectId.isValid(invoiceId)) return res.status(400).json({ error: 'Invalid invoice id' });
+      filter._id = new mongoose.Types.ObjectId(invoiceId);
+    } else if (qRaw) {
+      const safe = qRaw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(safe, 'i');
+      filter.$or = [
+        { invoiceNo: regex },
+        { customerName: regex },
+        { customerPhone: regex }
+      ];
+      filter.status = { $ne: 'cancelled' };
+    } else {
+      filter.status = 'open';
+    }
+
+    const rows = await CartInvoice.find(filter)
+      .sort({ updatedAt: -1 })
+      .limit(invoiceId ? 1 : 20)
+      .lean();
+
+    return res.json({ ok: true, invoices: rows.map(invoicePayload) });
+  } catch (err) {
+    console.error('apiListCartInvoices error', err);
+    return res.status(500).json({ error: 'Error loading invoices' });
+  }
+};
+
 // API: create order
 // expects body: { items: [{ serviceId, priceRuleId, pages (optional), fb (optional boolean), printerId (optional) } , ...] }
 // Server-authoritative pricing: when items[].fb is true and the price rule has price2, use price2.
@@ -636,20 +782,44 @@ return {
     });
 
     const submissionId = String(req.body && req.body.submissionId ? req.body.submissionId : '').trim();
-    if (!submissionId || !mongoose.Types.ObjectId.isValid(submissionId)) {
-      return res.status(400).json({ error: 'Select a submitted customer first.' });
+    const invoiceId = String(req.body && req.body.invoiceId ? req.body.invoiceId : '').trim();
+    let invoice = null;
+    let submission = null;
+
+    if (invoiceId && mongoose.Types.ObjectId.isValid(invoiceId)) {
+      invoice = await CartInvoice.findOne({
+        _id: new mongoose.Types.ObjectId(invoiceId),
+        status: 'open'
+      }).lean();
+
+      if (!invoice) {
+        return res.status(409).json({ error: 'Selected invoice is no longer available. Refresh and try again.' });
+      }
+
+      submission = {
+        _id: invoice.sourceSubmission || null,
+        customer: invoice.customer || null,
+        displayName: invoice.customerName || '',
+        phone: invoice.customerPhone || '',
+        categories: (invoice.categories || []).map(c => c.id).filter(Boolean),
+        fromInvoice: true
+      };
+    } else {
+      if (!submissionId || !mongoose.Types.ObjectId.isValid(submissionId)) {
+        return res.status(400).json({ error: 'Select a submitted customer or saved invoice first.' });
+      }
+
+      submission = await RegistrationSubmission.findOne({
+        _id: new mongoose.Types.ObjectId(submissionId),
+        status: 'pending'
+      }).select('_id customer displayName categories').lean();
+
+      if (!submission) {
+        return res.status(409).json({ error: 'Selected submission is no longer available. Refresh and try again.' });
+      }
     }
 
-    const submission = await RegistrationSubmission.findOne({
-      _id: new mongoose.Types.ObjectId(submissionId),
-      status: 'pending'
-    }).select('_id customer displayName categories').lean();
-
-    if (!submission) {
-      return res.status(409).json({ error: 'Selected submission is no longer available. Refresh and try again.' });
-    }
-
-    const allowedCategoryIds = new Set((submission.categories || []).map(id => String(id)));
+    const allowedCategoryIds = new Set((submission.categories || []).map(id => String(id && id._id ? id._id : id)));
     if (!allowedCategoryIds.size) {
       return res.status(400).json({ error: 'Submitted customer has no allowed categories.' });
     }
@@ -1024,6 +1194,22 @@ try {
   manual = null;
 }
 
+let manualTax = null;
+try {
+  if (req.body && req.body.tax && typeof req.body.tax === 'object') {
+    const tx = req.body.tax;
+    const mode = String(tx.mode || '').trim();
+    const value = Number(tx.value);
+    if ((mode === 'amount' || mode === 'percent') && isFinite(value) && value > 0) {
+      if (!(mode === 'percent' && value > 100)) {
+        manualTax = { mode, value: Number(value) };
+      }
+    }
+  }
+} catch (e) {
+  manualTax = null;
+}
+
 let discountAmount = 0;
 let discountBreakdown = null;
 
@@ -1096,13 +1282,31 @@ if (manual) {
   }
 }
 
-// Apply discount/premium adjustment
-const finalTotal = Number(Math.max(0, baseTotal - Number(discountAmount || 0)).toFixed(2));
+// Apply discount/premium adjustment, then tax on the adjusted amount.
+const adjustedTotalBeforeTax = Number(Math.max(0, baseTotal - Number(discountAmount || 0)).toFixed(2));
+let taxAmount = 0;
+let taxBreakdown = null;
+if (manualTax) {
+  taxAmount = Number(computeTaxAmount(adjustedTotalBeforeTax, manualTax).toFixed(2));
+  if (taxAmount > 0) {
+    taxBreakdown = {
+      scope: 'manual',
+      mode: manualTax.mode,
+      value: manualTax.value,
+      taxableAmount: adjustedTotalBeforeTax,
+      computed: taxAmount,
+      label: 'VAT'
+    };
+  }
+}
+const finalTotal = Number((adjustedTotalBeforeTax + Number(taxAmount || 0)).toFixed(2));
 
 // store snapshot on the order doc before saving
 order.totalBeforeDiscount = baseTotal;
 order.discountAmount = Number(discountAmount || 0);
 order.discountBreakdown = discountBreakdown;
+order.taxAmount = Number(taxAmount || 0);
+order.taxBreakdown = taxBreakdown;
 
 // IMPORTANT: total becomes final payable total
 order.total = finalTotal;
@@ -1234,19 +1438,34 @@ order.total = finalTotal;
     }
 
     try {
-      await RegistrationSubmission.updateOne(
-        { _id: submission._id, status: 'pending' },
-        {
-          $set: {
-            status: 'consumed',
-            consumedAt: new Date(),
-            consumedOrderId: order.orderId,
-            consumedBy: req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null
+      if (submission && submission._id && mongoose.Types.ObjectId.isValid(String(submission._id))) {
+        await RegistrationSubmission.updateOne(
+          { _id: submission._id, status: 'pending' },
+          {
+            $set: {
+              status: 'consumed',
+              consumedAt: new Date(),
+              consumedOrderId: order.orderId,
+              consumedBy: req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null
+            }
           }
-        }
-      );
+        );
+      }
+      if (invoice && invoice._id) {
+        await CartInvoice.updateOne(
+          { _id: invoice._id, status: 'open' },
+          {
+            $set: {
+              status: 'converted',
+              convertedAt: new Date(),
+              convertedOrderId: order.orderId,
+              convertedBy: req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null
+            }
+          }
+        );
+      }
     } catch (consumeErr) {
-      console.error('Failed to consume registration submission', consumeErr);
+      console.error('Failed to consume registration submission/invoice', consumeErr);
     }
 
 // If the order has a customer attached, re-evaluate their 'regular' status
@@ -1444,6 +1663,8 @@ for (let idx = 0; idx < builtItems.length; idx++) {
       ok: true,
       orderId: order.orderId,
       total: order.total,
+      taxAmount: order.taxAmount,
+      taxBreakdown: order.taxBreakdown,
       jobNote: String(order.jobNote || '').trim()
     });
   } catch (err) {
@@ -1699,6 +1920,8 @@ exports.apiGetOrderById = async (req, res) => {
         totalBeforeDiscount: order.totalBeforeDiscount,
         discountAmount: order.discountAmount,
         discountBreakdown: order.discountBreakdown,
+        taxAmount: order.taxAmount,
+        taxBreakdown: order.taxBreakdown,
 
         status: order.status,
         items: order.items || [],
@@ -1771,7 +1994,24 @@ exports.apiApplyManualDiscount = async (req, res) => {
     const discountAmount = Number((kind === 'premium' ? -unsignedAmount : unsignedAmount).toFixed(2));
 
     const paidSoFar = (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    const newTotal = Number(Math.max(0, baseTotal - discountAmount).toFixed(2));
+    const adjustedTotalBeforeTax = Number(Math.max(0, baseTotal - discountAmount).toFixed(2));
+    let taxAmount = 0;
+    let taxBreakdown = null;
+    if (order.taxBreakdown && typeof order.taxBreakdown === 'object') {
+      const existingTax = order.taxBreakdown;
+      const taxMode = String(existingTax.mode || '').trim();
+      const taxValue = Number(existingTax.value || 0);
+      if ((taxMode === 'amount' || taxMode === 'percent') && isFinite(taxValue) && taxValue > 0 && !(taxMode === 'percent' && taxValue > 100)) {
+        taxAmount = Number(computeTaxAmount(adjustedTotalBeforeTax, { mode: taxMode, value: taxValue }).toFixed(2));
+        if (taxAmount > 0) {
+          taxBreakdown = Object.assign({}, existingTax, {
+            taxableAmount: adjustedTotalBeforeTax,
+            computed: taxAmount
+          });
+        }
+      }
+    }
+    const newTotal = Number((adjustedTotalBeforeTax + Number(taxAmount || 0)).toFixed(2));
 
     if (kind === 'discount' && newTotal < paidSoFar) {
       return res.status(400).json({ error: 'Discount exceeds remaining balance' });
@@ -1787,6 +2027,8 @@ exports.apiApplyManualDiscount = async (req, res) => {
       computed: Number(unsignedAmount.toFixed(2)),
       label: kind === 'premium' ? 'Manual premium' : 'Manual discount'
     };
+    order.taxAmount = Number(taxAmount || 0);
+    order.taxBreakdown = taxBreakdown;
     order.total = newTotal;
 
     const outstandingAfter = Number((newTotal - paidSoFar).toFixed(2));
@@ -1804,6 +2046,8 @@ exports.apiApplyManualDiscount = async (req, res) => {
       totalBeforeDiscount: order.totalBeforeDiscount,
       discountAmount: order.discountAmount,
       discountBreakdown: order.discountBreakdown,
+      taxAmount: order.taxAmount,
+      taxBreakdown: order.taxBreakdown,
       outstanding: outstandingAfter
     });
   } catch (err) {

@@ -852,6 +852,27 @@ function discountAppliedLabel(order) {
   `;
     }
 
+    const taxAmount = Number(order.taxAmount || 0);
+    let taxHtml = '';
+    if (taxAmount > 0) {
+      const tb = (order.taxBreakdown && typeof order.taxBreakdown === 'object') ? order.taxBreakdown : {};
+      const taxableAmount = (typeof tb.taxableAmount !== 'undefined' && tb.taxableAmount !== null)
+        ? Number(tb.taxableAmount || 0)
+        : Number(Math.max(0, Number(order.total || 0) - taxAmount).toFixed(2));
+      taxHtml = `
+    <div class="mt-2">
+      <p class="text-end mb-1">
+        <span class="text-muted">VATable amount:</span>
+        <strong>GH₵ ${fmt(taxableAmount)}</strong>
+      </p>
+      <p class="text-end mb-1">
+        <span class="text-muted">VAT:</span>
+        <strong class="text-white">+ GH₵ ${fmt(taxAmount)}</strong>
+      </p>
+    </div>
+  `;
+    }
+
     const netBal = Number(
       (customerObj && typeof customerObj.accountNetBalance !== 'undefined' && customerObj.accountNetBalance !== null)
         ? customerObj.accountNetBalance
@@ -902,6 +923,7 @@ function discountAppliedLabel(order) {
       ${detailsTableHtml}
       ${itemsHtml}
       ${discountHtml}
+      ${taxHtml}
       <p class="text-end"><strong>Total to pay: GH₵ ${fmt(order.total)}</strong></p>
       <p class="text-end"><strong>Remaining: GH₵ ${fmt(Math.max(0, outstanding))}</strong></p>
       ${accountHtml}

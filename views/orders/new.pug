@@ -18,6 +18,7 @@ block content
 
             input(type='hidden', id='orderCustomerId', value=(customer && customer._id ? customer._id : ''))
             input(type='hidden', id='orderSubmissionId', value='')
+            input(type='hidden', id='orderInvoiceId', value='')
 
             // Selected customer at top (centered)
             - const hasCustomer = !!customer;
@@ -134,6 +135,22 @@ block content
                     p.text-muted-light.small.mt-2.mb-0
                       | This adjustment applies only to this order and will not be saved. You must re-apply it for each order when needed.
 
+              .card.mb-3.dark-surface(style='border:1px solid rgba(255,255,255,.08);')
+                .card-body.dark-card-body.py-2
+                  .row.g-2.align-items-end
+                    .col-12.col-md-3
+                      label.form-label.mb-1(for='cartTaxMode') VAT Mode
+                      select.form-select.form-select-sm.form-select-dark#cartTaxMode
+                        option(value='amount') Amount (GH₵)
+                        option(value='percent') Percent (%)
+                    .col-12.col-md-3
+                      label.form-label.mb-1(for='cartTaxValue') VAT Value
+                      input.form-control.form-control-sm.form-control-dark#cartTaxValue(type='number', min='0', step='0.01', placeholder='e.g. 5 or 10')
+                    .col-12.col-md-6.d-flex.gap-2.justify-content-end
+                      button.btn.btn-sm.btn-outline-light-custom#applyCartTaxBtn(type='button') Apply VAT
+                      button.btn.btn-sm.btn-outline-light-custom#clearCartTaxBtn(type='button', style='display:none;') Clear VAT
+                  p.text-muted-light.small.mt-2.mb-0 VAT is applied after adjustment/discount/premium, if any.
+
               .table-responsive
                 table.table.table-sm.table-borderless#cartTable
                   thead
@@ -161,6 +178,15 @@ block content
                       .text-end
                         div.small.text-muted-light#manualDiscountAmountLabel Discount:
                         strong#manualDiscountAmount.text-white - GH₵ 0.00
+                .mt-2#cartTaxSummary(style='display:none;')
+                  .d-flex.justify-content-end
+                    .text-end
+                      div.small.text-muted-light VATable amount:
+                      strong#cartTaxableAmount.text-white GH₵ 0.00
+                  .d-flex.justify-content-end
+                    .text-end
+                      div.small.text-muted-light VAT:
+                      strong#cartTaxAmount.text-white + GH₵ 0.00
                 .d-flex.justify-content-end.mt-2
                   .text-end.me-3#outsourcedCartWrap(style='display:none;')
                     div.small.text-muted-light Out-Sourced Cost Total:
@@ -170,12 +196,29 @@ block content
 
 
                 .d-flex.justify-content-end.mt-3.gap-2
-                  button.btn.btn-outline-light-custom#printCartInvoiceBtn(type='button', disabled)
-                    i.bi.bi-printer.me-1
-                    | Print Invoice
-                  button.btn.btn-outline-light-custom#shareCartInvoiceBtn(type='button', disabled)
-                    i.bi.bi-share.me-1
-                    | Send / Share PDF
+                  .dropdown.cart-invoice-actions
+                    button.btn.btn-outline-light-custom.dropdown-toggle#cartInvoiceActionsBtn(type='button', aria-expanded='false')
+                      i.bi.bi-receipt.me-1
+                      | Invoices
+                    ul.dropdown-menu.dropdown-menu-dark.dropdown-menu-end
+                      li
+                        button.dropdown-item#saveCartInvoiceBtn(type='button', disabled)
+                          i.bi.bi-save.me-1
+                          | Save Invoice
+                      li
+                        button.dropdown-item#printCartInvoiceBtn(type='button', disabled)
+                          i.bi.bi-printer.me-1
+                          | Print Invoice
+                      li
+                        button.dropdown-item#shareCartInvoiceBtn(type='button', disabled)
+                          i.bi.bi-share.me-1
+                          | Send / Share PDF
+                      li
+                        hr.dropdown-divider
+                      li
+                        button.dropdown-item#openCartInvoicesModalBtn(type='button')
+                          i.bi.bi-search.me-1
+                          | Saved Invoices
                   button.btn.btn-outline-light-custom#saveDraftBtn(type='button', disabled) Save Draft
                   button.btn.btn-primary#orderNowBtn(type='button', disabled) Order Now
 
@@ -244,6 +287,22 @@ block content
         .modal-footer
           button.btn.btn-outline-light-custom.btn-sm#copyDetailOrderIdBtn(type='button') Copy ID
           button.btn.btn-outline-light-custom.btn-sm#printDetailOrderBtn(type='button') Print
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
+
+  .modal.fade(id='cartInvoicesModal', tabindex='-1', aria-labelledby='cartInvoicesModalLabel', aria-hidden='true')
+    .modal-dialog.modal-lg.modal-dialog-centered
+      .modal-content.dark-surface
+        .modal-header
+          h5.modal-title#cartInvoicesModalLabel Saved Invoices
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          .d-flex.justify-content-between.align-items-center.mb-2
+            p.text-muted-light.mb-0 Search by customer name, phone, or invoice number.
+            button.btn.btn-sm.btn-outline-light-custom#reloadCartInvoicesBtn(type='button') Reload
+          input.form-control.form-control-dark.mb-3#cartInvoiceSearchInput(type='search', placeholder='Search invoice by name, phone or invoice no')
+          .list-group#cartInvoicesList
+            .list-group-item.dark-surface.text-muted-light No saved invoices loaded.
+        .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
   // Keep Orders New scripts inside #main-content so dashboard_nav AJAX loads them
   script(defer src='/javascripts/customer_editor.js')

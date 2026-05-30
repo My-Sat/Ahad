@@ -61,6 +61,11 @@ const OrderSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     default: null
   },
+  taxAmount: { type: Number, default: 0 },
+  taxBreakdown: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
   total: { type: Number, required: true, default: 0 },
   status: { type: String, enum: ['pending', 'paid', 'cancelled'], default: 'pending' },
   createdAt: { type: Date, default: Date.now },

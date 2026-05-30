@@ -148,30 +148,43 @@ block content
             -   }
             - }
 
-            .d-flex.justify-content-end.mb-2
-              if hasAdjustment
-                .me-3
-                  div.text-white #{isPremiumAdj ? 'Premium Applied:' : 'Discount Applied:'}
-                  strong #{discountApplied || (isPremiumAdj ? 'Premium' : 'Discount')}
-                .me-3
-                  div.text-white Total before adjustment:
-                  strong GH₵ #{Number(totalBeforeDiscount || 0).toFixed(2)}
-                .me-3
-                  div.text-white #{isPremiumAdj ? 'Premium:' : 'Discount:'}
-                  strong.text-white #{isPremiumAdj ? '+ GH₵ ' : '- GH₵ '}#{Math.abs(Number(order.discountAmount || 0)).toFixed(2)}
+            - var taxAmount = Number(order.taxAmount || 0)
+            - var hasTax = taxAmount > 0
+            - var tb = (order.taxBreakdown && typeof order.taxBreakdown === 'object') ? order.taxBreakdown : {}
+            - var taxableAmount = (typeof tb.taxableAmount !== 'undefined' && tb.taxableAmount !== null) ? Number(tb.taxableAmount || 0) : Number((Number(order.total || 0) - taxAmount).toFixed(2))
 
-              .me-3
-                div.text-white Total:
-                strong GH₵ #{Number(order.total || 0).toFixed(2)}
-              .me-3
-                div.text-white Paid so far:
-                strong GH₵ #{Number(paidSoFar || 0).toFixed(2)}
-              .me-3
-                div.text-white Remaining:
+            .mb-3
+              if hasAdjustment
+                p.text-end.mb-1
+                  span.text-white #{isPremiumAdj ? 'Premium Applied:' : 'Discount Applied:'}
+                  strong.ms-2 #{discountApplied || (isPremiumAdj ? 'Premium' : 'Discount')}
+                p.text-end.mb-1
+                  span.text-white Total before adjustment:
+                  strong.ms-2 GH₵ #{Number(totalBeforeDiscount || 0).toFixed(2)}
+                p.text-end.mb-1
+                  span.text-white #{isPremiumAdj ? 'Premium:' : 'Discount:'}
+                  strong.text-white.ms-2 #{isPremiumAdj ? '+ GH₵ ' : '- GH₵ '}#{Math.abs(Number(order.discountAmount || 0)).toFixed(2)}
+
+              if hasTax
+                p.text-end.mb-1
+                  span.text-white VATable amount:
+                  strong.ms-2 GH₵ #{Number(taxableAmount || 0).toFixed(2)}
+                p.text-end.mb-1
+                  span.text-white VAT:
+                  strong.text-white.ms-2 + GH₵ #{taxAmount.toFixed(2)}
+
+              p.text-end.mb-1
+                span.text-white Total:
+                strong.ms-2 GH₵ #{Number(order.total || 0).toFixed(2)}
+              p.text-end.mb-1
+                span.text-white Paid so far:
+                strong.ms-2 GH₵ #{Number(paidSoFar || 0).toFixed(2)}
+              p.text-end.mb-1
+                span.text-white Remaining:
                 if outstanding > 0
-                  strong GH₵ #{Number(outstanding || 0).toFixed(2)}
+                  strong.ms-2 GH₵ #{Number(outstanding || 0).toFixed(2)}
                 else
-                  strong GH₵ 0.00
+                  strong.ms-2 GH₵ 0.00
 
             // Payment history
             h6.mb-2.text-white Payment History

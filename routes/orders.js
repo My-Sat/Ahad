@@ -26,6 +26,18 @@ router.get(
 );
 
 router.get(
+  '/invoices',
+  ensureHasPermission('/orders/new'),
+  orderController.apiListCartInvoices
+);
+
+router.post(
+  '/invoices',
+  ensureHasPermission('/orders/new'),
+  orderController.apiSaveCartInvoice
+);
+
+router.get(
   '/list',
   ensureHasPermission('/orders/list'),
   orderController.apiListOrders

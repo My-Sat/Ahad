@@ -32,12 +32,21 @@
   const outsourcedCartWrapEl = document.getElementById('outsourcedCartWrap');
   const orderNowBtn = document.getElementById('orderNowBtn');
   const saveDraftBtn = document.getElementById('saveDraftBtn');
+  const saveCartInvoiceBtn = document.getElementById('saveCartInvoiceBtn');
   const printCartInvoiceBtn = document.getElementById('printCartInvoiceBtn');
   const shareCartInvoiceBtn = document.getElementById('shareCartInvoiceBtn');
   const orderJobNoteEl = document.getElementById('orderJobNote');
   const submittedCustomerSelect = document.getElementById('submittedCustomerSelect');
   const reloadSubmittedCustomersBtn = document.getElementById('reloadSubmittedCustomersBtn');
   const orderSubmissionIdEl = document.getElementById('orderSubmissionId');
+  const orderInvoiceIdEl = document.getElementById('orderInvoiceId');
+  const cartInvoiceSearchInput = document.getElementById('cartInvoiceSearchInput');
+  const cartInvoicesList = document.getElementById('cartInvoicesList');
+  const reloadCartInvoicesBtn = document.getElementById('reloadCartInvoicesBtn');
+  const openCartInvoicesModalBtn = document.getElementById('openCartInvoicesModalBtn');
+  const cartInvoiceActionsBtn = document.getElementById('cartInvoiceActionsBtn');
+  const cartInvoicesModalEl = document.getElementById('cartInvoicesModal');
+  const cartInvoicesModal = (window.bootstrap && cartInvoicesModalEl) ? new bootstrap.Modal(cartInvoicesModalEl) : null;
 
     // Admin-only manual discount UI (may not exist for non-admin)
   const manualDiscountMode = document.getElementById('manualDiscountMode');
@@ -51,12 +60,22 @@
   const manualDiscountBeforeEl = document.getElementById('manualDiscountTotalBefore');
   const manualDiscountAmountEl = document.getElementById('manualDiscountAmount');
   const manualDiscountAmountLabel = document.getElementById('manualDiscountAmountLabel');
+  const cartTaxMode = document.getElementById('cartTaxMode');
+  const cartTaxValue = document.getElementById('cartTaxValue');
+  const applyCartTaxBtn = document.getElementById('applyCartTaxBtn');
+  const clearCartTaxBtn = document.getElementById('clearCartTaxBtn');
+  const cartTaxSummary = document.getElementById('cartTaxSummary');
+  const cartTaxableAmountEl = document.getElementById('cartTaxableAmount');
+  const cartTaxAmountEl = document.getElementById('cartTaxAmount');
 
   // client-only state (per order)
   let manualDiscount = null; // { kind:'discount'|'premium', mode:'amount'|'percent', value:number }
+  let manualTax = null; // { mode:'amount'|'percent', value:number }
 
     let secretarySubmissions = [];
     let activeSubmission = null;
+    let activeInvoice = null;
+    let cartInvoiceSearchTimer = null;
 
     function getCurrentCustomerId() {
     const customerEl = document.getElementById('orderCustomerId');
@@ -67,6 +86,11 @@
   function getCurrentSubmissionId() {
     const sid = orderSubmissionIdEl && orderSubmissionIdEl.value ? String(orderSubmissionIdEl.value).trim() : '';
     return sid || '';
+  }
+
+  function getCurrentInvoiceId() {
+    const iid = orderInvoiceIdEl && orderInvoiceIdEl.value ? String(orderInvoiceIdEl.value).trim() : '';
+    return iid || '';
   }
 
   function draftKey(customerId) {
@@ -112,6 +136,7 @@
 
   function updateCartInvoiceButtons() {
     const hasCart = Array.isArray(cart) && cart.length > 0;
+    if (saveCartInvoiceBtn) saveCartInvoiceBtn.disabled = !hasCart;
     if (printCartInvoiceBtn) printCartInvoiceBtn.disabled = !hasCart;
     if (shareCartInvoiceBtn) shareCartInvoiceBtn.disabled = !hasCart;
   }
@@ -130,6 +155,15 @@
       manualDiscount = null;
       if (manualAdjustmentType) manualAdjustmentType.value = 'discount';
       if (manualDiscountValue) manualDiscountValue.value = '';
+    }
+    if (draft.manualTax) {
+      manualTax = draft.manualTax;
+      if (cartTaxMode) cartTaxMode.value = manualTax.mode || 'amount';
+      if (cartTaxValue) cartTaxValue.value = manualTax.value != null ? manualTax.value : '';
+    } else {
+      manualTax = null;
+      if (cartTaxMode) cartTaxMode.value = 'amount';
+      if (cartTaxValue) cartTaxValue.value = '';
     }
     refreshManualAdjustmentButton();
     renderCart();
@@ -318,7 +352,8 @@ async function loadServiceCategories() {
   }
 }
 
-function setSelectedCustomerFromSubmission(sub) {
+function setSelectedCustomerFromSubmission(sub, opts) {
+  opts = opts || {};
   const customerIdEl = document.getElementById('orderCustomerId');
   const nameEl = document.getElementById('selectedCustomerName');
   const phoneEl = document.getElementById('selectedCustomerPhone');
@@ -328,9 +363,14 @@ function setSelectedCustomerFromSubmission(sub) {
   const nextSubmissionId = sub ? String(sub.id || '') : '';
   const submissionChanged = prevSubmissionId !== nextSubmissionId;
 
-  if (submissionChanged && Array.isArray(cart) && cart.length) {
+  if (submissionChanged && Array.isArray(cart) && cart.length && !opts.preserveCart) {
     cart = [];
     manualDiscount = null;
+    manualTax = null;
+    activeInvoice = null;
+    if (orderInvoiceIdEl) orderInvoiceIdEl.value = '';
+    if (cartTaxValue) cartTaxValue.value = '';
+    if (cartTaxMode) cartTaxMode.value = 'amount';
     if (typeof renderCart === 'function') renderCart();
     if (serviceCategorySelect) serviceCategorySelect.value = '';
     if (serviceSelect) serviceSelect.innerHTML = '<option value="">-- Select a service --</option>';
@@ -342,7 +382,11 @@ function setSelectedCustomerFromSubmission(sub) {
   }
 
   activeSubmission = sub || null;
-  if (orderSubmissionIdEl) orderSubmissionIdEl.value = sub ? String(sub.id || '') : '';
+  if (!opts.fromInvoice) {
+    activeInvoice = null;
+    if (orderInvoiceIdEl) orderInvoiceIdEl.value = '';
+  }
+  if (orderSubmissionIdEl) orderSubmissionIdEl.value = (sub && !opts.fromInvoice) ? String(sub.id || '') : '';
 
   if (!sub) {
     if (customerIdEl) customerIdEl.value = '';
@@ -350,6 +394,8 @@ function setSelectedCustomerFromSubmission(sub) {
     if (phoneEl) phoneEl.textContent = '';
     if (categoryEl) categoryEl.textContent = '';
     if (card) card.style.display = 'none';
+    activeInvoice = null;
+    if (orderInvoiceIdEl) orderInvoiceIdEl.value = '';
     selectedServiceCategoryName = '';
     selectedServiceCategoryIsOutsourced = false;
     loadServiceCategories();
@@ -360,7 +406,10 @@ function setSelectedCustomerFromSubmission(sub) {
   if (customerIdEl) customerIdEl.value = sub.customerId ? String(sub.customerId) : '';
   if (nameEl) nameEl.textContent = sub.displayName || '';
   if (phoneEl) phoneEl.textContent = sub.phone || '';
-  if (categoryEl) categoryEl.textContent = sub.customerId ? '' : 'Walk-in';
+  if (categoryEl) {
+    if (sub.customerCategory) categoryEl.textContent = customerTypeDisplay(sub.customerCategory);
+    else categoryEl.textContent = sub.customerId ? '' : 'Walk-in';
+  }
   if (card) card.style.display = '';
   selectedServiceCategoryName = '';
   selectedServiceCategoryIsOutsourced = false;
@@ -373,6 +422,15 @@ function getActiveCustomerCategory() {
   const raw = String(activeSubmission.customerCategory || '').toLowerCase().trim();
   if (raw === 'artist' || raw === 'organisation') return raw;
   return 'customer';
+}
+
+function customerTypeDisplay(category) {
+  const raw = String(category || '').toLowerCase().trim();
+  if (raw === 'artist') return 'Artist';
+  if (raw === 'organisation') return 'Organisation';
+  if (raw === 'regular') return 'Regular';
+  if (raw === 'one_time' || raw === 'customer') return 'One-Time';
+  return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : '';
 }
 
 async function loadSecretarySubmissions() {
@@ -394,7 +452,7 @@ async function loadSecretarySubmissions() {
       submittedCustomerSelect.appendChild(opt);
     });
 
-    if (activeSubmission) {
+    if (activeSubmission && !activeInvoice) {
       const stillThere = secretarySubmissions.find(s => String(s.id) === String(activeSubmission.id));
       if (stillThere) {
         submittedCustomerSelect.value = String(stillThere.id);
@@ -407,6 +465,154 @@ async function loadSecretarySubmissions() {
     submittedCustomerSelect.innerHTML = '<option value="">Failed to load submitted customers</option>';
   } finally {
     submittedCustomerSelect.disabled = false;
+  }
+}
+
+function invoiceCustomerLabel(inv) {
+  return String((inv && (inv.customerName || inv.customerPhone || inv.invoiceNo)) || 'Customer').trim();
+}
+
+function invoiceToSubmission(inv) {
+  return {
+    id: '',
+    customerId: inv.customerId || '',
+    displayName: invoiceCustomerLabel(inv),
+    phone: inv.customerPhone || '',
+    customerCategory: inv.customerCategory || '',
+    categories: Array.isArray(inv.categories) ? inv.categories : []
+  };
+}
+
+function renderCartInvoices(rows) {
+  if (!cartInvoicesList) return;
+  const invoices = Array.isArray(rows) ? rows : [];
+  if (!invoices.length) {
+    cartInvoicesList.innerHTML = '<div class="list-group-item dark-surface text-muted-light">No open invoices found.</div>';
+    return;
+  }
+
+  cartInvoicesList.innerHTML = invoices.map(inv => {
+    const total = inv && inv.totals ? Number(inv.totals.finalTotal || inv.totals.total || 0) : 0;
+    const status = String(inv.status || 'open');
+    const canLoad = status === 'open';
+    return `
+      <div class="list-group-item dark-surface d-flex justify-content-between align-items-center gap-2">
+        <div class="min-width-0">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <strong class="text-white">${escapeHtml(invoiceCustomerLabel(inv))}</strong>
+            <span class="badge bg-info text-dark">${escapeHtml(inv.invoiceNo || 'Invoice')}</span>
+            <span class="badge ${canLoad ? 'bg-success' : 'bg-secondary'}">${escapeHtml(status)}</span>
+          </div>
+          <div class="small text-muted-light">
+            ${escapeHtml(inv.customerPhone || '')}
+            ${total > 0 ? ` · GH₵ ${formatMoney(total)}` : ''}
+            ${inv.convertedOrderId ? ` · Order ${escapeHtml(inv.convertedOrderId)}` : ''}
+          </div>
+        </div>
+        <button class="btn btn-sm btn-outline-light-custom load-cart-invoice-btn" type="button" data-invoice-id="${escapeHtml(inv.id || '')}" ${canLoad ? '' : 'disabled'}>Load</button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function loadCartInvoices(q) {
+  if (!cartInvoicesList) return;
+  cartInvoicesList.innerHTML = '<div class="list-group-item dark-surface text-muted-light">Loading invoices...</div>';
+  try {
+    const params = new URLSearchParams();
+    const term = String(q || '').trim();
+    if (term) params.set('q', term);
+    const res = await fetch(`/orders/invoices?${params.toString()}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    const j = await res.json().catch(() => null);
+    if (!res.ok || !j || !j.ok) throw new Error((j && j.error) || 'Failed to load invoices');
+    renderCartInvoices(j.invoices || []);
+  } catch (err) {
+    console.error('loadCartInvoices failed', err);
+    cartInvoicesList.innerHTML = '<div class="list-group-item dark-surface text-danger">Failed to load invoices.</div>';
+  }
+}
+
+function loadInvoiceIntoCart(inv) {
+  if (String(inv && inv.status || 'open') !== 'open') {
+    showAlertModal('This invoice has already been converted to an order.');
+    return;
+  }
+  if (!inv || !Array.isArray(inv.cart) || !inv.cart.length) {
+    showAlertModal('This invoice has no cart lines.');
+    return;
+  }
+
+  activeInvoice = inv;
+  if (orderInvoiceIdEl) orderInvoiceIdEl.value = inv.id || '';
+  if (submittedCustomerSelect) submittedCustomerSelect.value = '';
+  setSelectedCustomerFromSubmission(invoiceToSubmission(inv), { preserveCart: true, fromInvoice: true });
+
+  cart = inv.cart;
+  manualDiscount = inv.manualDiscount || null;
+  manualTax = inv.manualTax || null;
+  if (manualAdjustmentType) manualAdjustmentType.value = manualDiscount && manualDiscount.kind === 'premium' ? 'premium' : 'discount';
+  if (manualDiscountMode) manualDiscountMode.value = manualDiscount ? (manualDiscount.mode || 'amount') : 'amount';
+  if (manualDiscountValue) manualDiscountValue.value = manualDiscount && manualDiscount.value != null ? manualDiscount.value : '';
+  if (cartTaxMode) cartTaxMode.value = manualTax ? (manualTax.mode || 'amount') : 'amount';
+  if (cartTaxValue) cartTaxValue.value = manualTax && manualTax.value != null ? manualTax.value : '';
+  if (orderJobNoteEl) orderJobNoteEl.value = inv.jobNote || '';
+  refreshManualAdjustmentButton();
+  renderCart();
+  showAlertModal(`Invoice ${inv.invoiceNo || ''} loaded into cart.`, 'Invoice loaded');
+}
+
+async function saveCurrentCartInvoice(showNotice) {
+  if (!cart || !cart.length) {
+    showAlertModal('Add items to cart before saving an invoice.');
+    return null;
+  }
+
+  const submissionId = getCurrentSubmissionId();
+  const invoiceId = getCurrentInvoiceId();
+  if (!submissionId && !invoiceId) {
+    showAlertModal('Select a submitted customer/walk-in or load an existing invoice first.');
+    return null;
+  }
+
+  const payload = {
+    invoiceId: invoiceId || null,
+    submissionId: submissionId || null,
+    customerId: getCurrentCustomerId() || null,
+    cart,
+    manualDiscount,
+    manualTax,
+    totals: cartTotalsSnapshot(),
+    jobNote: orderJobNoteEl ? String(orderJobNoteEl.value || '').trim() : ''
+  };
+
+  const originalHtml = saveCartInvoiceBtn ? saveCartInvoiceBtn.innerHTML : '';
+  if (saveCartInvoiceBtn) {
+    saveCartInvoiceBtn.disabled = true;
+    saveCartInvoiceBtn.textContent = 'Saving...';
+  }
+  try {
+    const res = await fetch('/orders/invoices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify(payload)
+    });
+    const j = await res.json().catch(() => null);
+    if (!res.ok || !j || !j.ok || !j.invoice) throw new Error((j && j.error) || 'Failed to save invoice');
+    activeInvoice = j.invoice;
+    if (orderInvoiceIdEl) orderInvoiceIdEl.value = j.invoice.id || '';
+    if (showNotice) showAlertModal(`Invoice saved: ${j.invoice.invoiceNo}`, 'Invoice');
+    loadCartInvoices(cartInvoiceSearchInput ? cartInvoiceSearchInput.value : '');
+    return j.invoice;
+  } catch (err) {
+    console.error('save invoice failed', err);
+    showAlertModal(err.message || 'Failed to save invoice.');
+    return null;
+  } finally {
+    if (saveCartInvoiceBtn) {
+      saveCartInvoiceBtn.disabled = false;
+      saveCartInvoiceBtn.innerHTML = originalHtml || '<i class="bi bi-save me-1"></i>Save Invoice';
+      updateCartInvoiceButtons();
+    }
   }
 }
 
@@ -533,6 +739,148 @@ async function loadServicesForCategory(catId) {
     });
   }
 
+  if (reloadCartInvoicesBtn) {
+    reloadCartInvoicesBtn.addEventListener('click', function () {
+      loadCartInvoices(cartInvoiceSearchInput ? cartInvoiceSearchInput.value : '');
+    });
+  }
+
+  if (cartInvoiceActionsBtn) {
+    const wrap = cartInvoiceActionsBtn.closest('.cart-invoice-actions');
+    const menu = wrap ? wrap.querySelector('.dropdown-menu') : null;
+    if (menu) {
+      document.querySelectorAll('body > .cart-invoice-floating-menu[data-owner="orders-new"]').forEach(existing => {
+        if (existing !== menu) existing.remove();
+      });
+      menu.dataset.owner = 'orders-new';
+      menu.classList.add('cart-invoice-floating-menu');
+      document.body.appendChild(menu);
+    }
+
+    function hideInvoiceActionsMenu() {
+      if (!menu) return;
+      menu.classList.remove('show');
+      menu.style.display = 'none';
+      cartInvoiceActionsBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    function showInvoiceActionsMenu() {
+      if (!menu) return;
+      menu.style.display = 'block';
+      menu.style.visibility = 'hidden';
+      menu.classList.add('show');
+      menu.style.position = 'fixed';
+      menu.style.maxHeight = '';
+      menu.style.overflowY = '';
+
+      const rect = cartInvoiceActionsBtn.getBoundingClientRect();
+      const viewportPadding = 10;
+      const menuWidth = Math.max(menu.offsetWidth || 0, 210);
+      const menuHeight = Math.max(menu.scrollHeight || menu.offsetHeight || 0, 180);
+      const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+      const spaceAbove = rect.top - viewportPadding;
+      const openUp = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+      const availableHeight = Math.max(120, (openUp ? spaceAbove : spaceBelow) - 8);
+      const finalHeight = Math.min(menuHeight, availableHeight);
+
+      let top = openUp ? (rect.top - finalHeight - 8) : (rect.bottom + 8);
+      top = Math.max(viewportPadding, Math.min(top, window.innerHeight - finalHeight - viewportPadding));
+
+      let left = rect.right - menuWidth;
+      left = Math.max(viewportPadding, Math.min(left, window.innerWidth - menuWidth - viewportPadding));
+
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
+      menu.style.width = `${menuWidth}px`;
+      menu.style.maxHeight = `${finalHeight}px`;
+      menu.style.overflowY = menuHeight > finalHeight ? 'auto' : 'visible';
+      menu.style.visibility = 'visible';
+      cartInvoiceActionsBtn.setAttribute('aria-expanded', 'true');
+    }
+
+    cartInvoiceActionsBtn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (!menu) return;
+      if (menu.classList.contains('show') && menu.style.display !== 'none') {
+        hideInvoiceActionsMenu();
+      } else {
+        showInvoiceActionsMenu();
+      }
+    });
+
+    if (menu) {
+      menu.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        const item = ev.target.closest('.dropdown-item');
+        if (item) setTimeout(hideInvoiceActionsMenu, 80);
+      });
+    }
+
+    document.addEventListener('click', function (ev) {
+      if (!menu || !menu.classList.contains('show')) return;
+      if (ev.target === cartInvoiceActionsBtn || cartInvoiceActionsBtn.contains(ev.target)) return;
+      if (menu.contains(ev.target)) return;
+      hideInvoiceActionsMenu();
+    });
+
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') hideInvoiceActionsMenu();
+    });
+
+    window.addEventListener('resize', hideInvoiceActionsMenu);
+    window.addEventListener('scroll', hideInvoiceActionsMenu, true);
+  }
+
+  if (openCartInvoicesModalBtn) {
+    openCartInvoicesModalBtn.addEventListener('click', function () {
+      if (cartInvoicesModal) cartInvoicesModal.show();
+      loadCartInvoices(cartInvoiceSearchInput ? cartInvoiceSearchInput.value : '');
+      if (cartInvoiceSearchInput) {
+        setTimeout(() => {
+          try { cartInvoiceSearchInput.focus(); } catch (e) {}
+        }, 250);
+      }
+    });
+  }
+
+  if (cartInvoiceSearchInput) {
+    cartInvoiceSearchInput.addEventListener('input', function () {
+      if (cartInvoiceSearchTimer) clearTimeout(cartInvoiceSearchTimer);
+      const q = this.value || '';
+      cartInvoiceSearchTimer = setTimeout(function () {
+        loadCartInvoices(q);
+      }, 220);
+    });
+  }
+
+  if (cartInvoicesList) {
+    cartInvoicesList.addEventListener('click', function (ev) {
+      const btn = ev.target.closest('.load-cart-invoice-btn');
+      if (!btn) return;
+      const invoiceId = btn.dataset.invoiceId || '';
+      if (!invoiceId) return;
+      const rows = Array.from(cartInvoicesList.querySelectorAll('.load-cart-invoice-btn'));
+      rows.forEach(b => { b.disabled = true; });
+      fetch(`/orders/invoices?invoiceId=${encodeURIComponent(invoiceId)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(res => res.json().then(j => ({ ok: res.ok, j })))
+        .then(({ ok, j }) => {
+          if (!ok || !j || !j.ok || !j.invoices || !j.invoices[0]) {
+            throw new Error((j && j.error) || 'Failed to load invoice');
+          }
+          loadInvoiceIntoCart(j.invoices[0]);
+          if (cartInvoicesModal) cartInvoicesModal.hide();
+        })
+        .catch(err => {
+          console.error('load invoice failed', err);
+          showAlertModal(err.message || 'Failed to load invoice.');
+        })
+        .finally(() => {
+          loadCartInvoices(cartInvoiceSearchInput ? cartInvoiceSearchInput.value : '');
+        });
+    });
+  }
+
   // initial categories load
   loadServiceCategories();
   loadSecretarySubmissions();
@@ -641,6 +989,21 @@ async function loadServicesForCategory(catId) {
     return Number(amt.toFixed(2));
   }
 
+  function computeTaxAmount(taxableTotal, tax) {
+    if (!tax) return 0;
+    const mode = String(tax.mode || '');
+    const value = Number(tax.value || 0);
+    const base = Math.max(0, Number(taxableTotal || 0));
+
+    if (!isFinite(value) || value <= 0) return 0;
+    if (mode === 'amount') return Number(Math.max(0, value).toFixed(2));
+    if (mode === 'percent') {
+      const pct = clamp(value, 0, 100);
+      return Number((base * (pct / 100)).toFixed(2));
+    }
+    return 0;
+  }
+
   function updateManualDiscountUI(baseTotal) {
     // hide if not admin or UI not present
     if (!window._isAdmin || !manualDiscountMode || !manualDiscountValue) return;
@@ -657,6 +1020,19 @@ async function loadServicesForCategory(catId) {
     } else {
       if (manualDiscountSummary) manualDiscountSummary.style.display = 'none';
       if (clearManualDiscountBtn) clearManualDiscountBtn.style.display = 'none';
+    }
+  }
+
+  function updateTaxUI(taxableTotal) {
+    const taxAmt = computeTaxAmount(taxableTotal, manualTax);
+    if (cartTaxSummary && taxAmt > 0) {
+      cartTaxSummary.style.display = '';
+      if (cartTaxableAmountEl) cartTaxableAmountEl.textContent = `GH\u20B5 ${formatMoney(taxableTotal)}`;
+      if (cartTaxAmountEl) cartTaxAmountEl.textContent = `+ GH\u20B5 ${formatMoney(taxAmt)}`;
+      if (clearCartTaxBtn) clearCartTaxBtn.style.display = '';
+    } else {
+      if (cartTaxSummary) cartTaxSummary.style.display = 'none';
+      if (clearCartTaxBtn) clearCartTaxBtn.style.display = 'none';
     }
   }
 
@@ -1336,7 +1712,9 @@ function addToCart({
 
     // âœ… ensure breakdown under totals is hidden when cart empties
     if (manualDiscountSummary) manualDiscountSummary.style.display = 'none';
+    if (cartTaxSummary) cartTaxSummary.style.display = 'none';
     if (clearManualDiscountBtn) clearManualDiscountBtn.style.display = 'none';
+    if (clearCartTaxBtn) clearCartTaxBtn.style.display = 'none';
 
     return;
   }
@@ -1404,7 +1782,9 @@ function addToCart({
     const baseTotal = Number(total.toFixed(2));
     const discAmt = (window._isAdmin && manualDiscount) ? computeManualDiscountAmount(baseTotal, manualDiscount) : 0;
     const signedAdjustment = (manualAdjustmentKind() === 'premium') ? (-discAmt) : discAmt;
-    const finalTotal = Number(Math.max(0, baseTotal - signedAdjustment).toFixed(2));
+    const taxableTotal = Number(Math.max(0, baseTotal - signedAdjustment).toFixed(2));
+    const taxAmt = computeTaxAmount(taxableTotal, manualTax);
+    const finalTotal = Number((taxableTotal + taxAmt).toFixed(2));
 
     // show final in main total
     cartTotalEl.textContent = 'GH₵ ' + finalTotal.toFixed(2);
@@ -1415,6 +1795,7 @@ function addToCart({
 
     // update the manual discount summary box
     updateManualDiscountUI(baseTotal);
+    updateTaxUI(taxableTotal);
     orderNowBtn.disabled = false;
     updateSaveDraftBtn();
     updateCartInvoiceButtons();
@@ -1425,12 +1806,17 @@ function addToCart({
     const outsourcedCostTotal = Number((Array.isArray(cart) ? cart.reduce((sum, it) => sum + Number(it.outsourcedTotal || 0), 0) : 0).toFixed(2));
     const adjustmentAmount = (window._isAdmin && manualDiscount) ? computeManualDiscountAmount(baseTotal, manualDiscount) : 0;
     const isPremium = manualAdjustmentKind() === 'premium';
-    const finalTotal = Number(Math.max(0, baseTotal - (isPremium ? -adjustmentAmount : adjustmentAmount)).toFixed(2));
+    const taxableTotal = Number(Math.max(0, baseTotal - (isPremium ? -adjustmentAmount : adjustmentAmount)).toFixed(2));
+    const taxAmount = computeTaxAmount(taxableTotal, manualTax);
+    const finalTotal = Number((taxableTotal + taxAmount).toFixed(2));
     return {
       baseTotal,
       outsourcedCostTotal,
       adjustmentAmount,
       adjustmentKind: isPremium ? 'premium' : 'discount',
+      taxableTotal,
+      taxAmount,
+      tax: manualTax,
       finalTotal
     };
   }
@@ -1492,9 +1878,8 @@ function addToCart({
   }
 
   function invoiceNumber() {
-    const d = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    return `CART-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    if (activeInvoice && activeInvoice.invoiceNo) return String(activeInvoice.invoiceNo);
+    return Math.random().toString(36).replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase();
   }
 
   function buildCartInvoiceHtml() {
@@ -1505,6 +1890,9 @@ function addToCart({
     const invNo = invoiceNumber();
     const adjustmentLabel = totals.adjustmentKind === 'premium' ? 'Premium' : 'Discount';
     const adjustmentSign = totals.adjustmentKind === 'premium' ? '+' : '-';
+    const taxLabel = totals.tax && totals.tax.mode === 'percent'
+      ? `VAT (${Number(totals.tax.value || 0)}%)`
+      : 'VAT';
     const rows = lines.map((line, idx) => `
       <tr>
         <td>${idx + 1}</td>
@@ -1526,13 +1914,14 @@ function addToCart({
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Cart Invoice ${escapeHtml(invNo)}</title>
+  <title>Invoice ${escapeHtml(invNo)}</title>
   <style>
     @page { size: A4; margin: 16mm; }
     * { box-sizing: border-box; }
     body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; font-size: 12px; }
     .header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; border-bottom: 2px solid #111; padding-bottom: 14px; margin-bottom: 16px; }
     .logo { max-height: 62px; max-width: 160px; object-fit: contain; }
+    .company-name { margin-top: 6px; font-size: 17px; font-weight: 800; letter-spacing: .08em; }
     h1 { margin: 0; font-size: 22px; letter-spacing: .03em; }
     h2 { margin: 0 0 6px; font-size: 15px; }
     .muted { color: #555; font-size: 11px; }
@@ -1552,10 +1941,11 @@ function addToCart({
   <div class="header">
     <div>
       <img class="logo" src="/public/images/AHAD LOGO3.jpeg" alt="AHAD">
-      <div class="muted">Cart Invoice / Proforma</div>
+      <div class="company-name">AHADPRINT</div>
+      <div class="muted">Invoice</div>
     </div>
     <div class="right">
-      <h1>CART INVOICE</h1>
+      <h1>INVOICE</h1>
       <div><strong>No:</strong> ${escapeHtml(invNo)}</div>
       <div><strong>Date:</strong> ${escapeHtml(now.toLocaleString())}</div>
     </div>
@@ -1589,6 +1979,7 @@ function addToCart({
   <div class="totals">
     <div><span>Subtotal</span><strong>${formatCediPlain(totals.baseTotal)}</strong></div>
     ${totals.adjustmentAmount > 0 ? `<div><span>${adjustmentLabel}</span><strong>${adjustmentSign} ${formatCediPlain(totals.adjustmentAmount)}</strong></div>` : ''}
+    ${totals.taxAmount > 0 ? `<div><span>VATable amount</span><strong>${formatCediPlain(totals.taxableTotal)}</strong></div><div><span>${taxLabel}</span><strong>+ ${formatCediPlain(totals.taxAmount)}</strong></div>` : ''}
     ${totals.outsourcedCostTotal > 0 ? `<div><span>Out-Sourced Cost Total</span><strong>${formatCediPlain(totals.outsourcedCostTotal)}</strong></div>` : ''}
     <div class="grand"><span>Total</span><strong>${formatCediPlain(totals.finalTotal)}</strong></div>
   </div>
@@ -1596,8 +1987,10 @@ function addToCart({
 </html>`;
   }
 
-  function printCartInvoice() {
+  async function printCartInvoice() {
     if (!cart || !cart.length) return showAlertModal('Add items to cart before printing an invoice.');
+    const saved = await saveCurrentCartInvoice(false);
+    if (!saved) return;
     const w = window.open('', '_blank', 'toolbar=0,location=0,menubar=0');
     if (!w) return showAlertModal('Unable to open print window. Please allow pop-ups for this site.');
     w.document.open();
@@ -1637,11 +2030,71 @@ function addToCart({
     return lines.length ? lines : [''];
   }
 
-  function buildCartInvoicePdfBlob() {
+  function bytesToHex(bytes) {
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 1) {
+      out += bytes[i].toString(16).padStart(2, '0').toUpperCase();
+    }
+    return out;
+  }
+
+  function getJpegDimensions(bytes) {
+    if (!bytes || bytes.length < 4 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) return null;
+    let offset = 2;
+    const sofMarkers = new Set([0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF]);
+
+    while (offset < bytes.length) {
+      if (bytes[offset] !== 0xFF) {
+        offset += 1;
+        continue;
+      }
+      while (bytes[offset] === 0xFF) offset += 1;
+      const marker = bytes[offset];
+      offset += 1;
+      if (marker === 0xD9 || marker === 0xDA) break;
+      if (offset + 1 >= bytes.length) break;
+      const length = (bytes[offset] << 8) + bytes[offset + 1];
+      if (!length || offset + length > bytes.length) break;
+      if (sofMarkers.has(marker) && length >= 7) {
+        return {
+          height: (bytes[offset + 3] << 8) + bytes[offset + 4],
+          width: (bytes[offset + 5] << 8) + bytes[offset + 6],
+          components: bytes[offset + 7] || 3
+        };
+      }
+      offset += length;
+    }
+    return null;
+  }
+
+  async function loadInvoiceLogoForPdf() {
+    try {
+      const res = await fetch('/images/AHAD LOGO3.jpeg', { cache: 'force-cache' });
+      if (!res.ok) return null;
+      const buf = await res.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      const dims = getJpegDimensions(bytes);
+      if (!dims || !dims.width || !dims.height) return null;
+      return { bytes, width: dims.width, height: dims.height, components: dims.components || 3 };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function buildCartInvoicePdfBlob() {
     const customer = selectedCustomerSnapshot();
     const totals = cartTotalsSnapshot();
+    const rows = (cart || []).map(cartLineSnapshot);
+    const logo = await loadInvoiceLogoForPdf();
     const lines = [];
-    lines.push('AHADPRINT - CART INVOICE / PROFORMA');
+    const pad = (text, width) => sanitizePdfText(text).slice(0, width).padEnd(width, ' ');
+    const money = n => `GHS ${formatMoney(n)}`;
+    const totalLine = (label, value, prefix) => {
+      const amount = prefix ? `${prefix} ${money(value)}` : money(value);
+      lines.push(`${pad(label, 64)}${amount.padStart(24)}`);
+    };
+
+    lines.push('AHADPRINT - INVOICE');
     lines.push(`Generated: ${new Date().toLocaleString()}`);
     lines.push(`Invoice No: ${invoiceNumber()}`);
     lines.push('');
@@ -1650,30 +2103,57 @@ function addToCart({
     if (customer.category) lines.push(`Type: ${customer.category}`);
     if (customer.jobNote) lines.push(`Job Note: ${customer.jobNote}`);
     lines.push('');
-    lines.push('Items');
-    lines.push('-----');
-    (cart || []).map(cartLineSnapshot).forEach((line, idx) => {
-      lines.push(`${idx + 1}. ${line.service || ''} - ${line.description || ''}`);
-      lines.push(`   Pages: ${line.pages || '-'} | QTY: ${line.qty || '-'} | Sheets: ${line.sheets || '-'} | Unit: GHS ${formatMoney(line.unitPrice)} | Subtotal: GHS ${formatMoney(line.subtotal)}`);
-      if (line.note) lines.push(`   ${line.note.replace(/GH\u20B5/g, 'GHS')}`);
+    lines.push('ITEMS');
+    lines.push('No  Selection                              Pg   Qty  Shts        Unit     Subtotal');
+    lines.push('--  -------------------------------------- ---- ---- ----- ---------- ------------');
+    rows.forEach((line, idx) => {
+      const selection = `${line.service || ''} ${line.description || ''}`.trim() || 'Selection';
+      const wrappedSelection = wrapPdfLine(selection, 38);
+      const first = wrappedSelection.shift() || '';
+      lines.push(
+        `${String(idx + 1).padEnd(3)} ${pad(first, 38)} ${pad(line.pages || '-', 4)} ${pad(line.qty || '-', 4)} ${pad(line.sheets || '-', 5)} ${money(line.unitPrice).padStart(10)} ${money(line.subtotal).padStart(12)}`
+      );
+      wrappedSelection.forEach(extra => {
+        lines.push(`    ${pad(extra, 38)}`);
+      });
+      if (line.note) {
+        wrapPdfLine(line.note.replace(/GH\u20B5/g, 'GHS'), 84).forEach(noteLine => {
+          lines.push(`    ${noteLine}`);
+        });
+      }
     });
     lines.push('');
-    lines.push(`Subtotal: GHS ${formatMoney(totals.baseTotal)}`);
+    lines.push('--------------------------------------------------------------------------------');
+    totalLine('Subtotal', totals.baseTotal);
     if (totals.adjustmentAmount > 0) {
-      lines.push(`${totals.adjustmentKind === 'premium' ? 'Premium' : 'Discount'}: ${totals.adjustmentKind === 'premium' ? '+' : '-'} GHS ${formatMoney(totals.adjustmentAmount)}`);
+      totalLine(totals.adjustmentKind === 'premium' ? 'Premium' : 'Discount', totals.adjustmentAmount, totals.adjustmentKind === 'premium' ? '+' : '-');
     }
-    if (totals.outsourcedCostTotal > 0) lines.push(`Out-Sourced Cost Total: GHS ${formatMoney(totals.outsourcedCostTotal)}`);
-    lines.push(`TOTAL: GHS ${formatMoney(totals.finalTotal)}`);
+    if (totals.taxAmount > 0) {
+      const taxLabel = totals.tax && totals.tax.mode === 'percent'
+        ? `VAT (${Number(totals.tax.value || 0)}%)`
+        : 'VAT';
+      totalLine('VATable amount', totals.taxableTotal);
+      totalLine(taxLabel, totals.taxAmount, '+');
+    }
+    if (totals.outsourcedCostTotal > 0) totalLine('Out-Sourced Cost Total', totals.outsourcedCostTotal);
+    totalLine('TOTAL', totals.finalTotal);
 
     const wrapped = [];
     lines.forEach(line => {
-      wrapPdfLine(line, 92).forEach(w => wrapped.push(w));
+      const cleanLine = sanitizePdfText(line);
+      // Table rows are pre-padded for Courier; wrapping every line would collapse
+      // the spacing and make headers drift away from their columns.
+      if (cleanLine.length <= 92) {
+        wrapped.push(cleanLine);
+      } else {
+        wrapPdfLine(cleanLine, 92).forEach(w => wrapped.push(w));
+      }
     });
 
-    const pageSize = 48;
+    const pageSize = logo ? 44 : 48;
     const pages = [];
     for (let i = 0; i < wrapped.length; i += pageSize) pages.push(wrapped.slice(i, i + pageSize));
-    if (!pages.length) pages.push(['Cart invoice']);
+    if (!pages.length) pages.push(['Invoice']);
 
     const objects = [];
     const addObj = body => {
@@ -1683,11 +2163,25 @@ function addToCart({
 
     const catalogId = addObj(''); // placeholder
     const pagesId = addObj(''); // placeholder
-    const fontId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+    const fontId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>');
+    let imageId = null;
+    let logoDrawCommand = '';
+    if (logo) {
+      const imgWidth = 72;
+      const imgHeight = Math.min(58, Math.max(30, Number((imgWidth * (logo.height / logo.width)).toFixed(2))));
+      const imgX = 50;
+      const imgY = 765;
+      const colorSpace = logo.components === 1 ? '/DeviceGray' : (logo.components === 4 ? '/DeviceCMYK' : '/DeviceRGB');
+      const imageStream = `${bytesToHex(logo.bytes)}>`;
+      imageId = addObj(`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace ${colorSpace} /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${imageStream.length} >>\nstream\n${imageStream}\nendstream`);
+      logoDrawCommand = `q\n${imgWidth} 0 0 ${imgHeight} ${imgX} ${imgY} cm\n/Im1 Do\nQ`;
+    }
     const pageIds = [];
 
     pages.forEach(pageLines => {
-      const commands = ['BT', '/F1 10 Tf', '50 790 Td'];
+      const commands = [];
+      if (logoDrawCommand) commands.push(logoDrawCommand);
+      commands.push('BT', '/F1 10 Tf', logoDrawCommand ? '50 740 Td' : '50 790 Td');
       pageLines.forEach((line, idx) => {
         if (idx > 0) commands.push('0 -14 Td');
         commands.push(`(${pdfEscape(line)}) Tj`);
@@ -1695,7 +2189,8 @@ function addToCart({
       commands.push('ET');
       const stream = commands.join('\n');
       const contentId = addObj(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
-      const pageId = addObj(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+      const xObjectResource = imageId ? `/XObject << /Im1 ${imageId} 0 R >> ` : '';
+      const pageId = addObj(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R >> ${xObjectResource}>> /Contents ${contentId} 0 R >>`);
       pageIds.push(pageId);
     });
 
@@ -1725,7 +2220,9 @@ function addToCart({
       shareCartInvoiceBtn.textContent = 'Preparing...';
     }
     try {
-      const blob = buildCartInvoicePdfBlob();
+      const saved = await saveCurrentCartInvoice(false);
+      if (!saved) return;
+      const blob = await buildCartInvoicePdfBlob();
       const filename = `${invoiceNumber().toLowerCase()}.pdf`;
       const file = (typeof File !== 'undefined')
         ? new File([blob], filename, { type: 'application/pdf' })
@@ -1733,8 +2230,8 @@ function addToCart({
 
       if (file && navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
         await navigator.share({
-          title: 'Cart Invoice',
-          text: 'Cart invoice from AHADPRINT',
+          title: 'Invoice',
+          text: 'Invoice from AHADPRINT',
           files: [file]
         });
       } else {
@@ -1749,7 +2246,7 @@ function addToCart({
         showAlertModal('PDF downloaded. You can attach and send it to the customer.', 'Invoice PDF');
       }
     } catch (err) {
-      console.error('share cart invoice failed', err);
+      console.error('share invoice failed', err);
       showAlertModal('Failed to prepare the invoice PDF.');
     } finally {
       if (shareCartInvoiceBtn) {
@@ -1798,6 +2295,41 @@ function addToCart({
     });
   }
 
+  if (applyCartTaxBtn) {
+    applyCartTaxBtn.addEventListener('click', function () {
+      if (!cart || !cart.length) return showAlertModal('Add items to cart before applying VAT.');
+
+      const mode = cartTaxMode ? String(cartTaxMode.value || 'amount').toLowerCase() : 'amount';
+      const value = cartTaxValue ? Number(cartTaxValue.value) : 0;
+
+      if (mode !== 'amount' && mode !== 'percent') {
+        return showAlertModal('Select a valid VAT mode.');
+      }
+
+      if (!isFinite(value) || value <= 0) {
+        return showAlertModal('Enter a valid VAT value (> 0).');
+      }
+
+      if (mode === 'percent' && value > 100) {
+        return showAlertModal('VAT percentage cannot exceed 100%.');
+      }
+
+      manualTax = { mode, value: Number(value) };
+      renderCart();
+      showAlertModal('VAT applied for this order.', 'VAT');
+    });
+  }
+
+  if (clearCartTaxBtn) {
+    clearCartTaxBtn.addEventListener('click', function () {
+      manualTax = null;
+      if (cartTaxValue) cartTaxValue.value = '';
+      if (cartTaxMode) cartTaxMode.value = 'amount';
+      renderCart();
+      showAlertModal('VAT removed.', 'VAT');
+    });
+  }
+
   if (window._isAdmin && manualAdjustmentType) {
     manualAdjustmentType.addEventListener('change', function () {
       refreshManualAdjustmentButton();
@@ -1816,6 +2348,12 @@ function addToCart({
 
   if (shareCartInvoiceBtn) {
     shareCartInvoiceBtn.addEventListener('click', shareCartInvoicePdf);
+  }
+
+  if (saveCartInvoiceBtn) {
+    saveCartInvoiceBtn.addEventListener('click', function () {
+      saveCurrentCartInvoice(true);
+    });
   }
 
   async function lookupArtistByTerm(term) {
@@ -2393,7 +2931,12 @@ async function placeOrderFlow() {
   const originalText = orderNowBtn.textContent;
   orderNowBtn.textContent = 'Placing...';
 
-  try {
+    try {
+      if (getCurrentInvoiceId()) {
+        const savedInvoice = await saveCurrentCartInvoice(false);
+        if (!savedInvoice) return;
+      }
+
     // Build payload items
     const items = [];
 
@@ -2447,6 +2990,7 @@ async function placeOrderFlow() {
       const payload = {
         items,
         submissionId: getCurrentSubmissionId() || null,
+        invoiceId: getCurrentInvoiceId() || null,
         customerId:
           (document.getElementById('orderCustomerId') &&
            document.getElementById('orderCustomerId').value)
@@ -2488,6 +3032,20 @@ async function placeOrderFlow() {
       console.warn('Failed to attach manualDiscount to payload', e);
     }
 
+    try {
+      if (manualTax && typeof manualTax === 'object') {
+        const mode = String(manualTax.mode || '').trim().toLowerCase();
+        const value = Number(manualTax.value);
+        const validMode = (mode === 'amount' || mode === 'percent');
+        const validValue = isFinite(value) && value > 0 && (mode !== 'percent' || value <= 100);
+        if (validMode && validValue) {
+          payload.tax = { mode, value: Number(value) };
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to attach VAT to payload', e);
+    }
+
     const res = await fetch('/orders', {
       method: 'POST',
       headers: {
@@ -2518,8 +3076,11 @@ async function placeOrderFlow() {
     }
 
     setSelectedCustomerFromSubmission(null);
+    activeInvoice = null;
+    if (orderInvoiceIdEl) orderInvoiceIdEl.value = '';
     if (submittedCustomerSelect) submittedCustomerSelect.value = '';
     await loadSecretarySubmissions();
+    await loadCartInvoices(cartInvoiceSearchInput ? cartInvoiceSearchInput.value : '');
 
     // Stock just changed on the server â€” force refresh so next Apply uses updated remaining
     await refreshMaterialsIfStale(true);
@@ -2548,6 +3109,11 @@ async function placeOrderFlow() {
         if (mdClearBtn) mdClearBtn.style.display = 'none';
         refreshManualAdjustmentButton();
       }
+      manualTax = null;
+      if (cartTaxValue) cartTaxValue.value = '';
+      if (cartTaxMode) cartTaxMode.value = 'amount';
+      if (cartTaxSummary) cartTaxSummary.style.display = 'none';
+      if (clearCartTaxBtn) clearCartTaxBtn.style.display = 'none';
     } catch (e) {
       // ignore
     }
@@ -2567,8 +3133,9 @@ async function placeOrderFlow() {
     if (!cart.length) return;
 
     const submissionId = getCurrentSubmissionId();
-    if (!submissionId) {
-      showAlertModal('Select a submitted customer/walk-in before placing an order.');
+    const invoiceId = getCurrentInvoiceId();
+    if (!submissionId && !invoiceId) {
+      showAlertModal('Select a submitted customer/walk-in or load a saved invoice before placing an order.');
       return;
     }
 
@@ -2583,6 +3150,7 @@ async function placeOrderFlow() {
       const ok = writeDraft(customerId, {
         cart,
         manualDiscount,
+        manualTax,
         savedAt: new Date().toISOString()
       });
       if (ok) {
@@ -3007,6 +3575,33 @@ function renderOrdersList(orders) {
         html += `</tbody></table></div>`;
       } else {
         html += '<p class="text-muted small mb-0">No items listed for this order.</p>';
+      }
+
+      const rawAdjustment = Number(o.discountAmount || 0);
+      const hasAdjustment = Math.abs(rawAdjustment) > 0;
+      const taxAmount = Number(o.taxAmount || 0);
+      if (hasAdjustment || taxAmount > 0) {
+        const isPremium = rawAdjustment < 0;
+        const adjustmentAmount = Math.abs(rawAdjustment);
+        const totalBeforeAdjustment = (typeof o.totalBeforeDiscount !== 'undefined' && o.totalBeforeDiscount !== null)
+          ? Number(o.totalBeforeDiscount || 0)
+          : Number((Number(o.total || 0) + Number(rawAdjustment || 0) - taxAmount).toFixed(2));
+        const tb = (o.taxBreakdown && typeof o.taxBreakdown === 'object') ? o.taxBreakdown : {};
+        const taxableAmount = (typeof tb.taxableAmount !== 'undefined' && tb.taxableAmount !== null)
+          ? Number(tb.taxableAmount || 0)
+          : Number(Math.max(0, Number(o.total || 0) - taxAmount).toFixed(2));
+
+        html += '<div class="mt-3 text-end">';
+        if (hasAdjustment) {
+          html += `<div><span class="text-muted-light">Total before adjustment:</span> <strong>GH\u20B5 ${formatMoney(totalBeforeAdjustment)}</strong></div>`;
+          html += `<div><span class="text-muted-light">${isPremium ? 'Premium:' : 'Discount:'}</span> <strong>${isPremium ? '+' : '-'} GH\u20B5 ${formatMoney(adjustmentAmount)}</strong></div>`;
+        }
+        if (taxAmount > 0) {
+          html += `<div><span class="text-muted-light">VATable amount:</span> <strong>GH\u20B5 ${formatMoney(taxableAmount)}</strong></div>`;
+          html += `<div><span class="text-muted-light">VAT:</span> <strong>+ GH\u20B5 ${formatMoney(taxAmount)}</strong></div>`;
+        }
+        html += `<div><span class="text-muted-light">Total:</span> <strong>GH\u20B5 ${formatMoney(o.total || 0)}</strong></div>`;
+        html += '</div>';
       }
 
       html += `<div class="mt-3 small text-muted">

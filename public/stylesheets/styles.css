@@ -531,6 +531,36 @@ header .dropdown-menu,
   pointer-events: auto;
 }
 
+#ordersNewPage .cart-invoice-actions{
+  position: relative;
+  z-index: 2050;
+}
+
+#ordersNewPage .cart-invoice-actions .dropdown-menu{
+  z-index: 2055 !important;
+  max-height: min(70vh, 280px);
+  overflow-y: auto;
+}
+
+#ordersNewPage .cart-invoice-actions.dropup .dropdown-menu{
+  transform-origin: bottom right;
+}
+
+body > .cart-invoice-floating-menu{
+  position: fixed !important;
+  z-index: 5000 !important;
+  margin: 0 !important;
+  transform: none !important;
+  filter: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  box-shadow: var(--shadow-md);
+}
+
+body > .cart-invoice-floating-menu:not(.show){
+  display: none !important;
+}
+
 /* nested dropdown (Orders -> Operations -> New Registration) */
 .dropdown-submenu{ position: relative; }
 .dropdown-submenu > .dropdown-menu{
