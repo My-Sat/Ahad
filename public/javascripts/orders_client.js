@@ -1939,7 +1939,19 @@ function addToCart({
 
   function invoiceNumber() {
     if (activeInvoice && activeInvoice.invoiceNo) return String(activeInvoice.invoiceNo);
-    return Math.random().toString(36).replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase();
+    return `0000${String(new Date().getFullYear()).slice(-2)}`;
+  }
+
+  function safeInvoiceFileName() {
+    const customer = selectedCustomerSnapshot();
+    const rawName = String(customer.name || activeInvoice?.customerName || activeInvoice?.customerPhone || 'customer').trim();
+    const safeName = rawName
+      .replace(/[\\/:*?"<>|]+/g, '')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 80);
+    return `${safeName || 'customer'}_invoice.pdf`;
   }
 
   function buildCartInvoiceHtml() {
@@ -2283,7 +2295,7 @@ function addToCart({
       const saved = await saveCurrentCartInvoice(false);
       if (!saved) return;
       const blob = await buildCartInvoicePdfBlob();
-      const filename = `${invoiceNumber().toLowerCase()}.pdf`;
+      const filename = safeInvoiceFileName();
       const file = (typeof File !== 'undefined')
         ? new File([blob], filename, { type: 'application/pdf' })
         : null;

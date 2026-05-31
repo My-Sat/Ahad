@@ -18,6 +18,7 @@ const StoreStockAdjustment = require('../models/store_stock_adjustment');
 const StoreStockTransfer = require('../models/store_stock_transfer');
 const RegistrationSubmission = require('../models/registration_submission');
 const CartInvoice = require('../models/cart_invoice');
+const InvoiceCounter = require('../models/invoice_counter');
 const User = require('../models/user');
 const Book = require('../models/book');
 const {
@@ -432,8 +433,49 @@ function makeOrderId() {
   return (Date.now().toString(36) + crypto.randomBytes(3).toString('hex')).slice(-10).toUpperCase();
 }
 
-function makeInvoiceNo() {
-  return (Date.now().toString(36) + crypto.randomBytes(2).toString('hex')).replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase();
+async function maxExistingInvoiceSeq(yearSuffix) {
+  const latest = await CartInvoice.find({ invoiceNo: new RegExp(`^\\d{4}${yearSuffix}$`) })
+    .select('invoiceNo')
+    .sort({ invoiceNo: -1 })
+    .limit(1)
+    .lean();
+
+  for (const inv of latest) {
+    const n = Number(String(inv.invoiceNo || '').slice(0, 4));
+    if (Number.isFinite(n)) return n;
+  }
+  return 0;
+}
+
+async function makeInvoiceNo() {
+  const year = new Date().getFullYear();
+  const yearSuffix = String(year).slice(-2);
+
+  let counter = await InvoiceCounter.findOneAndUpdate(
+    { year },
+    { $inc: { seq: 1 } },
+    { new: true }
+  );
+
+  if (!counter) {
+    const startingSeq = await maxExistingInvoiceSeq(yearSuffix);
+    try {
+      await InvoiceCounter.create({ year, seq: startingSeq });
+    } catch (err) {
+      if (!err || err.code !== 11000) throw err;
+    }
+
+    counter = await InvoiceCounter.findOneAndUpdate(
+      { year },
+      { $inc: { seq: 1 } },
+      { new: true }
+    );
+  }
+
+  if (!counter) throw new Error('Unable to allocate invoice number');
+  if (Number(counter.seq || 0) > 9999) throw new Error(`Invoice number limit reached for ${year}`);
+
+  return `${String(counter.seq).padStart(4, '0')}${yearSuffix}`;
 }
 
 function invoicePayload(inv) {
@@ -679,7 +721,7 @@ exports.apiSaveCartInvoice = async (req, res) => {
         : String(source.displayName || '').trim();
 
       invoice = new CartInvoice({
-        invoiceNo: makeInvoiceNo(),
+        invoiceNo: await makeInvoiceNo(),
         customer: customerDoc && customerDoc._id ? customerDoc._id : null,
         customerName,
         customerPhone: String((customerDoc && customerDoc.phone) || source.phone || '').trim(),
