@@ -1,4 +1,4 @@
-﻿// public/javascripts/orders_pay.js
+// public/javascripts/orders_pay.js
 function initOrdersPay() {
   'use strict';
 
@@ -196,6 +196,7 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
   let currentHasCustomer = false;
   let currentCustomerId = null;
   let currentCustomerBalance = 0;
+  let currentCustomerNetBalance = 0;
   let currentOutstanding = 0;
   let currentHasDiscount = false;
   const isAdminUser = (typeof window._isAdmin !== 'undefined')
@@ -661,6 +662,11 @@ function discountAppliedLabel(order) {
       currentOrderId = null;
       currentOrderTotal = 0;
       currentOrderStatus = null;
+      currentHasCustomer = false;
+      currentCustomerId = null;
+      currentCustomerBalance = 0;
+      currentCustomerNetBalance = 0;
+      currentOutstanding = 0;
       currentHasDiscount = false;
       return;
     }
@@ -673,6 +679,7 @@ function discountAppliedLabel(order) {
     currentHasCustomer = false;
     currentCustomerId = null;
     currentCustomerBalance = 0;
+    currentCustomerNetBalance = 0;
     currentOutstanding = 0;
 
 
@@ -705,7 +712,7 @@ function discountAppliedLabel(order) {
 
         // DISPLAY FIX:
         // - non-printing: QTY = baseSheets
-        // - printing: Sheets = baseSheets Ã— factor
+        // - printing: Sheets = baseSheets × factor
         const displayQty = requiresPrinter ? (baseSheets * factor) : baseSheets;
 
         const qtyLabel = requiresPrinter ? 'Sheets' : 'QTY';
@@ -737,7 +744,7 @@ function discountAppliedLabel(order) {
             <div class="text-end ms-3" style="min-width:200px;">
             <div>${qtyLabel}: ${escapeHtml(String(displayQty))}</div>
             ${ requiresPrinter ? `<div>Pages: ${escapeHtml(String(pages))}</div>` : '' }
-            ${ (requiresPrinter && factor > 1) ? `<div>QTY Ã—${factor}</div>` : '' }
+            ${ (requiresPrinter && factor > 1) ? `<div>QTY ×${factor}</div>` : '' }
               <div>Unit: GH₵ ${escapeHtml(fmt(unit))}</div>
               <div>Subtotal: GH₵ ${escapeHtml(fmt(subtotal))}</div>
             </div>
@@ -797,12 +804,19 @@ function discountAppliedLabel(order) {
         const b = Number(customerObj.accountBalance || 0);
         currentCustomerBalance = isNaN(b) ? 0 : Number(b.toFixed(2));
       }
+      const net = Number(
+        (typeof customerObj.accountNetBalance !== 'undefined' && customerObj.accountNetBalance !== null)
+          ? customerObj.accountNetBalance
+          : currentCustomerBalance
+      );
+      currentCustomerNetBalance = isNaN(net) ? 0 : Number(net.toFixed(2));
     } else if (order.customer && typeof order.customer === 'string') {
       // if API returns only customer id (string)
       currentHasCustomer = true;
       currentCustomerId = String(order.customer);
       // balance unknown unless backend includes it; UI will show 0.00
       currentCustomerBalance = 0;
+      currentCustomerNetBalance = 0;
     }
 
 
@@ -952,6 +966,304 @@ function discountAppliedLabel(order) {
       partToggle && (partToggle.checked = false);
       partWrapper && (partWrapper.style.display = 'none');
       partAmountInput && (partAmountInput.value = '');
+    }
+  }
+
+  function customerDisplayFromOrder(order) {
+    if (!order || !order.customer) return 'Walk-in / Unknown';
+    if (typeof order.customer === 'string') return order.customer;
+    const c = order.customer;
+    if (c.category === 'artist') return c.businessName || c.firstName || c.phone || 'Artist';
+    return c.firstName || c.businessName || c.phone || 'Customer';
+  }
+
+  function customerPhoneFromOrder(order) {
+    if (!order) return '';
+    if (order.customer && typeof order.customer === 'object' && order.customer.phone) return String(order.customer.phone);
+    return order.customerPhone ? String(order.customerPhone) : '';
+  }
+
+  function handlerDisplayFromOrder(order) {
+    if (!order || !order.handledBy) return '-';
+    if (typeof order.handledBy === 'string') return order.handledBy;
+    return order.handledBy.name || order.handledBy.username || order.handledBy._id || '-';
+  }
+
+  function latestPaymentFromOrder(order) {
+    const payments = order && Array.isArray(order.payments) ? order.payments : [];
+    return payments.length ? payments[payments.length - 1] : {};
+  }
+
+  function receiptItemData(it) {
+    const rawLabel = it && it.selectionLabel ? String(it.selectionLabel) : '';
+    let selLabel = subUnitsOnlyFromLabel(rawLabel);
+    if (!selLabel && it && Array.isArray(it.selections) && it.selections.length) {
+      selLabel = it.selections.map(s => {
+        if (s.subUnit && typeof s.subUnit === 'object' && s.subUnit.name) return s.subUnit.name;
+        if (s.subUnit && typeof s.subUnit === 'string') return s.subUnit;
+        return '';
+      }).filter(Boolean).join(', ');
+    }
+    if (!selLabel) selLabel = rawLabel || '(no label)';
+
+    const isFb = (it && it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
+    const rawPages = Number((it && it.pages) || 1);
+    const baseSheets =
+      (it && typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null)
+        ? Number(it.effectiveQty)
+        : (isFb ? Math.ceil(rawPages / 2) : rawPages);
+    const requiresPrinter = !!(it && it.printer);
+    const factor = Math.max(1, Math.floor(Number((it && it.factor) || 1)));
+    const displayQty = requiresPrinter ? (baseSheets * factor) : baseSheets;
+    const unit = Number((it && it.unitPrice) || 0);
+    const subtotal = Number(
+      (it && (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))))
+        ? Number(it.subtotal)
+        : (displayQty * unit)
+    );
+
+    return {
+      serviceName: (it && it.serviceName) || 'Service',
+      selectionLabel: selLabel,
+      qtyLabel: requiresPrinter ? 'Sheets' : 'QTY',
+      qty: displayQty,
+      pages: requiresPrinter ? rawPages : null,
+      unit,
+      subtotal
+    };
+  }
+
+  function buildPaymentReceiptHtml(order, paymentResult, context) {
+    const ctx = context || {};
+    const result = paymentResult || {};
+    const latestPayment = latestPaymentFromOrder(order);
+    const paymentMeta = Object.assign({}, ctx.meta || {}, latestPayment.meta || {});
+    const paymentMethod = latestPayment.cashBookKind || latestPayment.method || ctx.method || 'cash';
+    const latestPaymentAmount = Number((latestPayment && latestPayment.amount) || 0) || 0;
+    const receivedAmount = Number(result.receivedAmount || ctx.receivedAmount || latestPaymentAmount) || 0;
+    const remaining = Number(
+      order && typeof order.outstanding !== 'undefined'
+        ? order.outstanding
+        : (typeof result.outstanding !== 'undefined' ? result.outstanding : computeOutstanding(order))
+    ) || 0;
+    const receiptDate = latestPayment.createdAt || new Date().toISOString();
+
+    const detailsRows = [
+      ['Receipt Date', formatDateTime(receiptDate)],
+      ['Order ID', order && order.orderId ? order.orderId : (result.orderId || '-')],
+      ['Customer', customerDisplayFromOrder(order)],
+      ['Customer Phone', customerPhoneFromOrder(order) || '-'],
+      ['Handled By', handlerDisplayFromOrder(order)],
+      ['Note / Job Type', order && order.jobNote ? order.jobNote : '-'],
+      ['Payment Method', paymentMethodLabel(paymentMethod)]
+    ];
+
+    const momoNumber = paymentMeta.momoNumber || ctx.momoNumber || '';
+    const momoTxId = paymentMeta.momoTxId || ctx.momoTxId || '';
+    const chequeNumber = paymentMeta.chequeNumber || ctx.chequeNumber || '';
+    const depositDetails = paymentMeta.depositDetails || ctx.depositDetails || '';
+    if (momoNumber) detailsRows.push(['MoMo Number', momoNumber]);
+    if (momoTxId) detailsRows.push(['Transaction ID', momoTxId]);
+    if (chequeNumber) detailsRows.push(['Cheque Number', chequeNumber]);
+    if (depositDetails) detailsRows.push(['Deposit Details', depositDetails]);
+
+    const detailRowsHtml = detailsRows.map(([label, value]) => `
+      <tr>
+        <th>${escapeHtml(label)}</th>
+        <td>${escapeHtml(value)}</td>
+      </tr>
+    `).join('');
+
+    const itemRows = ((order && Array.isArray(order.items)) ? order.items : []).map((it, idx) => {
+      const row = receiptItemData(it || {});
+      const qtyText = row.pages
+        ? `${row.qtyLabel}: ${row.qty} / Pages: ${row.pages}`
+        : `${row.qtyLabel}: ${row.qty}`;
+      return `
+        <tr>
+          <td class="text-center">${idx + 1}</td>
+          <td>
+            <strong>${escapeHtml(row.serviceName)}</strong>
+            <div class="receipt-muted">${escapeHtml(row.selectionLabel)}</div>
+          </td>
+          <td>${escapeHtml(qtyText)}</td>
+          <td class="text-end">${formatCedi(row.unit)}</td>
+          <td class="text-end">${formatCedi(row.subtotal)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const customerNetAfter = Number(
+      order && order.customer && typeof order.customer === 'object' && typeof order.customer.accountNetBalance !== 'undefined'
+        ? order.customer.accountNetBalance
+        : 0
+    );
+    const accountDebtAfter = customerNetAfter < 0 ? Math.abs(customerNetAfter) : 0;
+    const fallbackPreviousDebt = Math.max(0, Number((accountDebtAfter - Math.max(0, remaining)).toFixed(2)));
+    const previousDebt = Number(
+      typeof ctx.previousCustomerDebt !== 'undefined' && ctx.previousCustomerDebt !== null
+        ? ctx.previousCustomerDebt
+        : fallbackPreviousDebt
+    ) || 0;
+    const totalDebts = Number((Math.max(0, previousDebt) + Math.max(0, remaining)).toFixed(2));
+
+    const summaryRows = [
+      ['Order Amount', formatCedi(order && order.total ? order.total : 0)],
+      ['Amount Paid', formatCedi(receivedAmount)],
+      ['Remaining', formatCedi(Math.max(0, remaining))],
+      ['Previous Debt', formatCedi(Math.max(0, previousDebt))],
+      ['Total Balance', formatCedi(totalDebts)]
+    ];
+
+    const summaryRowsHtml = summaryRows.map(([label, value], idx) => `
+      <tr class="${idx === summaryRows.length - 1 ? 'receipt-total-row' : ''}">
+        <th>${escapeHtml(label)}</th>
+        <td class="text-end">${escapeHtml(value)}</td>
+      </tr>
+    `).join('');
+
+    return `
+      <div class="payment-receipt-card">
+        <div class="receipt-brand">
+          <img class="receipt-logo" src="/images/AHAD%20LOGO3.jpeg" alt="AHADPRINT logo">
+          <div>
+            <div class="receipt-company">AHADPRINT</div>
+            <div class="receipt-title">Payment Receipt</div>
+          </div>
+        </div>
+
+        <div class="receipt-grid">
+          <table class="receipt-info-table">
+            <tbody>${detailRowsHtml}</tbody>
+          </table>
+        </div>
+
+        <table class="receipt-items-table">
+          <thead>
+            <tr>
+              <th class="text-center">No</th>
+              <th>Order Details</th>
+              <th>Qty</th>
+              <th class="text-end">Unit</th>
+              <th class="text-end">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>${itemRows || '<tr><td colspan="5" class="receipt-muted">No order items listed.</td></tr>'}</tbody>
+        </table>
+
+        <table class="receipt-summary-table">
+          <tbody>${summaryRowsHtml}</tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function printPaymentReceipt(order, paymentResult, context) {
+    const w = window.open('', '_blank', 'toolbar=0,location=0,menubar=0');
+    if (!w) {
+      showAlertModal('Unable to open receipt print window. Please allow popups and try again.', 'Print blocked');
+      return;
+    }
+    const receiptHtml = buildPaymentReceiptHtml(order, paymentResult, context);
+    const orderId = order && order.orderId ? order.orderId : (paymentResult && paymentResult.orderId ? paymentResult.orderId : '');
+    const doc = w.document;
+    doc.open();
+    doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Receipt ${escapeHtml(orderId)}</title>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        body { font-family: Arial, Helvetica, sans-serif; color: #111; padding: 24px; background: #fff; }
+        .payment-receipt-card { max-width: 760px; margin: 0 auto; }
+        .receipt-brand { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #111827; padding-bottom: 12px; margin-bottom: 16px; }
+        .receipt-logo { width: 82px; height: 82px; object-fit: contain; }
+        .receipt-company { font-size: 24px; font-weight: 800; letter-spacing: .08em; }
+        .receipt-title { color: #4b5563; font-size: 14px; text-transform: uppercase; letter-spacing: .08em; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+        th, td { padding: 7px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+        th { text-align: left; color: #374151; }
+        .text-center { text-align: center; }
+        .text-end { text-align: right; }
+        .receipt-muted { color: #6b7280; font-size: 12px; }
+        .receipt-summary-table { width: 360px; margin-left: auto; }
+        .receipt-total-row th, .receipt-total-row td { border-top: 2px solid #111827; font-weight: 800; }
+        @media print { body { padding: 12px; } }
+      </style>
+    </head><body>${receiptHtml}</body></html>`);
+    doc.close();
+    w.focus();
+    const onLoadPrint = () => {
+      try { w.print(); } catch (e) { showAlertModal('Receipt print failed.', 'Print error'); }
+      setTimeout(() => { try { w.close(); } catch (e) {} }, 700);
+    };
+    const runWhenLogoReady = () => {
+      const logo = w.document.querySelector('.receipt-logo');
+      if (logo && !logo.complete) {
+        let done = false;
+        const go = () => {
+          if (done) return;
+          done = true;
+          setTimeout(onLoadPrint, 120);
+        };
+        logo.onload = go;
+        logo.onerror = go;
+        setTimeout(go, 1400);
+        return;
+      }
+      setTimeout(onLoadPrint, 120);
+    };
+    if (w.document.readyState === 'complete') runWhenLogoReady();
+    else { w.onload = runWhenLogoReady; setTimeout(runWhenLogoReady, 1200); }
+  }
+
+  function showPaymentReceiptModal(order, paymentResult, context) {
+    if (!order) {
+      showAlertModal('Payment recorded, but the updated order details could not be loaded for receipt.', 'Payment recorded');
+      return;
+    }
+
+    let modalEl = document.getElementById('paymentReceiptModal');
+    if (!modalEl) {
+      const html = `
+<div class="modal fade" id="paymentReceiptModal" tabindex="-1" aria-labelledby="paymentReceiptModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content dark-surface">
+      <div class="modal-header">
+        <h5 class="modal-title" id="paymentReceiptModalLabel">Payment Receipt</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body dark-card-body">
+        <div id="paymentReceiptPreview"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="printPaymentReceiptBtn">Print Receipt</button>
+        <button type="button" class="btn btn-outline-light-custom" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+      modalEl = _createModalFromHtml(html);
+    }
+
+    const preview = modalEl.querySelector('#paymentReceiptPreview');
+    const printBtn = modalEl.querySelector('#printPaymentReceiptBtn');
+    if (preview) {
+      preview.innerHTML = buildPaymentReceiptHtml(order, paymentResult, context);
+      const card = preview.querySelector('.payment-receipt-card');
+      if (card) {
+        card.style.background = '#fff';
+        card.style.color = '#111827';
+        card.style.borderRadius = '14px';
+        card.style.padding = '18px';
+      }
+    }
+    if (printBtn) {
+      printBtn.onclick = () => printPaymentReceipt(order, paymentResult, context);
+    }
+
+    try {
+      const inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+      inst.show();
+    } catch (err) {
+      showAlertModal('Payment recorded. Receipt is ready, but the receipt modal could not be opened.', 'Payment recorded');
     }
   }
 
@@ -1120,6 +1432,11 @@ function discountAppliedLabel(order) {
       const origText = payNowBtn.textContent;
       payNowBtn.textContent = 'Processing...';
       try {
+        const paidOrderId = currentOrderId;
+        const previousOutstandingForReceipt = Number(currentOutstanding || currentOrderTotal || 0);
+        const previousCustomerDebtForReceipt = currentHasCustomer
+          ? Math.max(0, Number((-Number(currentCustomerNetBalance || 0) - previousOutstandingForReceipt).toFixed(2)))
+          : 0;
         // Build payload - server currently ignores metadata, but this is prepared for backend support
         const payload = {
           cashBookId,
@@ -1131,9 +1448,25 @@ function discountAppliedLabel(order) {
           partPayment: isPart,
           partPaymentAmount: isPart ? Number(partAmount) : null
         };
+        const receiptContext = {
+          previousOutstanding: previousOutstandingForReceipt,
+          previousCustomerDebt: previousCustomerDebtForReceipt,
+          receivedAmount: isPart ? Number(partAmount) : previousOutstandingForReceipt,
+          method,
+          momoNumber: payload.momoNumber || '',
+          momoTxId: payload.momoTxId || '',
+          chequeNumber: payload.chequeNumber || '',
+          depositDetails: payload.depositDetails || '',
+          meta: {
+            momoNumber: payload.momoNumber || '',
+            momoTxId: payload.momoTxId || '',
+            chequeNumber: payload.chequeNumber || '',
+            depositDetails: payload.depositDetails || ''
+          }
+        };
 
         // send as JSON; existing server action will still mark paid as before.
-        const res = await fetch(`/orders/${encodeURIComponent(currentOrderId)}/pay`, {
+        const res = await fetch(`/orders/${encodeURIComponent(paidOrderId)}/pay`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
           body: JSON.stringify(payload)
@@ -1144,11 +1477,10 @@ function discountAppliedLabel(order) {
           return;
         }
 
-        showAlertModal('Payment recorded', 'Success');
-
         // re-fetch order to display updated status and data
-        await fetchOrderById(currentOrderId);
-        suppressOrderInDailyDropdown(currentOrderId);
+        const updatedOrder = await fetchOrderById(paidOrderId);
+        showPaymentReceiptModal(updatedOrder, j, receiptContext);
+        suppressOrderInDailyDropdown(paidOrderId);
         try { await loadDailyOrdersDropdown({ force: true }); } catch (e) {}
 
         // clear input & hide pay button if now paid
@@ -1481,7 +1813,7 @@ async function fetchMyCashierStatus() {
   // Hook into existing payment success flow:
   // After the code that calls fetchOrderById(currentOrderId) (which you already do after a successful pay),
   // add: _refreshAfterPayment();
-  // If you prefer I can patch the exact location for you â€” but placing the following small observer helps:
+  // If you prefer I can patch the exact location for you — but placing the following small observer helps:
   (function hookPaymentRefresh() {
     // We monkey-patch fetchOrderById to call original and then refresh cashier status
     if (typeof fetchOrderById === 'function') {
@@ -1768,7 +2100,7 @@ let html = '';
 let groupIndex = 0;
 
 Object.entries(grouped).forEach(([debtorName, items]) => {
-  // SINGLE record â†’ keep existing logic exactly
+  // SINGLE record → keep existing logic exactly
   if (items.length === 1) {
     const d = items[0];
     const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
@@ -1808,7 +2140,7 @@ Object.entries(grouped).forEach(([debtorName, items]) => {
     return;
   }
 
-  // MULTIPLE records â†’ expandable group
+  // MULTIPLE records → expandable group
   const groupId = `debtor-group-${groupIndex++}`;
 
 const totalDue = items.reduce((s, i) => s + Number(i.amountDue || 0), 0);
@@ -2898,6 +3230,7 @@ if (document.readyState === 'loading') {
 document.addEventListener('ajax:page:loaded', function () {
   initOrdersPay();
 });
+
 
 
 

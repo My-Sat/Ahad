@@ -692,7 +692,7 @@ async function loadServicesForCategory(catId) {
       booksInCategory.forEach(b => {
         const opt = document.createElement('option');
         opt.value = b._id;
-        opt.textContent = `${b.name} â€” GH₵ ${formatMoney(b.unitPrice)}`;
+        opt.textContent = `${b.name} — GH₵ ${formatMoney(b.unitPrice)}`;
         opt.dataset.type = 'book';
         group.appendChild(opt);
       });
@@ -953,7 +953,7 @@ async function loadServicesForCategory(catId) {
       materialsLoaded = true;
       materialsFetchedAt = Date.now();
     } catch (e) {
-      // Donâ€™t break ordering if materials canâ€™t load; just skip checks.
+      // Don’t break ordering if materials can’t load; just skip checks.
       console.warn('loadMaterialsForStockChecks failed', e);
       materials = [];
       materialsLoaded = false;
@@ -1200,7 +1200,7 @@ async function loadServicesForCategory(catId) {
       ta.style.left = '-9999px';
       document.body.appendChild(ta);
       ta.select();
-      try { document.execCommand('copy'); try { window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch (_) {} } catch (e) { alert('Copy failed â€” select and copy: ' + text); }
+      try { document.execCommand('copy'); try { window.showGlobalToast && window.showGlobalToast('Order ID copied', 1600); } catch (_) {} } catch (e) { alert('Copy failed — select and copy: ' + text); }
       document.body.removeChild(ta);
     }
 
@@ -1217,50 +1217,74 @@ async function loadServicesForCategory(catId) {
 
     function printOrder() {
       const idEl = modalEl.querySelector('#orderSuccessId');
-      const totalEl = modalEl.querySelector('#orderSuccessTotal');
       const noteEl = modalEl.querySelector('#orderSuccessJobNote');
       const idText = idEl ? idEl.textContent.trim() : (orderId || '');
-      const totalText = totalEl ? totalEl.textContent.trim() : (formatMoney(total));
       const noteText = noteEl ? noteEl.textContent.trim() : String(jobNote || '').trim();
+      const printedAt = new Date().toLocaleString();
       const w = window.open('', '_blank', 'toolbar=0,location=0,menubar=0');
       if (!w) {
         alert('Unable to open print window (blocked). Please copy order ID and print manually.');
         return;
       }
       const doc = w.document;
-      const title = 'Order ' + (idText || '');
+      const title = 'AHADPRINT';
+      const logoSrc = `${window.location.origin}/images/AHAD%20LOGO3.jpeg`;
       doc.open();
       doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
         <meta name="viewport" content="width=device-width,initial-scale=1">
         <style>
-          body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #111; }
-          .wrap { max-width: 560px; margin: 0 auto; text-align: center; }
-          .logo { max-height: 80px; margin-bottom: 12px; display: inline-block; }
-          h1 { font-size: 20px; margin-bottom: 8px; }
+          @page { margin: 0; }
+          body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 24px; color: #111; }
+          .wrap { max-width: 560px; margin: 0 auto; }
+          .brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 18px; }
+          .logo { max-height: 72px; max-width: 110px; object-fit: contain; display: block; }
+          .brand-name { font-size: 24px; font-weight: 800; letter-spacing: .08em; }
+          h1 { font-size: 20px; margin: 0 0 8px; text-align: center; }
           p { margin: 6px 0; }
           .muted { color: #666; font-size: 13px; }
-          .details { text-align: left; display: inline-block; margin-top: 12px; }
+          .details { text-align: left; display: inline-block; margin-top: 12px; border: 1px solid #ddd; border-radius: 10px; padding: 14px 18px; }
+          .center { text-align: center; }
+          .small-note { color: #666; font-size: 12px; margin-top: 18px; text-align: center; }
         </style>
         </head><body>
         <div class="wrap">
-          <img class="logo" src="/public/images/AHAD LOGO3.jpeg" alt="AHAD" />
+          <div class="brand">
+            <img class="logo" src="${escapeHtml(logoSrc)}" alt="AHADPRINT logo" />
+            <div class="brand-name">AHADPRINT</div>
+          </div>
           <h1>Order Created</h1>
-          <div class="details">
+          <div class="center"><div class="details">
             <p><strong>Order ID:</strong> ${escapeHtml(idText)}</p>
-            <p><strong>Total:</strong> GH₵ ${escapeHtml(totalText)}</p>
+            <p><strong>Date:</strong> ${escapeHtml(printedAt)}</p>
             ${noteText ? `<p><strong>Note / Job Type:</strong> ${escapeHtml(noteText)}</p>` : ''}
             <p class="muted">Show this ID at payment.</p>
-          </div>
+          </div></div>
           <p class="small-note">Printed from Ahad POS.</p>
         </div>
         </body></html>`);
       doc.close();
       w.focus();
       const onLoadPrint = () => {
-        try { w.print(); } catch (e) { alert('Print failed â€” try copying the order ID.'); }
+        try { w.print(); } catch (e) { alert('Print failed - try copying the order ID.'); }
         setTimeout(()=>{ try { w.close(); } catch (e){} }, 700);
       };
-      if (w.document.readyState === 'complete') onLoadPrint(); else { w.onload = onLoadPrint; setTimeout(onLoadPrint, 800); }
+      const runWhenLogoReady = () => {
+        const logo = w.document.querySelector('.logo');
+        if (logo && !logo.complete) {
+          let done = false;
+          const go = () => {
+            if (done) return;
+            done = true;
+            setTimeout(onLoadPrint, 120);
+          };
+          logo.onload = go;
+          logo.onerror = go;
+          setTimeout(go, 1400);
+          return;
+        }
+        setTimeout(onLoadPrint, 120);
+      };
+      if (w.document.readyState === 'complete') runWhenLogoReady(); else { w.onload = runWhenLogoReady; setTimeout(runWhenLogoReady, 1200); }
     }
 
     if (copyBtn && !copyBtn._bound) { copyBtn._bound = true; copyBtn.addEventListener('click', copyOrderId); }
@@ -1467,7 +1491,7 @@ function renderPrices(bookMode = false) {
       renderPrices();
       return;
     }
-    pricesList.innerHTML = '<div class="text-muted">Loading price rulesâ€¦</div>';
+    pricesList.innerHTML = '<div class="text-muted">Loading price rules…</div>';
     try {
       const cat = getActiveCustomerCategory();
       const url = `/admin/services/${encodeURIComponent(serviceId)}/prices${cat ? `?customerCategory=${encodeURIComponent(cat)}` : ''}`;
@@ -1685,8 +1709,8 @@ function addToCart({
   const effectiveQty = fb ? Math.ceil(origPages / 2) : origPages;
 
   // subtotal logic:
-  // - printing service â†’ unitPrice Ã— effectiveQty Ã— factor
-  // - non-printing service â†’ unitPrice Ã— effectiveQty
+  // - printing service → unitPrice × effectiveQty × factor
+  // - non-printing service → unitPrice × effectiveQty
   const subtotal = Number(
     (
       Number(unitPrice) *
@@ -1746,7 +1770,7 @@ function addToCart({
     updateSaveDraftBtn();
     updateCartInvoiceButtons();
 
-    // âœ… ensure breakdown under totals is hidden when cart empties
+    // ✅ ensure breakdown under totals is hidden when cart empties
     if (manualDiscountSummary) manualDiscountSummary.style.display = 'none';
     if (cartTaxSummary) cartTaxSummary.style.display = 'none';
     if (clearManualDiscountBtn) clearManualDiscountBtn.style.display = 'none';
@@ -1791,7 +1815,7 @@ function addToCart({
   const sheets = Math.max(0, Math.floor(effectiveQty * (isNaN(f) ? 1 : f)));
 
   qtyCell = String(isNaN(f) ? 1 : f);
-  factorCell = String(sheets);                          // âœ… Sheets
+  factorCell = String(sheets);                          // ✅ Sheets
   pagesCell = String(it.pagesOriginal);                 // raw pages
 } else {
         // normal service
@@ -2731,10 +2755,10 @@ function addToCart({
       // factor only meaningful for printing services
       const factorMul = serviceRequiresPrinter ? Math.max(1, Math.floor(Number(factor) || 1)) : 1;
 
-      // âœ… match server: (baseCount + spoiled) Ã— factor
+      // ✅ match server: (baseCount + spoiled) × factor
       const countNeeded = (Math.max(0, baseCount) + spoiledCount) * factorMul;
 
-      // If materials cache isn't loaded, skip checks (donâ€™t block order flow)
+      // If materials cache isn't loaded, skip checks (don’t block order flow)
       if (materialsLoaded && Array.isArray(materials) && materials.length) {
         const ruleSelections = Array.isArray(priceObj.selections) ? priceObj.selections : [];
 
@@ -2770,12 +2794,12 @@ function addToCart({
 
           if (blocks.length) {
             showAlertModal(blocks.join('\n'), 'Stock unavailable');
-            return; // âœ… block adding to cart
+            return; // ✅ block adding to cart
           }
 
           if (warns.length) {
             showAlertModal(warns.join('\n'), 'Low stock');
-            // âœ… allow add to cart after warning
+            // ✅ allow add to cart after warning
           }
         }
       }
@@ -3118,7 +3142,7 @@ async function placeOrderFlow() {
     await loadSecretarySubmissions();
     await loadCartInvoices(cartInvoiceSearchInput ? cartInvoiceSearchInput.value : '');
 
-    // Stock just changed on the server â€” force refresh so next Apply uses updated remaining
+    // Stock just changed on the server — force refresh so next Apply uses updated remaining
     await refreshMaterialsIfStale(true);
 
       // Reset cart and discount (discount must be re-applied per order)
@@ -3591,7 +3615,7 @@ function renderOrdersList(orders) {
           const isFb = (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
           const cleanLabel = isFb ? selLabel.replace(/\s*\(F\/B\)\s*$/i, '').trim() : selLabel;
 
-          // IMPORTANT: display the stored subtotal and pages â€” do not recompute based on pages only.
+          // IMPORTANT: display the stored subtotal and pages — do not recompute based on pages only.
           const qty = (typeof it.pages !== 'undefined' && it.pages !== null) ? String(it.pages) : '1';
           const unitPrice = (typeof it.unitPrice === 'number' || !isNaN(Number(it.unitPrice))) ? formatMoney(it.unitPrice) : (it.unitPrice || '');
           const subtotal = (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))) ? formatMoney(it.subtotal) : (it.subtotal || '');
@@ -3762,14 +3786,14 @@ function renderOrdersList(orders) {
       const html = orderDetailsJson ? orderDetailsJson.innerHTML : '';
       const w = window.open('', '_blank', 'toolbar=0,location=0,menubar=0');
       if (!w) { alert('Unable to open print window (blocked).'); return; }
-      const title = 'Order details';
+      const title = 'AHADPRINT';
       w.document.open();
       w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
         <meta name="viewport" content="width=device-width,initial-scale=1">
-        <style>body{font-family:Arial,Helvetica,sans-serif;padding:22px;color:#111}pre{white-space:pre-wrap;background:#f8f9fa;padding:12px;border-radius:6px}table{width:100%;border-collapse:collapse}td,th{padding:6px;border-bottom:1px solid #eee}</style>
+        <style>@page{margin:0}body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:22px;color:#111}.brand{display:flex;align-items:center;gap:12px;margin-bottom:14px}.brand img{max-height:60px}.brand-name{font-size:22px;font-weight:800;letter-spacing:.08em}.order-meta{border:1px solid #ddd;border-radius:8px;padding:10px 12px;margin:0 0 14px}pre{white-space:pre-wrap;background:#f8f9fa;padding:12px;border-radius:6px}table{width:100%;border-collapse:collapse}td,th{padding:6px;border-bottom:1px solid #eee}</style>
         </head><body>
-        <div><img src="/public/images/AHAD LOGO3.jpeg" style="max-height:60px"/></div>
-        <h2>Order</h2><p>${escapeHtml(meta || '')}</p>
+        <div class="brand"><img src="/images/AHAD%20LOGO3.jpeg" alt="AHADPRINT logo"><div class="brand-name">AHADPRINT</div></div>
+        <p class="order-meta">${escapeHtml(meta || '')}</p>
         <div>${html || '<p>No details</p>'}</div>
         </body></html>`);
       w.document.close();
@@ -3869,3 +3893,6 @@ if (serviceSelect) {
     initOrdersClient();
   });
 })();
+
+
+
