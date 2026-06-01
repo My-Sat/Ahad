@@ -1126,9 +1126,15 @@ function discountAppliedLabel(order) {
       <div class="payment-receipt-card">
         <div class="receipt-brand">
           <img class="receipt-logo" src="/images/AHAD%20LOGO3.jpeg" alt="AHADPRINT logo">
-          <div>
+          <div class="receipt-company-block">
             <div class="receipt-company">AHADPRINT</div>
             <div class="receipt-title">Payment Receipt</div>
+          </div>
+          <div class="receipt-business-info">
+            <div class="receipt-business-line"><strong>Services:</strong> Digital Printing, Sales of Home Use Computers, Stationery and general merchandise.</div>
+            <div class="receipt-business-line"><strong>Location:</strong> Tamale Technical University.</div>
+            <div class="receipt-business-line"><strong>Tel:</strong> 0244104350.</div>
+            <div class="receipt-business-line"><strong>WhatsApp:</strong> 0558590262</div>
           </div>
         </div>
 
@@ -1172,11 +1178,14 @@ function discountAppliedLabel(order) {
       <meta name="viewport" content="width=device-width,initial-scale=1">
       <style>
         body { font-family: Arial, Helvetica, sans-serif; color: #111; padding: 24px; background: #fff; }
-        .payment-receipt-card { max-width: 760px; margin: 0 auto; }
-        .receipt-brand { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #111827; padding-bottom: 12px; margin-bottom: 16px; }
+        .payment-receipt-card { max-width: 820px; margin: 0 auto; }
+        .receipt-brand { display: flex; align-items: flex-start; gap: 22px; border-bottom: 2px solid #111827; padding-bottom: 12px; margin-bottom: 16px; }
         .receipt-logo { width: 82px; height: 82px; object-fit: contain; }
+        .receipt-company-block { min-width: 180px; flex: 0 0 180px; }
         .receipt-company { font-size: 24px; font-weight: 800; letter-spacing: .08em; }
         .receipt-title { color: #4b5563; font-size: 14px; text-transform: uppercase; letter-spacing: .08em; }
+        .receipt-business-info { border-left: 1px solid #ddd; padding-left: 18px; }
+        .receipt-business-line { color: #333; font-size: 11px; line-height: 1.35; max-width: 560px; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
         th, td { padding: 7px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
         th { text-align: left; color: #374151; }

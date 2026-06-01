@@ -1235,10 +1235,13 @@ async function loadServicesForCategory(catId) {
         <style>
           @page { margin: 0; }
           body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 24px; color: #111; }
-          .wrap { max-width: 560px; margin: 0 auto; }
-          .brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 18px; }
+          .wrap { max-width: 720px; margin: 0 auto; }
+          .brand { display: flex; align-items: flex-start; justify-content: center; gap: 22px; margin-bottom: 18px; }
           .logo { max-height: 72px; max-width: 110px; object-fit: contain; display: block; }
-          .brand-name { font-size: 24px; font-weight: 800; letter-spacing: .08em; }
+          .brand-name { font-size: 24px; font-weight: 800; letter-spacing: .08em; white-space: nowrap; }
+          .brand-company { min-width: 180px; flex: 0 0 180px; }
+          .brand-info { text-align: left; border-left: 1px solid #ddd; padding-left: 18px; max-width: 390px; }
+          .brand-line { color: #333; font-size: 11px; line-height: 1.35; }
           h1 { font-size: 20px; margin: 0 0 8px; text-align: center; }
           p { margin: 6px 0; }
           .muted { color: #666; font-size: 13px; }
@@ -1250,7 +1253,16 @@ async function loadServicesForCategory(catId) {
         <div class="wrap">
           <div class="brand">
             <img class="logo" src="${escapeHtml(logoSrc)}" alt="AHADPRINT logo" />
-            <div class="brand-name">AHADPRINT</div>
+            <div class="brand-company">
+              <div class="brand-name">AHADPRINT</div>
+              <div class="muted">Order Slip</div>
+            </div>
+            <div class="brand-info">
+              <div class="brand-line"><strong>Services:</strong> Digital Printing, Sales of Home Use Computers, Stationery and general merchandise.</div>
+              <div class="brand-line"><strong>Location:</strong> Tamale Technical University.</div>
+              <div class="brand-line"><strong>Tel:</strong> 0244104350.</div>
+              <div class="brand-line"><strong>WhatsApp:</strong> 0558590262</div>
+            </div>
           </div>
           <h1>Order Created</h1>
           <div class="center"><div class="details">
@@ -1992,8 +2004,12 @@ function addToCart({
     * { box-sizing: border-box; }
     body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; font-size: 12px; }
     .header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; border-bottom: 2px solid #111; padding-bottom: 14px; margin-bottom: 16px; }
+    .brand { display: flex; align-items: flex-start; gap: 12px; max-width: 620px; }
     .logo { max-height: 62px; max-width: 160px; object-fit: contain; }
-    .company-name { margin-top: 6px; font-size: 17px; font-weight: 800; letter-spacing: .08em; }
+    .company-block { min-width: 118px; }
+    .company-name { margin-top: 0; font-size: 17px; font-weight: 800; letter-spacing: .08em; white-space: nowrap; }
+    .business-info { border-left: 1px solid #ddd; padding-left: 12px; }
+    .business-line { color: #333; font-size: 10.5px; line-height: 1.35; max-width: 360px; }
     h1 { margin: 0; font-size: 22px; letter-spacing: .03em; }
     h2 { margin: 0 0 6px; font-size: 15px; }
     .muted { color: #555; font-size: 11px; }
@@ -2011,10 +2027,18 @@ function addToCart({
 </head>
 <body>
   <div class="header">
-    <div>
+    <div class="brand">
       <img class="logo" src="/public/images/AHAD LOGO3.jpeg" alt="AHAD">
-      <div class="company-name">AHADPRINT</div>
-      <div class="muted">Invoice</div>
+      <div class="company-block">
+        <div class="company-name">AHADPRINT</div>
+        <div class="muted">Invoice</div>
+      </div>
+      <div class="business-info">
+        <div class="business-line"><strong>Services:</strong> Digital Printing, Sales of Home Use Computers, Stationery and general merchandise.</div>
+        <div class="business-line"><strong>Location:</strong> Tamale Technical University.</div>
+        <div class="business-line"><strong>Tel:</strong> 0244104350.</div>
+        <div class="business-line"><strong>WhatsApp:</strong> 0558590262</div>
+      </div>
     </div>
     <div class="right">
       <h1>INVOICE</h1>
@@ -2166,7 +2190,6 @@ function addToCart({
       lines.push(`${pad(label, 64)}${amount.padStart(24)}`);
     };
 
-    lines.push('AHADPRINT - INVOICE');
     lines.push(`Generated: ${new Date().toLocaleString()}`);
     lines.push(`Invoice No: ${invoiceNumber()}`);
     lines.push('');
@@ -2236,6 +2259,7 @@ function addToCart({
     const catalogId = addObj(''); // placeholder
     const pagesId = addObj(''); // placeholder
     const fontId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>');
+    const fontBoldId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold >>');
     let imageId = null;
     let logoDrawCommand = '';
     if (logo) {
@@ -2248,12 +2272,47 @@ function addToCart({
       imageId = addObj(`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace ${colorSpace} /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${imageStream.length} >>\nstream\n${imageStream}\nendstream`);
       logoDrawCommand = `q\n${imgWidth} 0 0 ${imgHeight} ${imgX} ${imgY} cm\n/Im1 Do\nQ`;
     }
+    const buildPdfHeaderCommands = () => {
+      const commands = [];
+      if (logoDrawCommand) commands.push(logoDrawCommand);
+      const companyX = logoDrawCommand ? 136 : 50;
+      const infoX = logoDrawCommand ? 278 : 198;
+      const addHeaderLabelValue = (x, y, label, value, valueDx) => {
+        commands.push(
+          'BT',
+          '/F2 8 Tf',
+          `${x} ${y} Td`,
+          `(${pdfEscape(label)}) Tj`,
+          'ET',
+          'BT',
+          '/F1 8 Tf',
+          `${x + valueDx} ${y} Td`,
+          `(${pdfEscape(value)}) Tj`,
+          'ET'
+        );
+      };
+      commands.push(
+        'BT',
+        '/F2 18 Tf',
+        `${companyX} 803 Td`,
+        `(${pdfEscape('AHADPRINT')}) Tj`,
+        '/F1 9 Tf',
+        `0 -16 Td`,
+        `(${pdfEscape('INVOICE')}) Tj`,
+        'ET'
+      );
+      addHeaderLabelValue(infoX, 807, 'Services:', 'Digital Printing, Sales of Home Use Computers,', 46);
+      commands.push('BT', '/F1 8 Tf', `${infoX} 796 Td`, `(${pdfEscape('Stationery and general merchandise.')}) Tj`, 'ET');
+      addHeaderLabelValue(infoX, 785, 'Location:', 'Tamale Technical University.', 48);
+      addHeaderLabelValue(infoX, 774, 'Tel:', '0244104350.', 22);
+      addHeaderLabelValue(infoX, 763, 'WhatsApp:', '0558590262', 52);
+      return commands;
+    };
     const pageIds = [];
 
     pages.forEach(pageLines => {
-      const commands = [];
-      if (logoDrawCommand) commands.push(logoDrawCommand);
-      commands.push('BT', '/F1 10 Tf', logoDrawCommand ? '50 740 Td' : '50 790 Td');
+      const commands = buildPdfHeaderCommands();
+      commands.push('BT', '/F1 10 Tf', '50 724 Td');
       pageLines.forEach((line, idx) => {
         if (idx > 0) commands.push('0 -14 Td');
         commands.push(`(${pdfEscape(line)}) Tj`);
@@ -2262,7 +2321,7 @@ function addToCart({
       const stream = commands.join('\n');
       const contentId = addObj(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
       const xObjectResource = imageId ? `/XObject << /Im1 ${imageId} 0 R >> ` : '';
-      const pageId = addObj(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R >> ${xObjectResource}>> /Contents ${contentId} 0 R >>`);
+      const pageId = addObj(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R /F2 ${fontBoldId} 0 R >> ${xObjectResource}>> /Contents ${contentId} 0 R >>`);
       pageIds.push(pageId);
     });
 
