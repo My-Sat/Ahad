@@ -30,6 +30,13 @@ const DEFAULT_EXPENSE_CATEGORIES = [
   { name: 'General Expense', accountCode: ACCOUNTS.GENERAL_EXPENSE }
 ];
 
+const ACCOUNTING_MAINTENANCE_TTL_MS = 10 * 60 * 1000;
+const accountingMaintenanceState = {
+  key: '',
+  lastRunAt: 0,
+  running: null
+};
+
 function parseDateStart(dstr) {
   if (!dstr) return null;
   const d = new Date(`${dstr}T00:00:00Z`);
@@ -79,13 +86,14 @@ function truthyInput(value) {
 
 async function ensureDefaultExpenseCategories() {
   await ensureDefaultAccounts();
-  for (const cat of DEFAULT_EXPENSE_CATEGORIES) {
-    await ExpenseCategory.updateOne(
-      { name: cat.name },
-      { $setOnInsert: Object.assign({}, cat, { active: true, system: true }) },
-      { upsert: true }
-    );
-  }
+  const operations = DEFAULT_EXPENSE_CATEGORIES.map(cat => ({
+    updateOne: {
+      filter: { name: cat.name },
+      update: { $setOnInsert: Object.assign({}, cat, { active: true, system: true }) },
+      upsert: true
+    }
+  }));
+  if (operations.length) await ExpenseCategory.bulkWrite(operations, { ordered: false });
 }
 
 function depreciationExpenseAccountForAsset(asset) {
@@ -443,6 +451,48 @@ async function postDuePrepaidReleases(asOf = new Date(), actor = {}) {
   return { posted, skipped };
 }
 
+async function runAccountingMaintenance(asOf = new Date(), actor = {}, opts = {}) {
+  const requestedCutoff = asOf && !isNaN(new Date(asOf).getTime()) ? new Date(asOf) : new Date();
+  const now = new Date();
+  const cutoff = requestedCutoff > now ? now : requestedCutoff;
+  const key = monthKeyUTC(cutoff);
+  const force = !!opts.force;
+  const fresh = accountingMaintenanceState.key === key
+    && (Date.now() - accountingMaintenanceState.lastRunAt) < ACCOUNTING_MAINTENANCE_TTL_MS;
+
+  if (!force && fresh) {
+    return { ok: true, skipped: true, reason: 'fresh' };
+  }
+
+  if (!force && accountingMaintenanceState.running) {
+    return accountingMaintenanceState.running;
+  }
+
+  accountingMaintenanceState.running = (async () => {
+    await ensureDefaultExpenseCategories();
+    const depreciation = await postDueStraightLineDepreciation(cutoff, actor);
+    const prepaid = await postDuePrepaidReleases(cutoff, actor);
+    await ensureFixedAssetCodes();
+    accountingMaintenanceState.key = key;
+    accountingMaintenanceState.lastRunAt = Date.now();
+    return { ok: true, skipped: false, depreciation, prepaid };
+  })();
+
+  try {
+    return await accountingMaintenanceState.running;
+  } finally {
+    accountingMaintenanceState.running = null;
+  }
+}
+
+function scheduleAccountingMaintenance(asOf = new Date(), actor = {}) {
+  setImmediate(() => {
+    runAccountingMaintenance(asOf, actor).catch(err => {
+      console.error('accounting maintenance error', err);
+    });
+  });
+}
+
 function serializePrepaid(expense) {
   const amount = round2(expense.amount || 0);
   const releasedAmount = round2(expense.releasedAmount || 0);
@@ -610,39 +660,22 @@ function normalBalanceAmount(row) {
 
 exports.page = async (req, res) => {
   try {
-    await ensureDefaultExpenseCategories();
-    await postDueStraightLineDepreciation(new Date(), actorFromReq(req));
-    await postDuePrepaidReleases(new Date(), actorFromReq(req));
-    await ensureFixedAssetCodes();
-    const [categories, cashBooks, printers, accounts, assets, expenses, accruedExpenses, accruedPayments, prepaids, prepaidReleases, equityTransactions, entries] = await Promise.all([
-      ExpenseCategory.find({ active: true }).sort({ name: 1 }).lean(),
-      CashBook.find({ active: true }).sort({ name: 1 }).lean(),
-      Printer.find().sort({ name: 1 }).lean(),
-      AccountingAccount.find({ active: true, type: { $in: ['asset', 'liability', 'equity'] } }).sort({ code: 1 }).lean(),
-      FixedAsset.find().populate('printer', 'name').sort({ createdAt: -1 }).limit(100).lean(),
-      ManualExpense.find().sort({ date: -1, createdAt: -1 }).limit(100).lean(),
-      ManualExpense.find({ treatment: 'accrued' }).sort({ date: -1, createdAt: -1 }).limit(200).lean(),
-      AccruedExpensePayment.find().sort({ date: -1, createdAt: -1 }).limit(100).lean(),
-      ManualExpense.find({ treatment: 'prepaid' }).sort({ date: -1, createdAt: -1 }).limit(200).lean(),
-      PrepaidRelease.find().sort({ date: -1, createdAt: -1 }).limit(100).lean(),
-      EquityTransaction.find().sort({ date: -1, createdAt: -1 }).limit(100).lean(),
-      JournalEntry.find().sort({ createdAt: -1, _id: -1 }).limit(50).lean()
-    ]);
+    scheduleAccountingMaintenance(new Date(), actorFromReq(req));
 
     return res.render('accounting/index', {
-      title: 'Accounting',
-      categories,
-      cashBooks,
-      printers,
-      accounts,
-      assets,
-      expenses,
-      accruedExpenses: accruedExpenses.map(serializeAccrued),
-      accruedPayments: accruedPayments.map(serializeAccruedPayment),
-      prepaids: prepaids.map(serializePrepaid),
-      prepaidReleases: prepaidReleases.map(serializePrepaidRelease),
-      equityTransactions: equityTransactions.map(serializeEquityTransaction),
-      entries,
+      title: 'Ledger',
+      categories: [],
+      cashBooks: [],
+      printers: [],
+      accounts: [],
+      assets: [],
+      expenses: [],
+      accruedExpenses: [],
+      accruedPayments: [],
+      prepaids: [],
+      prepaidReleases: [],
+      equityTransactions: [],
+      entries: [],
       defaultFrom: isoDate(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1))),
       defaultTo: isoDate(new Date())
     });
@@ -652,12 +685,27 @@ exports.page = async (req, res) => {
   }
 };
 
+exports.apiSetup = async (req, res) => {
+  try {
+    await ensureDefaultExpenseCategories();
+    const [categories, cashBooks, printers, accounts] = await Promise.all([
+      ExpenseCategory.find({ active: true }).sort({ name: 1 }).lean(),
+      CashBook.find({ active: true }).sort({ name: 1 }).lean(),
+      Printer.find().sort({ name: 1 }).lean(),
+      AccountingAccount.find({ active: true, type: { $in: ['asset', 'liability', 'equity'] } }).sort({ code: 1 }).lean()
+    ]);
+
+    return res.json({ ok: true, categories, cashBooks, printers, accounts });
+  } catch (err) {
+    console.error('accounting.apiSetup error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load ledger setup data' });
+  }
+};
+
 exports.apiProfitLoss = async (req, res) => {
   try {
-    await ensureDefaultAccounts();
     const { start, end, from, to } = getRange(req);
-    await postDueStraightLineDepreciation(end, actorFromReq(req));
-    await postDuePrepaidReleases(end, actorFromReq(req));
+    await runAccountingMaintenance(end, actorFromReq(req));
 
     const rows = await JournalEntry.aggregate([
       { $match: { date: { $gte: start, $lte: end } } },
@@ -716,10 +764,8 @@ exports.apiProfitLoss = async (req, res) => {
 
 exports.apiTrialBalance = async (req, res) => {
   try {
-    await ensureDefaultAccounts();
     const end = parseDateEnd(req.query.to) || new Date();
-    await postDueStraightLineDepreciation(end, actorFromReq(req));
-    await postDuePrepaidReleases(end, actorFromReq(req));
+    await runAccountingMaintenance(end, actorFromReq(req));
 
     const rows = (await getAccountBalancesAsOf(end)).map(row => {
       const debit = round2(row.debit || 0);
@@ -760,10 +806,8 @@ exports.apiTrialBalance = async (req, res) => {
 
 exports.apiBalanceSheet = async (req, res) => {
   try {
-    await ensureDefaultAccounts();
     const end = parseDateEnd(req.query.to) || new Date();
-    await postDueStraightLineDepreciation(end, actorFromReq(req));
-    await postDuePrepaidReleases(end, actorFromReq(req));
+    await runAccountingMaintenance(end, actorFromReq(req));
 
     const accountRows = await getAccountBalancesAsOf(end);
     const assets = [];
@@ -842,6 +886,16 @@ exports.apiEquityTransactions = async (req, res) => {
   } catch (err) {
     console.error('accounting.apiEquityTransactions error', err);
     return res.status(500).json({ ok: false, error: 'Failed to load equity entries' });
+  }
+};
+
+exports.apiManualExpenses = async (req, res) => {
+  try {
+    const expenses = await ManualExpense.find().sort({ date: -1, createdAt: -1 }).limit(100).lean();
+    return res.json({ ok: true, expenses });
+  } catch (err) {
+    console.error('accounting.apiManualExpenses error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load manual expenses' });
   }
 };
 
@@ -1029,7 +1083,7 @@ exports.apiCreateEquityTransaction = async (req, res) => {
     let autoDepreciation = { posted: 0 };
     let responseFixedAsset = null;
     if (fixedAsset && fixedAsset.depreciationMethod === 'straight_line') {
-      autoDepreciation = await postDueStraightLineDepreciation(new Date(), actorFromReq(req));
+      autoDepreciation = await runAccountingMaintenance(new Date(), actorFromReq(req), { force: true });
     }
     if (fixedAsset) {
       responseFixedAsset = await FixedAsset.findById(fixedAsset._id).populate('printer', 'name').lean();
@@ -1159,7 +1213,7 @@ exports.apiCreateManualExpense = async (req, res) => {
 
     let autoPrepaidRelease = { posted: 0 };
     if (expense && expense.treatment === 'prepaid' && expense.autoReleaseEnabled) {
-      autoPrepaidRelease = await postDuePrepaidReleases(new Date(), actorFromReq(req));
+      autoPrepaidRelease = await runAccountingMaintenance(new Date(), actorFromReq(req), { force: true });
       expense = await ManualExpense.findById(expense._id).lean() || expense;
     }
 
@@ -1325,7 +1379,7 @@ exports.apiPayAccruedExpense = async (req, res) => {
 
 exports.apiPrepaidExpenses = async (req, res) => {
   try {
-    await postDuePrepaidReleases(new Date(), actorFromReq(req));
+    await runAccountingMaintenance(new Date(), actorFromReq(req));
     const [prepaids, releases] = await Promise.all([
       ManualExpense.find({ treatment: 'prepaid' }).sort({ date: -1, createdAt: -1 }).limit(200).lean(),
       PrepaidRelease.find().sort({ date: -1, createdAt: -1 }).limit(100).lean()
@@ -1443,6 +1497,17 @@ exports.apiReleasePrepaidExpense = async (req, res) => {
   }
 };
 
+exports.apiFixedAssets = async (req, res) => {
+  try {
+    await runAccountingMaintenance(new Date(), actorFromReq(req));
+    const assets = await FixedAsset.find().populate('printer', 'name').sort({ createdAt: -1 }).limit(100).lean();
+    return res.json({ ok: true, assets });
+  } catch (err) {
+    console.error('accounting.apiFixedAssets error', err);
+    return res.status(500).json({ ok: false, error: 'Failed to load fixed assets' });
+  }
+};
+
 exports.apiCreateFixedAsset = async (req, res) => {
   let session = null;
   try {
@@ -1542,7 +1607,7 @@ exports.apiCreateFixedAsset = async (req, res) => {
 
     let autoDepreciation = { posted: 0 };
     if (asset && asset.depreciationMethod === 'straight_line') {
-      autoDepreciation = await postDueStraightLineDepreciation(new Date(), actorFromReq(req));
+      autoDepreciation = await runAccountingMaintenance(new Date(), actorFromReq(req), { force: true });
     }
     const responseAsset = asset
       ? (await FixedAsset.findById(asset._id).populate('printer', 'name').lean()) || asset

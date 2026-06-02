@@ -87,11 +87,15 @@ function reExecuteScripts(newRoot, targetRoot) {
       if (assets) list.push(assets);
     }
     if (
-      id === 'tab-services' || id === 'tab-users' || id === 'tab-cash-books' || id === 'tab-accounting' || id === 'tab-messaging' || id === 'tab-orders-discounts' ||
-      id === 'tab-services-sm' || id === 'tab-users-sm' || id === 'tab-cash-books-sm' || id === 'tab-accounting-sm' || id === 'tab-messaging-sm' || id === 'tab-orders-discounts-sm'
+      id === 'tab-services' || id === 'tab-users' || id === 'tab-cash-books' || id === 'tab-messaging' || id === 'tab-orders-discounts' ||
+      id === 'tab-services-sm' || id === 'tab-users-sm' || id === 'tab-cash-books-sm' || id === 'tab-messaging-sm' || id === 'tab-orders-discounts-sm'
     ) {
       const configs = document.getElementById('tab-configs');
       if (configs) list.push(configs);
+    }
+    if (id === 'tab-accounting-sm') {
+      const accounting = document.getElementById('tab-accounting');
+      if (accounting) list.push(accounting);
     }
     if (id === 'tab-orders-new' || id === 'tab-orders-new-sm') {
       const operations = document.getElementById('tab-operations');
@@ -248,7 +252,7 @@ function setActiveTabByUrl(url) {
       '/admin/stock': 'tab-assets',
       '/admin/users': 'tab-configs',
       '/admin/cash-books': 'tab-configs',
-      '/admin/accounting': 'tab-configs',
+      '/admin/accounting': 'tab-accounting',
       '/admin/messaging': 'tab-configs',
       '/admin/discounts': 'tab-configs',
       '/admin/reports': 'tab-reports',
@@ -270,7 +274,7 @@ function setActiveTabByUrl(url) {
       else if (path.startsWith('/admin/stock')) id = 'tab-assets';
       else if (path.startsWith('/admin/users')) id = 'tab-configs';
       else if (path.startsWith('/admin/cash-books')) id = 'tab-configs';
-      else if (path.startsWith('/admin/accounting')) id = 'tab-configs';
+      else if (path.startsWith('/admin/accounting')) id = 'tab-accounting';
       else if (path.startsWith('/admin/messaging')) id = 'tab-configs';
       else if (path.startsWith('/admin/discounts')) id = 'tab-configs';
       else if (path.startsWith('/admin/reports')) id = 'tab-reports';

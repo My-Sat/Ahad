@@ -3201,28 +3201,22 @@ async function placeOrderFlow() {
       return;
     }
 
+    const completedCustomerId = getCurrentCustomerId();
+
     showOrderSuccessModal(j.orderId, j.total, (j && j.jobNote) ? j.jobNote : (orderJobNoteEl ? orderJobNoteEl.value : ''));
     if (typeof showGlobalToast === 'function') {
       showGlobalToast(`Order created: ${j.orderId}`, 3200);
     }
 
-    setSelectedCustomerFromSubmission(null);
+    // Reset the order UI immediately. The list/material reloads run in the
+    // background so the create button is not held by slow follow-up fetches.
+    cart = [];
+    if (orderJobNoteEl) orderJobNoteEl.value = '';
+    if (completedCustomerId) clearDraft(completedCustomerId);
+    setSelectedCustomerFromSubmission(null, { preserveCart: true });
     activeInvoice = null;
     if (orderInvoiceIdEl) orderInvoiceIdEl.value = '';
     if (submittedCustomerSelect) submittedCustomerSelect.value = '';
-    await loadSecretarySubmissions();
-    await loadCartInvoices(cartInvoiceSearchInput ? cartInvoiceSearchInput.value : '');
-
-    // Stock just changed on the server — force refresh so next Apply uses updated remaining
-    await refreshMaterialsIfStale(true);
-
-      // Reset cart and discount (discount must be re-applied per order)
-      cart = [];
-      if (orderJobNoteEl) orderJobNoteEl.value = '';
-      // clear any saved draft for this customer after a successful order
-    const currentCustomerId = getCurrentCustomerId();
-    if (currentCustomerId) clearDraft(currentCustomerId);
-
     try {
       if (window._isAdmin) {
         if (typeof manualDiscount !== 'undefined') manualDiscount = null;
@@ -3250,6 +3244,14 @@ async function placeOrderFlow() {
     }
 
     renderCart();
+
+    Promise.allSettled([
+      loadSecretarySubmissions(),
+      loadCartInvoices(cartInvoiceSearchInput ? cartInvoiceSearchInput.value : ''),
+      refreshMaterialsIfStale(true)
+    ]).catch(err => {
+      console.warn('Post-order background refresh failed', err);
+    });
   } catch (err) {
     console.error('create order err', err);
     showAlertModal('Failed to create order');

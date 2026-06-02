@@ -158,13 +158,16 @@ router.put('/cash-books/:id', ensureAdmin, cashBooksController.apiUpdate);
 
 // Accounting
 router.get('/accounting', ensureAdmin, accountingController.page);
+router.get('/accounting/api/setup', ensureAdmin, accountingController.apiSetup);
 router.get('/accounting/api/profit-loss', ensureAdmin, accountingController.apiProfitLoss);
 router.get('/accounting/api/trial-balance', ensureAdmin, accountingController.apiTrialBalance);
 router.get('/accounting/api/balance-sheet', ensureAdmin, accountingController.apiBalanceSheet);
 router.get('/accounting/api/journal-entries', ensureAdmin, accountingController.apiJournalEntries);
+router.get('/accounting/api/manual-expenses', ensureAdmin, accountingController.apiManualExpenses);
 router.get('/accounting/api/prepaid-expenses', ensureAdmin, accountingController.apiPrepaidExpenses);
 router.get('/accounting/api/accrued-expenses', ensureAdmin, accountingController.apiAccruedExpenses);
 router.get('/accounting/api/equity-transactions', ensureAdmin, accountingController.apiEquityTransactions);
+router.get('/accounting/api/fixed-assets', ensureAdmin, accountingController.apiFixedAssets);
 router.post('/accounting/equity-transactions', ensureAdmin, accountingController.apiCreateEquityTransaction);
 router.post('/accounting/manual-expenses', ensureAdmin, accountingController.apiCreateManualExpense);
 router.post('/accounting/prepaid-expenses/:id/release', ensureAdmin, accountingController.apiReleasePrepaidExpense);

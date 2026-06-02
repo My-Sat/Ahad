@@ -34,6 +34,108 @@
       return j;
     }
 
+    let setupPromise = null;
+
+    function cashBookLabel(book) {
+      const kind = book?.kind === 'momo' ? 'MoMo' : (book?.kind === 'bank' ? 'Bank' : 'Cash');
+      return `${book?.name || 'Cash Book'} (${kind})`;
+    }
+
+    function setOptions(selectId, options, config) {
+      const select = document.getElementById(selectId);
+      if (!select) return;
+      const currentValue = select.value;
+      const placeholder = config?.placeholder;
+      select.innerHTML = '';
+      if (placeholder) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = placeholder;
+        select.appendChild(option);
+      }
+      (options || []).forEach(item => {
+        const option = document.createElement('option');
+        option.value = String(config.value(item));
+        option.textContent = config.label(item);
+        if (config.dataset) {
+          Object.entries(config.dataset(item) || {}).forEach(([key, value]) => {
+            option.dataset[key] = value == null ? '' : String(value);
+          });
+        }
+        select.appendChild(option);
+      });
+      if (currentValue && Array.from(select.options).some(option => option.value === currentValue)) {
+        select.value = currentValue;
+      }
+    }
+
+    function applySetupData(data) {
+      const categories = data?.categories || [];
+      const cashBooks = data?.cashBooks || [];
+      const printers = data?.printers || [];
+      const accounts = data?.accounts || [];
+
+      setOptions('manualExpenseCategory', categories, {
+        value: item => item._id,
+        label: item => item.name || 'Expense category'
+      });
+
+      ['manualExpenseCashBook', 'accruedPaymentCashBook'].forEach(id => {
+        setOptions(id, cashBooks, {
+          placeholder: 'Select cash book',
+          value: item => item._id,
+          label: cashBookLabel,
+          dataset: item => ({ kind: item.kind || 'cash' })
+        });
+      });
+
+      setOptions('equityCashBook', cashBooks, {
+        placeholder: 'No cash book involved',
+        value: item => item._id,
+        label: cashBookLabel,
+        dataset: item => ({ kind: item.kind || 'cash' })
+      });
+
+      setOptions('fixedAssetCashBook', cashBooks, {
+        placeholder: 'Bought on credit / unpaid',
+        value: item => item._id,
+        label: cashBookLabel,
+        dataset: item => ({ kind: item.kind || 'cash' })
+      });
+
+      ['fixedAssetPrinter', 'equityFixedAssetPrinter'].forEach(id => {
+        setOptions(id, printers, {
+          placeholder: 'Not linked',
+          value: item => item._id,
+          label: item => item.name || 'Printer'
+        });
+      });
+
+      setOptions('equityTransactionAccount', accounts, {
+        value: item => item.code,
+        label: item => `${item.code || ''} ${item.name || ''}`.trim(),
+        dataset: item => ({ type: item.type || '' })
+      });
+
+      toggleManualExpenseCashBook();
+      updateEquityAccountOptions();
+      toggleCashBookDetails('fixedAssetCashBook', 'fixedAssetMomoWrap', 'fixedAssetBankWrap', false);
+      toggleCashBookDetails('accruedPaymentCashBook', 'accruedPaymentMomoWrap', 'accruedPaymentBankWrap', false);
+    }
+
+    async function loadSetup() {
+      if (!setupPromise) {
+        setupPromise = fetchJson('/admin/accounting/api/setup').then(data => {
+          applySetupData(data);
+          return data;
+        }).catch(err => {
+          setupPromise = null;
+          throw err;
+        });
+      }
+      return setupPromise;
+    }
+
     function query() {
       const from = document.getElementById('accountingFrom')?.value || '';
       const to = document.getElementById('accountingTo')?.value || '';
@@ -112,6 +214,35 @@
       tbody.insertAdjacentHTML('afterbegin', rowHtml);
     }
 
+    function setTableLoading(tableId, colspan, message) {
+      const tbody = document.querySelector(`#${tableId} tbody`);
+      if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="${colspan || 1}">${escapeHtml(message || 'Loading...')}</td></tr>`;
+    }
+
+    function renderManualExpenses(expenses) {
+      const tbody = document.querySelector('#manualExpensesTable tbody');
+      if (!tbody) return;
+      if (!expenses || !expenses.length) {
+        tbody.innerHTML = '<tr><td class="text-muted" colspan="5">No manual expenses yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = expenses.map(expense => `
+        <tr>
+          <td>${formatDate(expense.date)}</td>
+          <td>${escapeHtml(expense.description || '')}</td>
+          <td>${escapeHtml(expense.categoryName || '')}</td>
+          <td>${escapeHtml(expense.treatment || '')}</td>
+          <td class="text-end">${fmt(expense.amount)}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadManualExpenses() {
+      setTableLoading('manualExpensesTable', 5);
+      const j = await fetchJson('/admin/accounting/api/manual-expenses');
+      renderManualExpenses(j.expenses || []);
+    }
+
     function prependManualExpense(expense) {
       if (!expense) return;
       prependTableRow('manualExpensesTable', `
@@ -151,6 +282,39 @@
       `);
     }
 
+    function renderFixedAssets(assets) {
+      const tbody = document.querySelector('#fixedAssetsTable tbody');
+      if (!tbody) return;
+      if (!assets || !assets.length) {
+        tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No fixed assets yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = assets.map(asset => {
+        const printerName = asset.printer && typeof asset.printer === 'object'
+          ? asset.printer.name
+          : '-';
+        const assetCode = asset.code
+          ? `<span class="badge bg-info text-dark ms-2">${escapeHtml(asset.code)}</span>`
+          : '';
+        return `
+          <tr>
+            <td><span>${escapeHtml(asset.name || '')}</span>${assetCode}</td>
+            <td>${escapeHtml(printerName || '-')}</td>
+            <td>${escapeHtml(asset.depreciationMethod || '')}</td>
+            <td class="text-end">${fmt(asset.purchaseCost)}</td>
+            <td class="text-end">${fmt(asset.accumulatedDepreciation)}</td>
+            <td class="text-end">${fixedAssetPostingBadge(asset)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function loadFixedAssets() {
+      setTableLoading('fixedAssetsTable', 6);
+      const j = await fetchJson('/admin/accounting/api/fixed-assets');
+      renderFixedAssets(j.assets || []);
+    }
+
     function renderEquityTransactions(entries) {
       const tbody = document.querySelector('#equityTransactionsTable tbody');
       if (!tbody) return;
@@ -185,6 +349,7 @@
     }
 
     async function loadEquityTransactions() {
+      setTableLoading('equityTransactionsTable', 6);
       const j = await fetchJson('/admin/accounting/api/equity-transactions');
       renderEquityTransactions(j.entries || []);
     }
@@ -259,6 +424,8 @@
     }
 
     async function loadPrepaids() {
+      setTableLoading('prepaidExpensesTable', 8);
+      setTableLoading('prepaidReleasesTable', 5);
       const j = await fetchJson('/admin/accounting/api/prepaid-expenses');
       renderPrepaids(j.prepaids || []);
       renderPrepaidReleases(j.releases || []);
@@ -331,6 +498,8 @@
     }
 
     async function loadAccruedExpenses() {
+      setTableLoading('accruedExpensesTable', 7);
+      setTableLoading('accruedPaymentsTable', 6);
       const j = await fetchJson('/admin/accounting/api/accrued-expenses');
       renderAccruedExpenses(j.accruedExpenses || []);
       renderAccruedPayments(j.payments || []);
@@ -362,6 +531,7 @@
     }
 
     async function loadJournalEntries() {
+      setTableLoading('journalEntriesTable', 4);
       const j = await fetchJson('/admin/accounting/api/journal-entries');
       renderJournalEntries(j.entries || []);
     }
@@ -403,6 +573,7 @@
     }
 
     async function loadTrialBalance() {
+      setTableLoading('trialBalanceTable', 6);
       const j = await fetchJson(`/admin/accounting/api/trial-balance${trialBalanceQuery()}`);
       renderTrialBalance(j);
     }
@@ -442,6 +613,9 @@
     }
 
     async function loadBalanceSheet() {
+      setTableLoading('balanceSheetAssetsTable', 3);
+      setTableLoading('balanceSheetLiabilitiesTable', 3);
+      setTableLoading('balanceSheetEquityTable', 3);
       const j = await fetchJson(`/admin/accounting/api/balance-sheet${balanceSheetQuery()}`);
       renderBalanceSheet(j);
     }
@@ -457,6 +631,89 @@
       renderRows('plRevenueTable', j.revenue || []);
       renderRows('plCogsTable', j.cogs || []);
       renderRows('plOperatingTable', j.operatingExpenses || []);
+    }
+
+    const loadedSections = Object.create(null);
+    const loadingSections = Object.create(null);
+    const sectionTargets = {
+      profitLoss: '#tabProfitLoss',
+      balanceSheet: '#tabBalanceSheet',
+      equity: '#tabEquity',
+      fixedAssets: '#tabFixedAssets',
+      manualExpenses: '#tabManualExpenses',
+      accruedExpenses: '#tabAccruedExpenses',
+      prepaidExpenses: '#tabPrepaidExpenses',
+      trialBalance: '#tabTrialBalance',
+      journal: '#tabJournal'
+    };
+    const targetSections = Object.entries(sectionTargets).reduce((acc, pair) => {
+      acc[pair[1]] = pair[0];
+      return acc;
+    }, {});
+
+    function sectionForTarget(target) {
+      if (!target) return null;
+      if (targetSections[target]) return targetSections[target];
+      const category = document.querySelector(`${target} .tab-content > .tab-pane.active[id]`);
+      return category ? targetSections[`#${category.id}`] : null;
+    }
+
+    function isSectionVisible(section) {
+      const target = sectionTargets[section];
+      const pane = target ? document.querySelector(target) : null;
+      return !!(pane && pane.classList.contains('active') && pane.getClientRects().length);
+    }
+
+    function markSectionDirty(...sections) {
+      sections.flat().forEach(section => {
+        if (section) loadedSections[section] = false;
+      });
+    }
+
+    async function loadSection(section, opts) {
+      opts = opts || {};
+      if (!section) return;
+      if (!opts.force && loadedSections[section]) return;
+      if (loadingSections[section]) return loadingSections[section];
+
+      const loaders = {
+        profitLoss: loadProfitLoss,
+        balanceSheet: loadBalanceSheet,
+        equity: loadEquityTransactions,
+        fixedAssets: loadFixedAssets,
+        manualExpenses: loadManualExpenses,
+        accruedExpenses: loadAccruedExpenses,
+        prepaidExpenses: loadPrepaids,
+        trialBalance: loadTrialBalance,
+        journal: loadJournalEntries
+      };
+      const loader = loaders[section];
+      if (!loader) return;
+
+      loadingSections[section] = Promise.resolve()
+        .then(() => {
+          if (['equity', 'fixedAssets', 'manualExpenses', 'accruedExpenses'].includes(section)) {
+            return loadSetup();
+          }
+          return null;
+        })
+        .then(loader)
+        .then(() => {
+          loadedSections[section] = true;
+        })
+        .finally(() => {
+          delete loadingSections[section];
+        });
+
+      return loadingSections[section];
+    }
+
+    function loadVisibleDirtySections() {
+      Object.keys(sectionTargets).forEach(section => {
+        if (!loadedSections[section] && isSectionVisible(section)) {
+          loadSection(section, { force: true }).catch(err => console.error(`Failed to load ${section}`, err));
+        }
+      });
     }
 
     function toggleManualExpenseCashBook() {
@@ -541,15 +798,15 @@
     }
 
     document.getElementById('loadProfitLossBtn')?.addEventListener('click', () => {
-      loadProfitLoss().catch(err => alert(err.message));
+      loadSection('profitLoss', { force: true }).catch(err => alert(err.message));
     });
     document.getElementById('loadTrialBalanceBtn')?.addEventListener('click', () => {
-      loadTrialBalance().catch(err => alert(err.message));
+      loadSection('trialBalance', { force: true }).catch(err => alert(err.message));
     });
     document.getElementById('loadBalanceSheetBtn')?.addEventListener('click', async function () {
       const originalText = setButtonLoading(this, 'Loading...');
       try {
-        await loadBalanceSheet();
+        await loadSection('balanceSheet', { force: true });
       } catch (err) {
         alert(err.message);
       } finally {
@@ -575,6 +832,13 @@
     toggleFixedAssetLifeFields();
     toggleCashBookDetails('fixedAssetCashBook', 'fixedAssetMomoWrap', 'fixedAssetBankWrap', false);
     toggleCashBookDetails('accruedPaymentCashBook', 'accruedPaymentMomoWrap', 'accruedPaymentBankWrap', false);
+
+    root.querySelectorAll('[data-bs-toggle="tab"][data-bs-target]').forEach(tab => {
+      tab.addEventListener('shown.bs.tab', function () {
+        const section = sectionForTarget(this.getAttribute('data-bs-target'));
+        loadSection(section).catch(err => console.error(`Failed to load ${section}`, err));
+      });
+    });
 
     document.getElementById('equityTransactionForm')?.addEventListener('submit', async function (ev) {
       ev.preventDefault();
@@ -611,10 +875,8 @@
         if (status) status.textContent = j.fixedAsset ? 'Opening fixed asset recorded.' : 'Equity entry recorded.';
         this.reset();
         updateEquityAccountOptions();
-        await loadProfitLoss();
-        await loadTrialBalance();
-        await loadBalanceSheet();
-        await loadJournalEntries();
+        markSectionDirty('profitLoss', 'trialBalance', 'balanceSheet', 'journal', 'fixedAssets');
+        loadVisibleDirtySections();
       } catch (err) {
         if (status) status.textContent = err.message;
         else alert(err.message);
@@ -653,12 +915,8 @@
         if (status) status.textContent = 'Expense recorded.';
         this.reset();
         toggleManualExpenseCashBook();
-        await loadPrepaids();
-        await loadAccruedExpenses();
-        await loadProfitLoss();
-        await loadTrialBalance();
-        await loadBalanceSheet();
-        await loadJournalEntries();
+        markSectionDirty('prepaidExpenses', 'accruedExpenses', 'profitLoss', 'trialBalance', 'balanceSheet', 'journal');
+        loadVisibleDirtySections();
       } catch (err) {
         if (status) status.textContent = err.message;
         else alert(err.message);
@@ -709,11 +967,9 @@
         if (status) status.textContent = 'Accrued expense paid.';
         this.reset();
         toggleCashBookDetails('accruedPaymentCashBook', 'accruedPaymentMomoWrap', 'accruedPaymentBankWrap', false);
-        await loadAccruedExpenses();
-        await loadProfitLoss();
-        await loadTrialBalance();
-        await loadBalanceSheet();
-        await loadJournalEntries();
+        await loadSection('accruedExpenses', { force: true });
+        markSectionDirty('profitLoss', 'trialBalance', 'balanceSheet', 'journal');
+        loadVisibleDirtySections();
       } catch (err) {
         if (status) status.textContent = err.message;
         else alert(err.message);
@@ -758,11 +1014,9 @@
         });
         if (status) status.textContent = 'Prepaid expense released to P&L.';
         this.reset();
-        await loadPrepaids();
-        await loadProfitLoss();
-        await loadTrialBalance();
-        await loadBalanceSheet();
-        await loadJournalEntries();
+        await loadSection('prepaidExpenses', { force: true });
+        markSectionDirty('profitLoss', 'trialBalance', 'balanceSheet', 'journal');
+        loadVisibleDirtySections();
       } catch (err) {
         if (status) status.textContent = err.message;
         else alert(err.message);
@@ -808,10 +1062,8 @@
         this.reset();
         toggleFixedAssetLifeFields();
         toggleCashBookDetails('fixedAssetCashBook', 'fixedAssetMomoWrap', 'fixedAssetBankWrap', false);
-        await loadProfitLoss();
-        await loadTrialBalance();
-        await loadBalanceSheet();
-        await loadJournalEntries();
+        markSectionDirty('profitLoss', 'trialBalance', 'balanceSheet', 'journal');
+        loadVisibleDirtySections();
       } catch (err) {
         if (status) status.textContent = err.message;
         else alert(err.message);
@@ -820,10 +1072,7 @@
       }
     });
 
-    loadProfitLoss().catch(() => {});
-    loadTrialBalance().catch(() => {});
-    loadBalanceSheet().catch(() => {});
-    loadEquityTransactions().catch(() => {});
+    loadSection('profitLoss').catch(() => {});
   }
 
   if (document.readyState === 'loading') {

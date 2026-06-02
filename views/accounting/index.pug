@@ -9,696 +9,735 @@ block content
           .card-body.dark-card-body#accountingPage
             .d-flex.justify-content-between.align-items-center.mb-3
               div
-                h4.mb-0.text-white Accounting
+                h4.mb-0.text-white Ledger
                 p.text-muted-light.small.mb-0 Accrual accounting for revenue, stock cost, fixed assets, and manual expenses.
 
             ul.nav.nav-tabs.mb-3(role='tablist')
               li.nav-item(role='presentation')
-                button.nav-link.active(type='button', data-bs-toggle='tab', data-bs-target='#tabProfitLoss') Profit & Loss
+                button.nav-link.active(type='button', data-bs-toggle='tab', data-bs-target='#accountingFinancialStatement') Financial Statement
               li.nav-item(role='presentation')
-                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabTrialBalance') Trial Balance
+                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#accountingCapital') Capital
               li.nav-item(role='presentation')
-                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabBalanceSheet') Balance Sheet
+                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#accountingExpenseAdjustment') Expenses Adjustment
               li.nav-item(role='presentation')
-                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabEquity') Equity
-              li.nav-item(role='presentation')
-                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabManualExpenses') Manual Expenses
-              li.nav-item(role='presentation')
-                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabAccruedExpenses') Accrued Expenses
-              li.nav-item(role='presentation')
-                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabPrepaidExpenses') Prepaid Expenses
-              li.nav-item(role='presentation')
-                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabFixedAssets') Fixed Assets
-              li.nav-item(role='presentation')
-                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabJournal') Journal
+                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#accountingFinancialControl') Financial Control
 
             .tab-content
-              #tabProfitLoss.tab-pane.fade.show.active
-                .d-flex.gap-2.align-items-end.mb-3
+              #accountingFinancialStatement.tab-pane.fade.show.active
+                .d-flex.justify-content-between.align-items-center.mb-2
                   div
-                    label.form-label.small.text-muted-light(for='accountingFrom') From
-                    input.form-control.form-control-sm.form-control-dark#accountingFrom(type='date', value=defaultFrom)
-                  div
-                    label.form-label.small.text-muted-light(for='accountingTo') To
-                    input.form-control.form-control-sm.form-control-dark#accountingTo(type='date', value=defaultTo)
-                  button.btn.btn-primary.btn-sm#loadProfitLossBtn(type='button') Load P&L
-                .row.g-2.mb-3
-                  .col-6.col-lg-2
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Revenue
-                        strong#plRevenue GH₵ 0.00
-                  .col-6.col-lg-2
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Cost of Sales
-                        strong#plCogs GH₵ 0.00
-                  .col-6.col-lg-2
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Gross Profit
-                        strong#plGross GH₵ 0.00
-                  .col-6.col-lg-3
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Operating Expenses
-                        strong#plOperating GH₵ 0.00
-                  .col-6.col-lg-3
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Net Profit / Loss
-                        strong#plNet GH₵ 0.00
-                .row.g-3
-                  .col-lg-4
-                    h6.text-white Revenue
-                    table.table.table-sm#plRevenueTable
-                      tbody
-                        tr
-                          td.text-muted Loading...
-                  .col-lg-4
-                    h6.text-white Cost of Sales
-                    table.table.table-sm#plCogsTable
-                      tbody
-                        tr
-                          td.text-muted Loading...
-                  .col-lg-4
-                    h6.text-white Operating Expenses
-                    table.table.table-sm#plOperatingTable
-                      tbody
-                        tr
-                          td.text-muted Loading...
+                    h5.text-white.mb-0 Financial Statement
+                    p.text-muted-light.small.mb-0 Review business performance and position.
+                ul.nav.nav-pills.mb-3(role='tablist')
+                  li.nav-item(role='presentation')
+                    button.nav-link.active(type='button', data-bs-toggle='tab', data-bs-target='#tabProfitLoss') Profit & Loss
+                  li.nav-item(role='presentation')
+                    button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabBalanceSheet') Balance Sheet
+                .tab-content
+                  #tabProfitLoss.tab-pane.fade.show.active
+                    .d-flex.gap-2.align-items-end.mb-3
+                      div
+                        label.form-label.small.text-muted-light(for='accountingFrom') From
+                        input.form-control.form-control-sm.form-control-dark#accountingFrom(type='date', value=defaultFrom)
+                      div
+                        label.form-label.small.text-muted-light(for='accountingTo') To
+                        input.form-control.form-control-sm.form-control-dark#accountingTo(type='date', value=defaultTo)
+                      button.btn.btn-primary.btn-sm#loadProfitLossBtn(type='button') Load P&L
+                    .row.g-2.mb-3
+                      .col-6.col-lg-2
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Revenue
+                            strong#plRevenue GH₵ 0.00
+                      .col-6.col-lg-2
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Cost of Sales
+                            strong#plCogs GH₵ 0.00
+                      .col-6.col-lg-2
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Gross Profit
+                            strong#plGross GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Operating Expenses
+                            strong#plOperating GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Net Profit / Loss
+                            strong#plNet GH₵ 0.00
+                    .row.g-3
+                      .col-lg-4
+                        h6.text-white Revenue
+                        table.table.table-sm#plRevenueTable
+                          tbody
+                            tr
+                              td.text-muted Loading...
+                      .col-lg-4
+                        h6.text-white Cost of Sales
+                        table.table.table-sm#plCogsTable
+                          tbody
+                            tr
+                              td.text-muted Loading...
+                      .col-lg-4
+                        h6.text-white Operating Expenses
+                        table.table.table-sm#plOperatingTable
+                          tbody
+                            tr
+                              td.text-muted Loading...
 
-              #tabTrialBalance.tab-pane.fade
-                .d-flex.flex-wrap.gap-2.align-items-end.mb-3
-                  div
-                    label.form-label.small.text-muted-light(for='trialBalanceTo') As of
-                    input.form-control.form-control-sm.form-control-dark#trialBalanceTo(type='date', value=defaultTo)
-                  button.btn.btn-primary.btn-sm#loadTrialBalanceBtn(type='button') Load Trial Balance
-                  small.text-muted-light.ms-sm-2 Trial Balance summarizes all journal balances up to the selected date.
-                .row.g-2.mb-3
-                  .col-6.col-lg-3
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Total Debit
-                        strong#trialBalanceDebit GH₵ 0.00
-                  .col-6.col-lg-3
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Total Credit
-                        strong#trialBalanceCredit GH₵ 0.00
-                  .col-6.col-lg-3
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Difference
-                        strong#trialBalanceDifference GH₵ 0.00
-                  .col-6.col-lg-3
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Status
-                        span.badge#trialBalanceStatusBadge.bg-secondary Loading
-                .table-responsive
-                  table.table.table-sm.table-hover#trialBalanceTable
-                    thead
-                      tr
-                        th Code
-                        th Account
-                        th Type
-                        th Group
-                        th.text-end Debit
-                        th.text-end Credit
-                    tbody
-                      tr
-                        td.text-muted(colspan='6') Loading...
+                  #tabBalanceSheet.tab-pane.fade
+                    .d-flex.flex-wrap.gap-2.align-items-end.mb-3
+                      div
+                        label.form-label.small.text-muted-light(for='balanceSheetTo') As of
+                        input.form-control.form-control-sm.form-control-dark#balanceSheetTo(type='date', value=defaultTo)
+                      button.btn.btn-primary.btn-sm#loadBalanceSheetBtn(type='button') Load Balance Sheet
+                      small.text-muted-light.ms-sm-2 Assets must equal liabilities plus equity. Equity includes capital, drawings, opening balances, and accumulated profit/loss.
+                    .row.g-2.mb-3
+                      .col-6.col-lg
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Total Assets
+                            strong#balanceSheetAssets GH₵ 0.00
+                      .col-6.col-lg
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Total Liabilities
+                            strong#balanceSheetLiabilities GH₵ 0.00
+                      .col-6.col-lg
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Business Value / Equity
+                            strong#balanceSheetEquity GH₵ 0.00
+                      .col-6.col-lg
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Liabilities + Equity
+                            strong#balanceSheetLiabilitiesEquity GH₵ 0.00
+                      .col-6.col-lg
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Status
+                            span.badge#balanceSheetStatusBadge.bg-secondary Loading
+                    .row.g-3
+                      .col-lg-4
+                        h6.text-white Assets
+                        .table-responsive
+                          table.table.table-sm.table-hover#balanceSheetAssetsTable
+                            thead
+                              tr
+                                th Account
+                                th Group
+                                th.text-end Amount
+                            tbody
+                              tr
+                                td.text-muted(colspan='3') Loading...
+                      .col-lg-4
+                        h6.text-white Liabilities
+                        .table-responsive
+                          table.table.table-sm.table-hover#balanceSheetLiabilitiesTable
+                            thead
+                              tr
+                                th Account
+                                th Group
+                                th.text-end Amount
+                            tbody
+                              tr
+                                td.text-muted(colspan='3') Loading...
+                      .col-lg-4
+                        h6.text-white Equity
+                        .table-responsive
+                          table.table.table-sm.table-hover#balanceSheetEquityTable
+                            thead
+                              tr
+                                th Account
+                                th Group
+                                th.text-end Amount
+                            tbody
+                              tr
+                                td.text-muted(colspan='3') Loading...
 
-              #tabBalanceSheet.tab-pane.fade
-                .d-flex.flex-wrap.gap-2.align-items-end.mb-3
-                  div
-                    label.form-label.small.text-muted-light(for='balanceSheetTo') As of
-                    input.form-control.form-control-sm.form-control-dark#balanceSheetTo(type='date', value=defaultTo)
-                  button.btn.btn-primary.btn-sm#loadBalanceSheetBtn(type='button') Load Balance Sheet
-                  small.text-muted-light.ms-sm-2 Assets must equal liabilities plus equity. Equity includes capital, drawings, opening balances, and accumulated profit/loss.
-                .row.g-2.mb-3
-                  .col-6.col-lg
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Total Assets
-                        strong#balanceSheetAssets GH₵ 0.00
-                  .col-6.col-lg
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Total Liabilities
-                        strong#balanceSheetLiabilities GH₵ 0.00
-                  .col-6.col-lg
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Business Value / Equity
-                        strong#balanceSheetEquity GH₵ 0.00
-                  .col-6.col-lg
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Liabilities + Equity
-                        strong#balanceSheetLiabilitiesEquity GH₵ 0.00
-                  .col-6.col-lg
-                    .card.dark-surface.border-0
-                      .card-body.p-2.dark-card-body
-                        div.small.text-muted-light Status
-                        span.badge#balanceSheetStatusBadge.bg-secondary Loading
-                .row.g-3
-                  .col-lg-4
-                    h6.text-white Assets
-                    .table-responsive
-                      table.table.table-sm.table-hover#balanceSheetAssetsTable
-                        thead
-                          tr
-                            th Account
-                            th Group
-                            th.text-end Amount
-                        tbody
-                          tr
-                            td.text-muted(colspan='3') Loading...
-                  .col-lg-4
-                    h6.text-white Liabilities
-                    .table-responsive
-                      table.table.table-sm.table-hover#balanceSheetLiabilitiesTable
-                        thead
-                          tr
-                            th Account
-                            th Group
-                            th.text-end Amount
-                        tbody
-                          tr
-                            td.text-muted(colspan='3') Loading...
-                  .col-lg-4
-                    h6.text-white Equity
-                    .table-responsive
-                      table.table.table-sm.table-hover#balanceSheetEquityTable
-                        thead
-                          tr
-                            th Account
-                            th Group
-                            th.text-end Amount
-                        tbody
-                      tr
-                        td.text-muted(colspan='3') Loading...
 
-              #tabEquity.tab-pane.fade
-                .row.g-3
-                  .col-lg-4
-                    h6.text-white Owner Equity & Opening Balances
-                    p.small.text-muted-light.mb-2 Use this for owner investments, owner withdrawals, and existing asset/liability balances from before the accounting system started.
-                    form#equityTransactionForm(data-disable-spinner='true')
-                      .mb-2
-                        label.form-label.text-muted-light(for='equityTransactionType') Entry type
-                        select.form-select.form-select-dark#equityTransactionType(required)
-                          option(value='owner_capital' selected) Owner capital / investment
-                          option(value='owner_drawing') Owner drawing / withdrawal
-                          option(value='opening_asset') Opening asset balance
-                          option(value='opening_liability') Opening liability balance
-                      .mb-2
-                        label.form-label.text-muted-light(for='equityTransactionAccount') Affected account
-                        select.form-select.form-select-dark#equityTransactionAccount(required)
-                          each account in accounts
-                            if ['asset', 'liability'].includes(account.type)
-                              option(value=account.code data-type=account.type data-group=account.group)= `${account.code} ${account.name}`
-                      .row.g-2
-                        .col-6
-                          label.form-label.text-muted-light(for='equityTransactionAmount') Amount
-                          input.form-control.form-control-dark#equityTransactionAmount(type='number', min='0.01', step='0.01', required)
-                        .col-6
-                          label.form-label.text-muted-light(for='equityTransactionDate') Date
-                          input.form-control.form-control-dark#equityTransactionDate(type='date', value=defaultTo)
-                      .mb-2.mt-2
-                        label.form-label.text-muted-light(for='equityTransactionDescription') Description
-                        input.form-control.form-control-dark#equityTransactionDescription(type='text', placeholder='e.g. Opening cash balance')
-                      .card.dark-surface.border-secondary.mb-2.d-none#equityFixedAssetWrap
-                        .card-body.p-2
-                          h6.text-white.mb-1 Opening Fixed Asset Details
-                          p.small.text-muted-light.mb-2 The Amount above becomes the opening book value/cost. Depreciation starts from the selected date.
+              #accountingCapital.tab-pane.fade
+                .d-flex.justify-content-between.align-items-center.mb-2
+                  div
+                    h5.text-white.mb-0 Capital
+                    p.text-muted-light.small.mb-0 Manage owner equity, opening balances, and fixed assets.
+                ul.nav.nav-pills.mb-3(role='tablist')
+                  li.nav-item(role='presentation')
+                    button.nav-link.active(type='button', data-bs-toggle='tab', data-bs-target='#tabEquity') Equity
+                  li.nav-item(role='presentation')
+                    button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabFixedAssets') Fixed Assets
+                .tab-content
+                  #tabEquity.tab-pane.fade.show.active
+                    .row.g-3
+                      .col-lg-4
+                        h6.text-white Owner Equity & Opening Balances
+                        p.small.text-muted-light.mb-2 Use this for owner investments, owner withdrawals, and existing asset/liability balances from before the accounting system started.
+                        form#equityTransactionForm(data-disable-spinner='true')
                           .mb-2
-                            label.form-label.text-muted-light(for='equityFixedAssetName') Asset name
-                            input.form-control.form-control-dark#equityFixedAssetName(type='text', placeholder='e.g. Large format printer')
+                            label.form-label.text-muted-light(for='equityTransactionType') Entry type
+                            select.form-select.form-select-dark#equityTransactionType(required)
+                              option(value='owner_capital' selected) Owner capital / investment
+                              option(value='owner_drawing') Owner drawing / withdrawal
+                              option(value='opening_asset') Opening asset balance
+                              option(value='opening_liability') Opening liability balance
                           .mb-2
-                            label.form-label.text-muted-light(for='equityFixedAssetPrinter') Linked printer
-                            select.form-select.form-select-dark#equityFixedAssetPrinter
+                            label.form-label.text-muted-light(for='equityTransactionAccount') Affected account
+                            select.form-select.form-select-dark#equityTransactionAccount(required)
+                              each account in accounts
+                                if ['asset', 'liability'].includes(account.type)
+                                  option(value=account.code data-type=account.type data-group=account.group)= `${account.code} ${account.name}`
+                          .row.g-2
+                            .col-6
+                              label.form-label.text-muted-light(for='equityTransactionAmount') Amount
+                              input.form-control.form-control-dark#equityTransactionAmount(type='number', min='0.01', step='0.01', required)
+                            .col-6
+                              label.form-label.text-muted-light(for='equityTransactionDate') Date
+                              input.form-control.form-control-dark#equityTransactionDate(type='date', value=defaultTo)
+                          .mb-2.mt-2
+                            label.form-label.text-muted-light(for='equityTransactionDescription') Description
+                            input.form-control.form-control-dark#equityTransactionDescription(type='text', placeholder='e.g. Opening cash balance')
+                          .card.dark-surface.border-secondary.mb-2.d-none#equityFixedAssetWrap
+                            .card-body.p-2
+                              h6.text-white.mb-1 Opening Fixed Asset Details
+                              p.small.text-muted-light.mb-2 The Amount above becomes the opening book value/cost. Depreciation starts from the selected date.
+                              .mb-2
+                                label.form-label.text-muted-light(for='equityFixedAssetName') Asset name
+                                input.form-control.form-control-dark#equityFixedAssetName(type='text', placeholder='e.g. Large format printer')
+                              .mb-2
+                                label.form-label.text-muted-light(for='equityFixedAssetPrinter') Linked printer
+                                select.form-select.form-select-dark#equityFixedAssetPrinter
+                                  option(value='') Not linked
+                                  each p in printers
+                                    option(value=p._id)= p.name
+                                small.text-muted-light Link only actual printer assets. Tables, chairs, and other assets stay unlinked.
+                              .row.g-2.mt-1
+                                .col-6
+                                  label.form-label.text-muted-light(for='equityFixedAssetResidual') Residual value
+                                  input.form-control.form-control-dark#equityFixedAssetResidual(type='number', min='0', step='0.01', value='0')
+                                .col-6
+                                  label.form-label.text-muted-light(for='equityFixedAssetMethod') Depreciation
+                                  select.form-select.form-select-dark#equityFixedAssetMethod
+                                    option(value='straight_line' selected) Straight line
+                                    option(value='usage') Usage based
+                              .row.g-2.mt-1
+                                .col-6#equityFixedAssetUnitsWrap
+                                  label.form-label.text-muted-light(for='equityFixedAssetUnits') Useful life units
+                                  input.form-control.form-control-dark#equityFixedAssetUnits(type='number', min='0', step='1', placeholder='e.g. 1000000')
+                                .col-6#equityFixedAssetMonthsWrap
+                                  label.form-label.text-muted-light(for='equityFixedAssetMonths') Useful life months
+                                  input.form-control.form-control-dark#equityFixedAssetMonths(type='number', min='0', step='1', placeholder='e.g. 60')
+                          .mb-2#equityCashBookWrap
+                            label.form-label.text-muted-light(for='equityCashBook') Cash book affected
+                            select.form-select.form-select-dark#equityCashBook
+                              option(value='') Select cash book
+                              each book in cashBooks
+                                option(value=book._id data-kind=book.kind)= `${book.name} (${book.kind === 'momo' ? 'MoMo' : (book.kind === 'bank' ? 'Bank' : 'Cash')})`
+                          .row.g-2.d-none#equityMomoWrap
+                            .col-6
+                              label.form-label.text-muted-light(for='equityMomoNumber') MoMo number
+                              input.form-control.form-control-dark#equityMomoNumber(type='text')
+                            .col-6
+                              label.form-label.text-muted-light(for='equityMomoTxId') Transaction ID
+                              input.form-control.form-control-dark#equityMomoTxId(type='text')
+                          .row.g-2.d-none#equityBankWrap
+                            .col-6
+                              label.form-label.text-muted-light(for='equityChequeNumber') Cheque number
+                              input.form-control.form-control-dark#equityChequeNumber(type='text')
+                            .col-6
+                              label.form-label.text-muted-light(for='equityDepositDetails') Deposit details
+                              input.form-control.form-control-dark#equityDepositDetails(type='text')
+                          button.btn.btn-primary#saveEquityTransactionBtn(type='submit') Save Equity Entry
+                          p.small.mt-2#equityTransactionStatus
+                      .col-lg-8
+                        h6.text-white Recent Equity Entries
+                        .table-responsive
+                          table.table.table-sm.table-hover#equityTransactionsTable
+                            thead
+                              tr
+                                th Date
+                                th Type
+                                th Account
+                                th Description
+                                th Cash Book
+                                th.text-end Amount
+                            tbody
+                              if equityTransactions && equityTransactions.length
+                                each entry in equityTransactions
+                                  tr
+                                    td #{entry.date ? new Date(entry.date).toLocaleDateString() : ''}
+                                    td= entry.type
+                                    td #{entry.accountCode} #{entry.accountName}
+                                    td
+                                      div= entry.description
+                                      if entry.fixedAssetName
+                                        small.text-muted-light Asset: #{entry.fixedAssetName}
+                                    td= entry.cashBookName
+                                    td.text-end GH₵ #{Number(entry.amount || 0).toFixed(2)}
+                              else
+                                tr
+                                  td.text-muted(colspan='6') No equity entries yet.
+
+                  #tabFixedAssets.tab-pane.fade
+                    .row.g-3
+                      .col-lg-4
+                        h6.text-white Create Fixed Asset
+                        form#fixedAssetForm(data-disable-spinner='true')
+                          .mb-2
+                            label.form-label.text-muted-light(for='fixedAssetName') Name
+                            input.form-control.form-control-dark#fixedAssetName(type='text', placeholder='e.g. Canon Printer', required)
+                          .mb-2
+                            label.form-label.text-muted-light(for='fixedAssetPrinter') Linked printer
+                            select.form-select.form-select-dark#fixedAssetPrinter
                               option(value='') Not linked
                               each p in printers
                                 option(value=p._id)= p.name
-                            small.text-muted-light Link only actual printer assets. Tables, chairs, and other assets stay unlinked.
+                          .row.g-2
+                            .col-6
+                              label.form-label.text-muted-light(for='fixedAssetCost') Purchase cost
+                              input.form-control.form-control-dark#fixedAssetCost(type='number', min='0.01', step='0.01', required)
+                            .col-6
+                              label.form-label.text-muted-light(for='fixedAssetResidual') Residual value
+                              input.form-control.form-control-dark#fixedAssetResidual(type='number', min='0', step='0.01', value='0')
                           .row.g-2.mt-1
                             .col-6
-                              label.form-label.text-muted-light(for='equityFixedAssetResidual') Residual value
-                              input.form-control.form-control-dark#equityFixedAssetResidual(type='number', min='0', step='0.01', value='0')
+                              label.form-label.text-muted-light(for='fixedAssetMethod') Depreciation
+                              select.form-select.form-select-dark#fixedAssetMethod
+                                option(value='usage' selected) Usage based
+                                option(value='straight_line') Straight line
                             .col-6
-                              label.form-label.text-muted-light(for='equityFixedAssetMethod') Depreciation
-                              select.form-select.form-select-dark#equityFixedAssetMethod
-                                option(value='straight_line' selected) Straight line
-                                option(value='usage') Usage based
+                              label.form-label.text-muted-light(for='fixedAssetDate') Purchase date
+                              input.form-control.form-control-dark#fixedAssetDate(type='date', value=defaultTo)
                           .row.g-2.mt-1
-                            .col-6#equityFixedAssetUnitsWrap
-                              label.form-label.text-muted-light(for='equityFixedAssetUnits') Useful life units
-                              input.form-control.form-control-dark#equityFixedAssetUnits(type='number', min='0', step='1', placeholder='e.g. 1000000')
-                            .col-6#equityFixedAssetMonthsWrap
-                              label.form-label.text-muted-light(for='equityFixedAssetMonths') Useful life months
-                              input.form-control.form-control-dark#equityFixedAssetMonths(type='number', min='0', step='1', placeholder='e.g. 60')
-                      .mb-2#equityCashBookWrap
-                        label.form-label.text-muted-light(for='equityCashBook') Cash book affected
-                        select.form-select.form-select-dark#equityCashBook
-                          option(value='') Select cash book
-                          each book in cashBooks
-                            option(value=book._id data-kind=book.kind)= `${book.name} (${book.kind === 'momo' ? 'MoMo' : (book.kind === 'bank' ? 'Bank' : 'Cash')})`
-                      .row.g-2.d-none#equityMomoWrap
-                        .col-6
-                          label.form-label.text-muted-light(for='equityMomoNumber') MoMo number
-                          input.form-control.form-control-dark#equityMomoNumber(type='text')
-                        .col-6
-                          label.form-label.text-muted-light(for='equityMomoTxId') Transaction ID
-                          input.form-control.form-control-dark#equityMomoTxId(type='text')
-                      .row.g-2.d-none#equityBankWrap
-                        .col-6
-                          label.form-label.text-muted-light(for='equityChequeNumber') Cheque number
-                          input.form-control.form-control-dark#equityChequeNumber(type='text')
-                        .col-6
-                          label.form-label.text-muted-light(for='equityDepositDetails') Deposit details
-                          input.form-control.form-control-dark#equityDepositDetails(type='text')
-                      button.btn.btn-primary#saveEquityTransactionBtn(type='submit') Save Equity Entry
-                      p.small.mt-2#equityTransactionStatus
-                  .col-lg-8
-                    h6.text-white Recent Equity Entries
-                    .table-responsive
-                      table.table.table-sm.table-hover#equityTransactionsTable
-                        thead
-                          tr
-                            th Date
-                            th Type
-                            th Account
-                            th Description
-                            th Cash Book
-                            th.text-end Amount
-                        tbody
-                          if equityTransactions && equityTransactions.length
-                            each entry in equityTransactions
-                              tr
-                                td #{entry.date ? new Date(entry.date).toLocaleDateString() : ''}
-                                td= entry.type
-                                td #{entry.accountCode} #{entry.accountName}
-                                td
-                                  div= entry.description
-                                  if entry.fixedAssetName
-                                    small.text-muted-light Asset: #{entry.fixedAssetName}
-                                td= entry.cashBookName
-                                td.text-end GH₵ #{Number(entry.amount || 0).toFixed(2)}
-                          else
-                            tr
-                              td.text-muted(colspan='6') No equity entries yet.
-
-              #tabManualExpenses.tab-pane.fade
-                .row.g-3
-                  .col-lg-4
-                    h6.text-white Record Manual Expense
-                    form#manualExpenseForm(data-disable-spinner='true')
-                      .mb-2
-                        label.form-label.text-muted-light(for='manualExpenseDescription') Description
-                        input.form-control.form-control-dark#manualExpenseDescription(type='text', required)
-                      .mb-2
-                        label.form-label.text-muted-light(for='manualExpenseCategory') Category
-                        select.form-select.form-select-dark#manualExpenseCategory
-                          each cat in categories
-                            option(value=cat._id)= cat.name
-                      .row.g-2
-                        .col-6
-                          label.form-label.text-muted-light(for='manualExpenseAmount') Amount
-                          input.form-control.form-control-dark#manualExpenseAmount(type='number', min='0.01', step='0.01', required)
-                        .col-6
-                          label.form-label.text-muted-light(for='manualExpenseDate') Date
-                          input.form-control.form-control-dark#manualExpenseDate(type='date', value=defaultTo)
-                      .mb-2.mt-2
-                        label.form-label.text-muted-light(for='manualExpenseTreatment') Treatment
-                        select.form-select.form-select-dark#manualExpenseTreatment
-                          option(value='expense' selected) Expense paid now
-                          option(value='accrued') Expense accrued/unpaid
-                          option(value='prepaid') Prepaid asset
-                      .card.dark-surface.border-secondary.mb-2.d-none#manualExpenseAutoReleaseWrap
-                        .card-body.p-2
-                          .form-check.form-switch.mb-2
-                            input.form-check-input#manualExpenseAutoRelease(type='checkbox')
-                            label.form-check-label.text-muted-light(for='manualExpenseAutoRelease') Auto release monthly
-                          .row.g-2.align-items-end
+                            .col-6#fixedAssetUnitsWrap
+                              label.form-label.text-muted-light(for='fixedAssetUnits') Useful life units
+                              input.form-control.form-control-dark#fixedAssetUnits(type='number', min='0', step='1', placeholder='e.g. 1000000')
+                            .col-6#fixedAssetMonthsWrap
+                              label.form-label.text-muted-light(for='fixedAssetMonths') Useful life months
+                              input.form-control.form-control-dark#fixedAssetMonths(type='number', min='0', step='1')
+                          p.small.text-muted-light.mt-2.mb-0 Usage based posts when the linked printer is used. Straight line posts automatically once per month.
+                          .mb-2.mt-2
+                            label.form-label.text-muted-light(for='fixedAssetCashBook') Cash book used
+                            select.form-select.form-select-dark#fixedAssetCashBook
+                              option(value='') Bought on credit / unpaid
+                              each book in cashBooks
+                                option(value=book._id data-kind=book.kind)= `${book.name} (${book.kind === 'momo' ? 'MoMo' : (book.kind === 'bank' ? 'Bank' : 'Cash')})`
+                          .row.g-2.d-none#fixedAssetMomoWrap
                             .col-6
-                              label.form-label.text-muted-light(for='manualExpenseReleaseMonths') Number of months
-                              input.form-control.form-control-dark#manualExpenseReleaseMonths(type='number', min='1', step='1', placeholder='e.g. 6')
+                              label.form-label.text-muted-light(for='fixedAssetMomoNumber') MoMo number
+                              input.form-control.form-control-dark#fixedAssetMomoNumber(type='text')
                             .col-6
-                              small.text-muted-light#manualExpenseAutoReleaseHint Manual release remains available.
-                      .mb-2#manualExpenseCashBookWrap
-                        label.form-label.text-muted-light(for='manualExpenseCashBook') Cash book
-                        select.form-select.form-select-dark#manualExpenseCashBook
-                          option(value='') Select cash book
-                          each book in cashBooks
-                            option(value=book._id data-kind=book.kind)= `${book.name} (${book.kind === 'momo' ? 'MoMo' : (book.kind === 'bank' ? 'Bank' : 'Cash')})`
-                      .row.g-2.d-none#manualExpenseMomoWrap
-                        .col-6
-                          label.form-label.text-muted-light(for='manualExpenseMomoNumber') MoMo number
-                          input.form-control.form-control-dark#manualExpenseMomoNumber(type='text')
-                        .col-6
-                          label.form-label.text-muted-light(for='manualExpenseMomoTxId') Transaction ID
-                          input.form-control.form-control-dark#manualExpenseMomoTxId(type='text')
-                      .row.g-2.d-none#manualExpenseBankWrap
-                        .col-6
-                          label.form-label.text-muted-light(for='manualExpenseChequeNumber') Cheque number
-                          input.form-control.form-control-dark#manualExpenseChequeNumber(type='text')
-                        .col-6
-                          label.form-label.text-muted-light(for='manualExpenseDepositDetails') Deposit details
-                          input.form-control.form-control-dark#manualExpenseDepositDetails(type='text')
-                      button.btn.btn-primary#saveManualExpenseBtn(type='submit') Save Expense
-                      p.small.mt-2#manualExpenseStatus
-                  .col-lg-8
-                    h6.text-white Recent Manual Expenses
-                    .table-responsive
-                      table.table.table-sm.table-hover#manualExpensesTable
-                        thead
-                          tr
-                            th Date
-                            th Description
-                            th Category
-                            th Treatment
-                            th.text-end Amount
-                        tbody
-                          if expenses && expenses.length
-                            each e in expenses
+                              label.form-label.text-muted-light(for='fixedAssetMomoTxId') Transaction ID
+                              input.form-control.form-control-dark#fixedAssetMomoTxId(type='text')
+                          .row.g-2.d-none#fixedAssetBankWrap
+                            .col-6
+                              label.form-label.text-muted-light(for='fixedAssetChequeNumber') Cheque number
+                              input.form-control.form-control-dark#fixedAssetChequeNumber(type='text')
+                            .col-6
+                              label.form-label.text-muted-light(for='fixedAssetDepositDetails') Deposit details
+                              input.form-control.form-control-dark#fixedAssetDepositDetails(type='text')
+                          .mb-2
+                            label.form-label.text-muted-light(for='fixedAssetNote') Note
+                            input.form-control.form-control-dark#fixedAssetNote(type='text')
+                          button.btn.btn-primary#saveFixedAssetBtn(type='submit') Save Asset
+                          p.small.mt-2#fixedAssetStatus
+                      .col-lg-8
+                        h6.text-white Fixed Assets
+                        .table-responsive
+                          table.table.table-sm.table-hover#fixedAssetsTable
+                            thead
                               tr
-                                td #{e.date ? new Date(e.date).toLocaleDateString() : ''}
-                                td= e.description
-                                td= e.categoryName
-                                td= e.treatment
-                                td.text-end GH₵ #{Number(e.amount || 0).toFixed(2)}
-                          else
-                            tr
-                              td.text-muted(colspan='5') No manual expenses yet.
+                                th Asset
+                                th Printer
+                                th Method
+                                th.text-end Cost
+                                th.text-end Accum. Dep.
+                                th.text-end Action
+                            tbody
+                              if assets && assets.length
+                                each a in assets
+                                  tr
+                                    td
+                                      span= a.name
+                                      if a.code
+                                        span.badge.bg-info.text-dark.ms-2= a.code
+                                    td= a.printer ? a.printer.name : '-'
+                                    td= a.depreciationMethod
+                                    td.text-end GH₵ #{Number(a.purchaseCost || 0).toFixed(2)}
+                                    td.text-end GH₵ #{Number(a.accumulatedDepreciation || 0).toFixed(2)}
+                                    td.text-end
+                                      if a.depreciationMethod === 'straight_line'
+                                        span.badge.bg-info.text-dark Auto monthly
+                                      else
+                                        span.badge.bg-secondary Auto per usage
+                              else
+                                tr
+                                  td.text-muted(colspan='6') No fixed assets yet.
 
-              #tabAccruedExpenses.tab-pane.fade
-                .row.g-3
-                  .col-lg-4
-                    h6.text-white Pay Accrued Expense
-                    form#accruedPaymentForm(data-disable-spinner='true')
-                      .mb-2
-                        label.form-label.text-muted-light(for='accruedExpenseSelect') Accrued item
-                        select.form-select.form-select-dark#accruedExpenseSelect(required)
-                          option(value='') Select accrued expense
-                          each a in accruedExpenses
-                            if Number(a.remainingAmount || 0) > 0
-                              option(value=a._id data-remaining=Number(a.remainingAmount || 0).toFixed(2)) #{a.description} - remaining GH₵ #{Number(a.remainingAmount || 0).toFixed(2)}
-                      .row.g-2
-                        .col-6
-                          label.form-label.text-muted-light(for='accruedPaymentAmount') Payment amount
-                          input.form-control.form-control-dark#accruedPaymentAmount(type='number', min='0.01', step='0.01', required)
-                        .col-6
-                          label.form-label.text-muted-light(for='accruedPaymentDate') Payment date
-                          input.form-control.form-control-dark#accruedPaymentDate(type='date', value=defaultTo)
-                      .mb-2.mt-2
-                        label.form-label.text-muted-light(for='accruedPaymentCashBook') Cash book
-                        select.form-select.form-select-dark#accruedPaymentCashBook(required)
-                          option(value='') Select cash book
-                          each book in cashBooks
-                            option(value=book._id data-kind=book.kind)= `${book.name} (${book.kind === 'momo' ? 'MoMo' : (book.kind === 'bank' ? 'Bank' : 'Cash')})`
-                      .row.g-2.d-none#accruedPaymentMomoWrap
-                        .col-6
-                          label.form-label.text-muted-light(for='accruedPaymentMomoNumber') MoMo number
-                          input.form-control.form-control-dark#accruedPaymentMomoNumber(type='text')
-                        .col-6
-                          label.form-label.text-muted-light(for='accruedPaymentMomoTxId') Transaction ID
-                          input.form-control.form-control-dark#accruedPaymentMomoTxId(type='text')
-                      .row.g-2.d-none#accruedPaymentBankWrap
-                        .col-6
-                          label.form-label.text-muted-light(for='accruedPaymentChequeNumber') Cheque number
-                          input.form-control.form-control-dark#accruedPaymentChequeNumber(type='text')
-                        .col-6
-                          label.form-label.text-muted-light(for='accruedPaymentDepositDetails') Payment details
-                          input.form-control.form-control-dark#accruedPaymentDepositDetails(type='text')
-                      .mb-2.mt-2
-                        label.form-label.text-muted-light(for='accruedPaymentNote') Note
-                        input.form-control.form-control-dark#accruedPaymentNote(type='text', placeholder='e.g. Salary paid')
-                      button.btn.btn-outline-primary#accruedPaymentBtn(type='submit') Pay Accrued
-                      p.small.mt-2#accruedPaymentStatus
-                  .col-lg-8
-                    h6.text-white Accrued Payables
-                    .table-responsive.mb-3
-                      table.table.table-sm.table-hover#accruedExpensesTable
-                        thead
-                          tr
-                            th Date
-                            th Description
-                            th Category
-                            th.text-end Original
-                            th.text-end Paid
-                            th.text-end Remaining
-                            th.text-end Posting
-                        tbody
-                          if accruedExpenses && accruedExpenses.length
-                            each a in accruedExpenses
-                              tr
-                                td #{a.date ? new Date(a.date).toLocaleDateString() : ''}
-                                td= a.description
-                                td= a.categoryName
-                                td.text-end GH₵ #{Number(a.amount || 0).toFixed(2)}
-                                td.text-end GH₵ #{Number(a.paidAmount || 0).toFixed(2)}
-                                td.text-end GH₵ #{Number(a.remainingAmount || 0).toFixed(2)}
-                                td.text-end
-                                  if Number(a.remainingAmount || 0) > 0
-                                    button.btn.btn-outline-light-custom.btn-sm.use-accrued-payment-btn(type='button', data-accrued-id=a._id, data-remaining=Number(a.remainingAmount || 0).toFixed(2), data-description=a.description) Pay
-                                  else
-                                    span.badge.bg-success Paid
-                          else
-                            tr
-                              td.text-muted(colspan='7') No accrued expenses yet.
-                    h6.text-white Recent Accrued Payments
-                    .table-responsive
-                      table.table.table-sm.table-hover#accruedPaymentsTable
-                        thead
-                          tr
-                            th Date
-                            th Description
-                            th Category
-                            th Cash Book
-                            th Note
-                            th.text-end Amount
-                        tbody
-                          if accruedPayments && accruedPayments.length
-                            each p in accruedPayments
-                              tr
-                                td #{p.date ? new Date(p.date).toLocaleDateString() : ''}
-                                td= p.description
-                                td= p.categoryName
-                                td= p.cashBookName
-                                td= p.note
-                                td.text-end GH₵ #{Number(p.amount || 0).toFixed(2)}
-                          else
-                            tr
-                              td.text-muted(colspan='6') No accrued payments yet.
 
-              #tabPrepaidExpenses.tab-pane.fade
-                .row.g-3
-                  .col-lg-4
-                    h6.text-white Release Prepaid Expense
-                    form#prepaidReleaseForm(data-disable-spinner='true')
-                      .mb-2
-                        label.form-label.text-muted-light(for='prepaidExpenseSelect') Prepaid item
-                        select.form-select.form-select-dark#prepaidExpenseSelect(required)
-                          option(value='') Select prepaid expense
-                          each p in prepaids
-                            if Number(p.remainingAmount || 0) > 0
-                              option(value=p._id data-remaining=Number(p.remainingAmount || 0).toFixed(2)) #{p.description} - remaining GH₵ #{Number(p.remainingAmount || 0).toFixed(2)}
-                      .row.g-2
-                        .col-6
-                          label.form-label.text-muted-light(for='prepaidReleaseAmount') Release amount
-                          input.form-control.form-control-dark#prepaidReleaseAmount(type='number', min='0.01', step='0.01', required)
-                        .col-6
-                          label.form-label.text-muted-light(for='prepaidReleaseDate') Release date
-                          input.form-control.form-control-dark#prepaidReleaseDate(type='date', value=defaultTo)
-                      .mb-2.mt-2
-                        label.form-label.text-muted-light(for='prepaidReleaseNote') Note
-                        input.form-control.form-control-dark#prepaidReleaseNote(type='text', placeholder='e.g. May rent release')
-                      button.btn.btn-outline-primary#savePrepaidReleaseBtn(type='submit') Release To Expense
-                      p.small.mt-2#prepaidReleaseStatus
-                  .col-lg-8
-                    h6.text-white Prepaid Balances
-                    .table-responsive.mb-3
-                      table.table.table-sm.table-hover#prepaidExpensesTable
-                        thead
-                          tr
-                            th Date
-                            th Description
-                            th Category
-                            th.text-end Original
-                            th.text-end Released
-                            th.text-end Remaining
-                            th Release
-                            th.text-end Action
-                        tbody
-                          if prepaids && prepaids.length
-                            each p in prepaids
-                              tr
-                                td #{p.date ? new Date(p.date).toLocaleDateString() : ''}
-                                td= p.description
-                                td= p.categoryName
-                                td.text-end GH₵ #{Number(p.amount || 0).toFixed(2)}
-                                td.text-end GH₵ #{Number(p.releasedAmount || 0).toFixed(2)}
-                                td.text-end GH₵ #{Number(p.remainingAmount || 0).toFixed(2)}
-                                td
-                                  if p.autoReleaseEnabled
-                                    span.badge.bg-info.text-dark Auto #{Number(p.releaseMonths || 0)} mo.
-                                  else
-                                    span.badge.bg-secondary Manual
-                                td.text-end
-                                  if Number(p.remainingAmount || 0) > 0
-                                    button.btn.btn-outline-light-custom.btn-sm.use-prepaid-release-btn(type='button', data-prepaid-id=p._id, data-remaining=Number(p.remainingAmount || 0).toFixed(2), data-description=p.description) Release
-                                  else
-                                    span.badge.bg-success Fully released
-                          else
-                            tr
-                              td.text-muted(colspan='8') No prepaid expenses yet.
-                    h6.text-white Recent Releases
-                    .table-responsive
-                      table.table.table-sm.table-hover#prepaidReleasesTable
-                        thead
-                          tr
-                            th Date
-                            th Description
-                            th Category
-                            th Note
-                            th.text-end Amount
-                        tbody
-                          if prepaidReleases && prepaidReleases.length
-                            each r in prepaidReleases
-                              tr
-                                td #{r.date ? new Date(r.date).toLocaleDateString() : ''}
-                                td= r.description
-                                td= r.categoryName
-                                td= r.note
-                                td.text-end GH₵ #{Number(r.amount || 0).toFixed(2)}
-                          else
-                            tr
-                              td.text-muted(colspan='5') No prepaid releases yet.
-
-              #tabFixedAssets.tab-pane.fade
-                .row.g-3
-                  .col-lg-4
-                    h6.text-white Create Fixed Asset
-                    form#fixedAssetForm(data-disable-spinner='true')
-                      .mb-2
-                        label.form-label.text-muted-light(for='fixedAssetName') Name
-                        input.form-control.form-control-dark#fixedAssetName(type='text', placeholder='e.g. Canon Printer', required)
-                      .mb-2
-                        label.form-label.text-muted-light(for='fixedAssetPrinter') Linked printer
-                        select.form-select.form-select-dark#fixedAssetPrinter
-                          option(value='') Not linked
-                          each p in printers
-                            option(value=p._id)= p.name
-                      .row.g-2
-                        .col-6
-                          label.form-label.text-muted-light(for='fixedAssetCost') Purchase cost
-                          input.form-control.form-control-dark#fixedAssetCost(type='number', min='0.01', step='0.01', required)
-                        .col-6
-                          label.form-label.text-muted-light(for='fixedAssetResidual') Residual value
-                          input.form-control.form-control-dark#fixedAssetResidual(type='number', min='0', step='0.01', value='0')
-                      .row.g-2.mt-1
-                        .col-6
-                          label.form-label.text-muted-light(for='fixedAssetMethod') Depreciation
-                          select.form-select.form-select-dark#fixedAssetMethod
-                            option(value='usage' selected) Usage based
-                            option(value='straight_line') Straight line
-                        .col-6
-                          label.form-label.text-muted-light(for='fixedAssetDate') Purchase date
-                          input.form-control.form-control-dark#fixedAssetDate(type='date', value=defaultTo)
-                      .row.g-2.mt-1
-                        .col-6#fixedAssetUnitsWrap
-                          label.form-label.text-muted-light(for='fixedAssetUnits') Useful life units
-                          input.form-control.form-control-dark#fixedAssetUnits(type='number', min='0', step='1', placeholder='e.g. 1000000')
-                        .col-6#fixedAssetMonthsWrap
-                          label.form-label.text-muted-light(for='fixedAssetMonths') Useful life months
-                          input.form-control.form-control-dark#fixedAssetMonths(type='number', min='0', step='1')
-                      p.small.text-muted-light.mt-2.mb-0 Usage based posts when the linked printer is used. Straight line posts automatically once per month.
-                      .mb-2.mt-2
-                        label.form-label.text-muted-light(for='fixedAssetCashBook') Cash book used
-                        select.form-select.form-select-dark#fixedAssetCashBook
-                          option(value='') Bought on credit / unpaid
-                          each book in cashBooks
-                            option(value=book._id data-kind=book.kind)= `${book.name} (${book.kind === 'momo' ? 'MoMo' : (book.kind === 'bank' ? 'Bank' : 'Cash')})`
-                      .row.g-2.d-none#fixedAssetMomoWrap
-                        .col-6
-                          label.form-label.text-muted-light(for='fixedAssetMomoNumber') MoMo number
-                          input.form-control.form-control-dark#fixedAssetMomoNumber(type='text')
-                        .col-6
-                          label.form-label.text-muted-light(for='fixedAssetMomoTxId') Transaction ID
-                          input.form-control.form-control-dark#fixedAssetMomoTxId(type='text')
-                      .row.g-2.d-none#fixedAssetBankWrap
-                        .col-6
-                          label.form-label.text-muted-light(for='fixedAssetChequeNumber') Cheque number
-                          input.form-control.form-control-dark#fixedAssetChequeNumber(type='text')
-                        .col-6
-                          label.form-label.text-muted-light(for='fixedAssetDepositDetails') Deposit details
-                          input.form-control.form-control-dark#fixedAssetDepositDetails(type='text')
-                      .mb-2
-                        label.form-label.text-muted-light(for='fixedAssetNote') Note
-                        input.form-control.form-control-dark#fixedAssetNote(type='text')
-                      button.btn.btn-primary#saveFixedAssetBtn(type='submit') Save Asset
-                      p.small.mt-2#fixedAssetStatus
-                  .col-lg-8
-                    h6.text-white Fixed Assets
-                    .table-responsive
-                      table.table.table-sm.table-hover#fixedAssetsTable
-                        thead
-                          tr
-                            th Asset
-                            th Printer
-                            th Method
-                            th.text-end Cost
-                            th.text-end Accum. Dep.
-                            th.text-end Action
-                        tbody
-                          if assets && assets.length
-                            each a in assets
-                              tr
-                                td
-                                  span= a.name
-                                  if a.code
-                                    span.badge.bg-info.text-dark.ms-2= a.code
-                                td= a.printer ? a.printer.name : '-'
-                                td= a.depreciationMethod
-                                td.text-end GH₵ #{Number(a.purchaseCost || 0).toFixed(2)}
-                                td.text-end GH₵ #{Number(a.accumulatedDepreciation || 0).toFixed(2)}
-                                td.text-end
-                                  if a.depreciationMethod === 'straight_line'
-                                    span.badge.bg-info.text-dark Auto monthly
-                                  else
-                                    span.badge.bg-secondary Auto per usage
-                          else
-                            tr
-                              td.text-muted(colspan='6') No fixed assets yet.
-
-              #tabJournal.tab-pane.fade
+              #accountingExpenseAdjustment.tab-pane.fade
                 .d-flex.justify-content-between.align-items-center.mb-2
-                  h6.text-white.mb-0 Recent Journal Entries
-                  button.btn.btn-outline-info.btn-sm(type='button', data-bs-toggle='modal', data-bs-target='#journalHelpModal', aria-label='Journal help') Journal Help
-                .table-responsive
-                  table.table.table-sm.table-hover#journalEntriesTable
-                    thead
-                      tr
-                        th Date
-                        th Source
-                        th Memo
-                        th Lines
-                    tbody
-                      if entries && entries.length
-                        each j in entries
+                  div
+                    h5.text-white.mb-0 Expenses Adjustment
+                    p.text-muted-light.small.mb-0 Record, settle, and release expense adjustments.
+                ul.nav.nav-pills.mb-3(role='tablist')
+                  li.nav-item(role='presentation')
+                    button.nav-link.active(type='button', data-bs-toggle='tab', data-bs-target='#tabManualExpenses') Manual Expenditure
+                  li.nav-item(role='presentation')
+                    button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabAccruedExpenses') Accrued Expenditure
+                  li.nav-item(role='presentation')
+                    button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabPrepaidExpenses') Prepaid Expenditure
+                .tab-content
+                  #tabManualExpenses.tab-pane.fade.show.active
+                    .row.g-3
+                      .col-lg-4
+                        h6.text-white Record Manual Expense
+                        form#manualExpenseForm(data-disable-spinner='true')
+                          .mb-2
+                            label.form-label.text-muted-light(for='manualExpenseDescription') Description
+                            input.form-control.form-control-dark#manualExpenseDescription(type='text', required)
+                          .mb-2
+                            label.form-label.text-muted-light(for='manualExpenseCategory') Category
+                            select.form-select.form-select-dark#manualExpenseCategory
+                              each cat in categories
+                                option(value=cat._id)= cat.name
+                          .row.g-2
+                            .col-6
+                              label.form-label.text-muted-light(for='manualExpenseAmount') Amount
+                              input.form-control.form-control-dark#manualExpenseAmount(type='number', min='0.01', step='0.01', required)
+                            .col-6
+                              label.form-label.text-muted-light(for='manualExpenseDate') Date
+                              input.form-control.form-control-dark#manualExpenseDate(type='date', value=defaultTo)
+                          .mb-2.mt-2
+                            label.form-label.text-muted-light(for='manualExpenseTreatment') Treatment
+                            select.form-select.form-select-dark#manualExpenseTreatment
+                              option(value='expense' selected) Expense paid now
+                              option(value='accrued') Expense accrued/unpaid
+                              option(value='prepaid') Prepaid asset
+                          .card.dark-surface.border-secondary.mb-2.d-none#manualExpenseAutoReleaseWrap
+                            .card-body.p-2
+                              .form-check.form-switch.mb-2
+                                input.form-check-input#manualExpenseAutoRelease(type='checkbox')
+                                label.form-check-label.text-muted-light(for='manualExpenseAutoRelease') Auto release monthly
+                              .row.g-2.align-items-end
+                                .col-6
+                                  label.form-label.text-muted-light(for='manualExpenseReleaseMonths') Number of months
+                                  input.form-control.form-control-dark#manualExpenseReleaseMonths(type='number', min='1', step='1', placeholder='e.g. 6')
+                                .col-6
+                                  small.text-muted-light#manualExpenseAutoReleaseHint Manual release remains available.
+                          .mb-2#manualExpenseCashBookWrap
+                            label.form-label.text-muted-light(for='manualExpenseCashBook') Cash book
+                            select.form-select.form-select-dark#manualExpenseCashBook
+                              option(value='') Select cash book
+                              each book in cashBooks
+                                option(value=book._id data-kind=book.kind)= `${book.name} (${book.kind === 'momo' ? 'MoMo' : (book.kind === 'bank' ? 'Bank' : 'Cash')})`
+                          .row.g-2.d-none#manualExpenseMomoWrap
+                            .col-6
+                              label.form-label.text-muted-light(for='manualExpenseMomoNumber') MoMo number
+                              input.form-control.form-control-dark#manualExpenseMomoNumber(type='text')
+                            .col-6
+                              label.form-label.text-muted-light(for='manualExpenseMomoTxId') Transaction ID
+                              input.form-control.form-control-dark#manualExpenseMomoTxId(type='text')
+                          .row.g-2.d-none#manualExpenseBankWrap
+                            .col-6
+                              label.form-label.text-muted-light(for='manualExpenseChequeNumber') Cheque number
+                              input.form-control.form-control-dark#manualExpenseChequeNumber(type='text')
+                            .col-6
+                              label.form-label.text-muted-light(for='manualExpenseDepositDetails') Deposit details
+                              input.form-control.form-control-dark#manualExpenseDepositDetails(type='text')
+                          button.btn.btn-primary#saveManualExpenseBtn(type='submit') Save Expense
+                          p.small.mt-2#manualExpenseStatus
+                      .col-lg-8
+                        h6.text-white Recent Manual Expenses
+                        .table-responsive
+                          table.table.table-sm.table-hover#manualExpensesTable
+                            thead
+                              tr
+                                th Date
+                                th Description
+                                th Category
+                                th Treatment
+                                th.text-end Amount
+                            tbody
+                              if expenses && expenses.length
+                                each e in expenses
+                                  tr
+                                    td #{e.date ? new Date(e.date).toLocaleDateString() : ''}
+                                    td= e.description
+                                    td= e.categoryName
+                                    td= e.treatment
+                                    td.text-end GH₵ #{Number(e.amount || 0).toFixed(2)}
+                              else
+                                tr
+                                  td.text-muted(colspan='5') No manual expenses yet.
+
+                  #tabAccruedExpenses.tab-pane.fade
+                    .row.g-3
+                      .col-lg-4
+                        h6.text-white Pay Accrued Expense
+                        form#accruedPaymentForm(data-disable-spinner='true')
+                          .mb-2
+                            label.form-label.text-muted-light(for='accruedExpenseSelect') Accrued item
+                            select.form-select.form-select-dark#accruedExpenseSelect(required)
+                              option(value='') Select accrued expense
+                              each a in accruedExpenses
+                                if Number(a.remainingAmount || 0) > 0
+                                  option(value=a._id data-remaining=Number(a.remainingAmount || 0).toFixed(2)) #{a.description} - remaining GH₵ #{Number(a.remainingAmount || 0).toFixed(2)}
+                          .row.g-2
+                            .col-6
+                              label.form-label.text-muted-light(for='accruedPaymentAmount') Payment amount
+                              input.form-control.form-control-dark#accruedPaymentAmount(type='number', min='0.01', step='0.01', required)
+                            .col-6
+                              label.form-label.text-muted-light(for='accruedPaymentDate') Payment date
+                              input.form-control.form-control-dark#accruedPaymentDate(type='date', value=defaultTo)
+                          .mb-2.mt-2
+                            label.form-label.text-muted-light(for='accruedPaymentCashBook') Cash book
+                            select.form-select.form-select-dark#accruedPaymentCashBook(required)
+                              option(value='') Select cash book
+                              each book in cashBooks
+                                option(value=book._id data-kind=book.kind)= `${book.name} (${book.kind === 'momo' ? 'MoMo' : (book.kind === 'bank' ? 'Bank' : 'Cash')})`
+                          .row.g-2.d-none#accruedPaymentMomoWrap
+                            .col-6
+                              label.form-label.text-muted-light(for='accruedPaymentMomoNumber') MoMo number
+                              input.form-control.form-control-dark#accruedPaymentMomoNumber(type='text')
+                            .col-6
+                              label.form-label.text-muted-light(for='accruedPaymentMomoTxId') Transaction ID
+                              input.form-control.form-control-dark#accruedPaymentMomoTxId(type='text')
+                          .row.g-2.d-none#accruedPaymentBankWrap
+                            .col-6
+                              label.form-label.text-muted-light(for='accruedPaymentChequeNumber') Cheque number
+                              input.form-control.form-control-dark#accruedPaymentChequeNumber(type='text')
+                            .col-6
+                              label.form-label.text-muted-light(for='accruedPaymentDepositDetails') Payment details
+                              input.form-control.form-control-dark#accruedPaymentDepositDetails(type='text')
+                          .mb-2.mt-2
+                            label.form-label.text-muted-light(for='accruedPaymentNote') Note
+                            input.form-control.form-control-dark#accruedPaymentNote(type='text', placeholder='e.g. Salary paid')
+                          button.btn.btn-outline-primary#accruedPaymentBtn(type='submit') Pay Accrued
+                          p.small.mt-2#accruedPaymentStatus
+                      .col-lg-8
+                        h6.text-white Accrued Payables
+                        .table-responsive.mb-3
+                          table.table.table-sm.table-hover#accruedExpensesTable
+                            thead
+                              tr
+                                th Date
+                                th Description
+                                th Category
+                                th.text-end Original
+                                th.text-end Paid
+                                th.text-end Remaining
+                                th.text-end Posting
+                            tbody
+                              if accruedExpenses && accruedExpenses.length
+                                each a in accruedExpenses
+                                  tr
+                                    td #{a.date ? new Date(a.date).toLocaleDateString() : ''}
+                                    td= a.description
+                                    td= a.categoryName
+                                    td.text-end GH₵ #{Number(a.amount || 0).toFixed(2)}
+                                    td.text-end GH₵ #{Number(a.paidAmount || 0).toFixed(2)}
+                                    td.text-end GH₵ #{Number(a.remainingAmount || 0).toFixed(2)}
+                                    td.text-end
+                                      if Number(a.remainingAmount || 0) > 0
+                                        button.btn.btn-outline-light-custom.btn-sm.use-accrued-payment-btn(type='button', data-accrued-id=a._id, data-remaining=Number(a.remainingAmount || 0).toFixed(2), data-description=a.description) Pay
+                                      else
+                                        span.badge.bg-success Paid
+                              else
+                                tr
+                                  td.text-muted(colspan='7') No accrued expenses yet.
+                        h6.text-white Recent Accrued Payments
+                        .table-responsive
+                          table.table.table-sm.table-hover#accruedPaymentsTable
+                            thead
+                              tr
+                                th Date
+                                th Description
+                                th Category
+                                th Cash Book
+                                th Note
+                                th.text-end Amount
+                            tbody
+                              if accruedPayments && accruedPayments.length
+                                each p in accruedPayments
+                                  tr
+                                    td #{p.date ? new Date(p.date).toLocaleDateString() : ''}
+                                    td= p.description
+                                    td= p.categoryName
+                                    td= p.cashBookName
+                                    td= p.note
+                                    td.text-end GH₵ #{Number(p.amount || 0).toFixed(2)}
+                              else
+                                tr
+                                  td.text-muted(colspan='6') No accrued payments yet.
+
+                  #tabPrepaidExpenses.tab-pane.fade
+                    .row.g-3
+                      .col-lg-4
+                        h6.text-white Release Prepaid Expense
+                        form#prepaidReleaseForm(data-disable-spinner='true')
+                          .mb-2
+                            label.form-label.text-muted-light(for='prepaidExpenseSelect') Prepaid item
+                            select.form-select.form-select-dark#prepaidExpenseSelect(required)
+                              option(value='') Select prepaid expense
+                              each p in prepaids
+                                if Number(p.remainingAmount || 0) > 0
+                                  option(value=p._id data-remaining=Number(p.remainingAmount || 0).toFixed(2)) #{p.description} - remaining GH₵ #{Number(p.remainingAmount || 0).toFixed(2)}
+                          .row.g-2
+                            .col-6
+                              label.form-label.text-muted-light(for='prepaidReleaseAmount') Release amount
+                              input.form-control.form-control-dark#prepaidReleaseAmount(type='number', min='0.01', step='0.01', required)
+                            .col-6
+                              label.form-label.text-muted-light(for='prepaidReleaseDate') Release date
+                              input.form-control.form-control-dark#prepaidReleaseDate(type='date', value=defaultTo)
+                          .mb-2.mt-2
+                            label.form-label.text-muted-light(for='prepaidReleaseNote') Note
+                            input.form-control.form-control-dark#prepaidReleaseNote(type='text', placeholder='e.g. May rent release')
+                          button.btn.btn-outline-primary#savePrepaidReleaseBtn(type='submit') Release To Expense
+                          p.small.mt-2#prepaidReleaseStatus
+                      .col-lg-8
+                        h6.text-white Prepaid Balances
+                        .table-responsive.mb-3
+                          table.table.table-sm.table-hover#prepaidExpensesTable
+                            thead
+                              tr
+                                th Date
+                                th Description
+                                th Category
+                                th.text-end Original
+                                th.text-end Released
+                                th.text-end Remaining
+                                th Release
+                                th.text-end Action
+                            tbody
+                              if prepaids && prepaids.length
+                                each p in prepaids
+                                  tr
+                                    td #{p.date ? new Date(p.date).toLocaleDateString() : ''}
+                                    td= p.description
+                                    td= p.categoryName
+                                    td.text-end GH₵ #{Number(p.amount || 0).toFixed(2)}
+                                    td.text-end GH₵ #{Number(p.releasedAmount || 0).toFixed(2)}
+                                    td.text-end GH₵ #{Number(p.remainingAmount || 0).toFixed(2)}
+                                    td
+                                      if p.autoReleaseEnabled
+                                        span.badge.bg-info.text-dark Auto #{Number(p.releaseMonths || 0)} mo.
+                                      else
+                                        span.badge.bg-secondary Manual
+                                    td.text-end
+                                      if Number(p.remainingAmount || 0) > 0
+                                        button.btn.btn-outline-light-custom.btn-sm.use-prepaid-release-btn(type='button', data-prepaid-id=p._id, data-remaining=Number(p.remainingAmount || 0).toFixed(2), data-description=p.description) Release
+                                      else
+                                        span.badge.bg-success Fully released
+                              else
+                                tr
+                                  td.text-muted(colspan='8') No prepaid expenses yet.
+                        h6.text-white Recent Releases
+                        .table-responsive
+                          table.table.table-sm.table-hover#prepaidReleasesTable
+                            thead
+                              tr
+                                th Date
+                                th Description
+                                th Category
+                                th Note
+                                th.text-end Amount
+                            tbody
+                              if prepaidReleases && prepaidReleases.length
+                                each r in prepaidReleases
+                                  tr
+                                    td #{r.date ? new Date(r.date).toLocaleDateString() : ''}
+                                    td= r.description
+                                    td= r.categoryName
+                                    td= r.note
+                                    td.text-end GH₵ #{Number(r.amount || 0).toFixed(2)}
+                              else
+                                tr
+                                  td.text-muted(colspan='5') No prepaid releases yet.
+
+
+              #accountingFinancialControl.tab-pane.fade
+                .d-flex.justify-content-between.align-items-center.mb-2
+                  div
+                    h5.text-white.mb-0 Financial Control
+                    p.text-muted-light.small.mb-0 Verify journals and account balances.
+                ul.nav.nav-pills.mb-3(role='tablist')
+                  li.nav-item(role='presentation')
+                    button.nav-link.active(type='button', data-bs-toggle='tab', data-bs-target='#tabTrialBalance') Trial Balance
+                  li.nav-item(role='presentation')
+                    button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabJournal') Journal
+                .tab-content
+                  #tabTrialBalance.tab-pane.fade.show.active
+                    .d-flex.flex-wrap.gap-2.align-items-end.mb-3
+                      div
+                        label.form-label.small.text-muted-light(for='trialBalanceTo') As of
+                        input.form-control.form-control-sm.form-control-dark#trialBalanceTo(type='date', value=defaultTo)
+                      button.btn.btn-primary.btn-sm#loadTrialBalanceBtn(type='button') Load Trial Balance
+                      small.text-muted-light.ms-sm-2 Trial Balance summarizes all journal balances up to the selected date.
+                    .row.g-2.mb-3
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Total Debit
+                            strong#trialBalanceDebit GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Total Credit
+                            strong#trialBalanceCredit GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Difference
+                            strong#trialBalanceDifference GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Status
+                            span.badge#trialBalanceStatusBadge.bg-secondary Loading
+                    .table-responsive
+                      table.table.table-sm.table-hover#trialBalanceTable
+                        thead
                           tr
-                            td #{j.date ? new Date(j.date).toLocaleString() : ''}
-                            td= j.sourceType
-                            td= j.memo
-                            td
-                              each line in j.lines
-                                div.small #{line.accountCode} #{line.accountName}: Dr #{Number(line.debit || 0).toFixed(2)} / Cr #{Number(line.credit || 0).toFixed(2)}
-                      else
-                        tr
-                          td.text-muted(colspan='4') No journal entries yet.
+                            th Code
+                            th Account
+                            th Type
+                            th Group
+                            th.text-end Debit
+                            th.text-end Credit
+                        tbody
+                          tr
+                            td.text-muted(colspan='6') Loading...
+
+                  #tabJournal.tab-pane.fade
+                    .d-flex.justify-content-between.align-items-center.mb-2
+                      h6.text-white.mb-0 Recent Journal Entries
+                      button.btn.btn-outline-info.btn-sm(type='button', data-bs-toggle='modal', data-bs-target='#journalHelpModal', aria-label='Journal help') Journal Help
+                    .table-responsive
+                      table.table.table-sm.table-hover#journalEntriesTable
+                        thead
+                          tr
+                            th Date
+                            th Source
+                            th Memo
+                            th Lines
+                        tbody
+                          if entries && entries.length
+                            each j in entries
+                              tr
+                                td #{j.date ? new Date(j.date).toLocaleString() : ''}
+                                td= j.sourceType
+                                td= j.memo
+                                td
+                                  each line in j.lines
+                                    div.small #{line.accountCode} #{line.accountName}: Dr #{Number(line.debit || 0).toFixed(2)} / Cr #{Number(line.credit || 0).toFixed(2)}
+                          else
+                            tr
+                              td.text-muted(colspan='4') No journal entries yet.
 
     .modal.fade#journalHelpModal(tabindex='-1', aria-hidden='true')
       .modal-dialog.modal-xl.modal-dialog-scrollable

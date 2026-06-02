@@ -21,4 +21,7 @@ const ManualExpenseSchema = new mongoose.Schema({
   createdByName: { type: String, default: '' }
 }, { timestamps: true });
 
+ManualExpenseSchema.index({ treatment: 1, date: -1, createdAt: -1 });
+ManualExpenseSchema.index({ treatment: 1, autoReleaseEnabled: 1, releaseMonths: 1, date: 1 });
+
 module.exports = mongoose.model('ManualExpense', ManualExpenseSchema);

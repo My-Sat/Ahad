@@ -18,4 +18,8 @@ const PrinterUsageSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now, index: true }
 });
 
+PrinterUsageSchema.index({ orderRef: 1 });
+PrinterUsageSchema.index({ orderId: 1 });
+PrinterUsageSchema.index({ printer: 1, createdAt: -1 });
+
 module.exports = mongoose.model('PrinterUsage', PrinterUsageSchema);

@@ -17,5 +17,6 @@ const PrepaidReleaseSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 PrepaidReleaseSchema.index({ sourceKey: 1 }, { unique: true, sparse: true });
+PrepaidReleaseSchema.index({ date: -1, createdAt: -1 });
 
 module.exports = mongoose.model('PrepaidRelease', PrepaidReleaseSchema);

@@ -29,4 +29,6 @@ const EquityTransactionSchema = new mongoose.Schema({
   createdByName: { type: String, trim: true, default: '' }
 }, { timestamps: true });
 
+EquityTransactionSchema.index({ date: -1, createdAt: -1 });
+
 module.exports = mongoose.model('EquityTransaction', EquityTransactionSchema);

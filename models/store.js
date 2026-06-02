@@ -8,5 +8,6 @@ const StoreSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 StoreSchema.index({ name: 1 }, { unique: true });
+StoreSchema.index({ isOperational: 1 });
 
 module.exports = mongoose.model('Store', StoreSchema);

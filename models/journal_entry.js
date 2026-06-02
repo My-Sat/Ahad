@@ -27,4 +27,7 @@ const JournalEntrySchema = new mongoose.Schema({
   postedByName: { type: String, trim: true, default: '' }
 }, { timestamps: { createdAt: 'createdAt', updatedAt: false } });
 
+JournalEntrySchema.index({ createdAt: -1, _id: -1 });
+JournalEntrySchema.index({ date: 1, 'lines.accountType': 1 });
+
 module.exports = mongoose.model('JournalEntry', JournalEntrySchema);

@@ -16,5 +16,6 @@ const StoreStockSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 StoreStockSchema.index({ store: 1, material: 1 }, { unique: true });
+StoreStockSchema.index({ store: 1, active: 1 });
 
 module.exports = mongoose.model('StoreStock', StoreStockSchema);

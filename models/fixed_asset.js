@@ -23,5 +23,7 @@ const FixedAssetSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 FixedAssetSchema.index({ printer: 1, active: 1 });
+FixedAssetSchema.index({ active: 1, depreciationMethod: 1, usefulLifeMonths: 1, purchaseDate: 1 });
+FixedAssetSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('FixedAsset', FixedAssetSchema);

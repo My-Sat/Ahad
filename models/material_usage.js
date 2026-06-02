@@ -26,6 +26,9 @@ const MaterialAggregateSchema = new mongoose.Schema({
   total: { type: Number, default: 0 }
 });
 
+MaterialUsageSchema.index({ orderRef: 1 });
+MaterialUsageSchema.index({ store: 1, material: 1, createdAt: -1 });
+
 // unique per store-material
 MaterialAggregateSchema.index({ store: 1, material: 1 }, { unique: true });
 

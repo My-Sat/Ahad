@@ -78,6 +78,11 @@ const OrderSchema = new mongoose.Schema({
   payments: { type: [PaymentSchema], default: [] }
 });
 
+OrderSchema.index({ customer: 1, createdAt: -1, _id: -1 });
+OrderSchema.index({ status: 1, createdAt: -1 });
+OrderSchema.index({ handledBy: 1, createdAt: -1 });
+OrderSchema.index({ 'items.outsourcedArtist': 1, createdAt: -1 });
+
 // instance helper to compute paid so far (not persisted)
 OrderSchema.methods.paidSoFar = function () {
   if (!this.payments || !this.payments.length) return 0;

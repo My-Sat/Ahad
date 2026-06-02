@@ -98,11 +98,14 @@ html(lang="en")
                       li
                         a.dropdown-item(href='/admin/cash-books', data-ajax='true', id='tab-cash-books') Cash Books
                       li
-                        a.dropdown-item(href='/admin/accounting', data-ajax='true', id='tab-accounting') Accounting
-                      li
                         a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging') Messaging
                       li
                         a.dropdown-item(href='/admin/discounts', data-ajax='true', id='tab-orders-discounts') Discounts
+
+                  li.nav-item
+                    a.nav-link.d-flex.align-items-center(href='/admin/accounting', data-ajax='true', role='tab', id='tab-accounting')
+                      i.bi.bi-journal-text.me-2(aria-hidden='true')
+                      | Ledger
 
                   li.nav-item
                     a.nav-link.d-flex.align-items-center(href='/admin/reports', data-ajax='true', role='tab', id='tab-reports')
@@ -219,8 +222,6 @@ html(lang="en")
                     li
                       a.dropdown-item(href='/admin/cash-books', data-ajax='true', id='tab-cash-books-sm') Configs - Cash Books
                     li
-                      a.dropdown-item(href='/admin/accounting', data-ajax='true', id='tab-accounting-sm') Configs - Accounting
-                    li
                       a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging-sm') Configs - Messaging
                     li
                       a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Jobs — Operations
@@ -232,6 +233,8 @@ html(lang="en")
                       a.dropdown-item(href='/registrations', data-ajax='true', id='tab-registerations-sm') Registerations
                     li
                       a.dropdown-item(href='/admin/discounts', data-ajax='true', id='tab-orders-discounts-sm') Configs - Discounts
+                    li
+                      a.dropdown-item(href='/admin/accounting', data-ajax='true', id='tab-accounting-sm') Ledger
                     li
                       a.dropdown-item(href='/admin/reports', data-ajax='true', id='tab-reports-sm') Reports
                     li

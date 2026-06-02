@@ -6,6 +6,7 @@ const Order = require('../models/order');
 const Customer = require('../models/customer');
 const CustomerAccountTxn = require('../models/customer_account_txn');
 const Printer = require('../models/printer');
+const PrinterUsage = require('../models/printer_usage');
 const mongoose = require('mongoose');
 const Material = require('../models/material');
 const { MaterialUsage, MaterialAggregate } = require('../models/material_usage');
@@ -521,6 +522,153 @@ function materialMatchesItem(matSelections, itemSelections) {
   return true;
 }
 
+async function loadOperationalStockContext() {
+  const opStore = await Store.findOne({ isOperational: true }).lean();
+  if (!opStore) return { opStore: null, opStocks: [] };
+
+  const opStocks = await StoreStock.find({ store: opStore._id, active: true })
+    .populate('material', '_id name selections')
+    .lean();
+
+  return { opStore, opStocks };
+}
+
+function buildMaterialRequirements(builtItems, opStocks) {
+  const requirements = [];
+
+  for (let idx = 0; idx < (builtItems || []).length; idx++) {
+    const it = builtItems[idx];
+    const itemSelections = it.selections || [];
+
+    const pages = Number(it.pages) || 1;
+    const isFb = !!it.fb;
+    const baseCount = (!pages || pages <= 0) ? 1 : (isFb ? Math.ceil(pages / 2) : pages);
+
+    const spoiled = (it.spoiled !== undefined && it.spoiled !== null)
+      ? Math.floor(Number(it.spoiled) || 0)
+      : 0;
+
+    const factorMul = (it.printer && it.factor !== undefined && it.factor !== null)
+      ? Math.max(1, Math.floor(Number(it.factor) || 1))
+      : 1;
+
+    const count = (Math.max(0, baseCount) + Math.max(0, spoiled)) * factorMul;
+    if (count <= 0) continue;
+
+    for (const st of (opStocks || [])) {
+      const m = st.material;
+      if (!m || !m.selections || !m.selections.length) continue;
+
+      if (materialMatchesItem(m.selections, itemSelections)) {
+        requirements.push({
+          stock: st,
+          material: m,
+          itemIndex: idx,
+          count
+        });
+      }
+    }
+  }
+
+  return requirements;
+}
+
+function scheduleOrderPostResponseTasks({ orderId, materialUsageIds, printerUsageIds, outsourcedArtistTotals, actor }) {
+  setImmediate(async () => {
+    try {
+      const order = await Order.findOne({ orderId }).lean();
+      if (!order) return;
+
+      const tasks = [];
+
+      tasks.push((async () => {
+        try {
+          await postOrderRevenue(order, actor);
+          for (const payment of (order.payments || [])) {
+            await postOrderPayment(order, payment, actor);
+          }
+        } catch (err) {
+          console.error('Background accounting order revenue/payment posting failed', err);
+        }
+      })());
+
+      tasks.push((async () => {
+        try {
+          const usages = materialUsageIds && materialUsageIds.length
+            ? await MaterialUsage.find({ _id: { $in: materialUsageIds } }).lean()
+            : [];
+          for (const usage of usages) {
+            await postMaterialUsageCost(usage, actor);
+          }
+        } catch (err) {
+          console.error('Background material usage accounting failed', err);
+        }
+      })());
+
+      tasks.push((async () => {
+        try {
+          const usages = printerUsageIds && printerUsageIds.length
+            ? await PrinterUsage.find({ _id: { $in: printerUsageIds } })
+            : [];
+          for (const usage of usages) {
+            await postPrinterDepreciation(usage, actor);
+          }
+        } catch (err) {
+          console.error('Background printer depreciation accounting failed', err);
+        }
+      })());
+
+      tasks.push((async () => {
+        try {
+          for (const entry of (outsourcedArtistTotals || [])) {
+            if (!entry || !entry.artistId || Number(entry.amount || 0) <= 0) continue;
+            await postOutsourcedCost(order, entry.artistId, Number(entry.amount || 0), actor);
+          }
+        } catch (err) {
+          console.error('Background outsourced cost accounting failed', err);
+        }
+      })());
+
+      tasks.push((async () => {
+        try {
+          if (!order.customer) return;
+          const customerController = require('./customer');
+          let cust = await customerController.updateRegularStatus(order.customer);
+          if (!cust) {
+            cust = await Customer.findById(order.customer).select('_id phone category accountBalance').lean();
+          }
+          if (!cust || !cust.phone) return;
+
+          const { sendSms } = require('../utilities/hubtel_sms');
+          const messagingController = require('./messaging');
+          const auto = await messagingController.buildAutoMessageForCustomer(
+            cust,
+            'order',
+            {
+              orderId: order.orderId,
+              amount: order.total,
+              totalBeforeDiscount: order.totalBeforeDiscount ?? '',
+              discountAmount: order.discountAmount ?? ''
+            }
+          );
+
+          if (auto && auto.enabled === false) return;
+          const msg = (auto && auto.content) ? auto.content : buildThankYouSms(cust.category);
+          if (msg && String(msg).trim()) {
+            await sendSms({ to: cust.phone, content: msg });
+          }
+        } catch (err) {
+          console.error('Background post-order customer status/SMS failed', err);
+        }
+      })());
+
+      await Promise.allSettled(tasks);
+    } catch (err) {
+      console.error('Background post-order task runner failed', err);
+    }
+  });
+}
+
 
 // Render order creation page
 exports.newOrderPage = async (req, res) => {
@@ -893,212 +1041,249 @@ return {
       .filter(id => mongoose.Types.ObjectId.isValid(id))
       .map(id => new mongoose.Types.ObjectId(id));
 
+    for (const it of items) {
+      if (!mongoose.Types.ObjectId.isValid(it.serviceId) || !mongoose.Types.ObjectId.isValid(it.priceRuleId)) {
+        return res.status(400).json({ error: 'Invalid IDs in items' });
+      }
+    }
+
+    const itemServiceIdStrings = Array.from(new Set(items.map(it => String(it.serviceId))));
+    const itemPriceRuleIdStrings = Array.from(new Set(items.map(it => String(it.priceRuleId))));
+    const itemPrinterIdStrings = Array.from(new Set(
+      items
+        .map(it => String(it.printerId || '').trim())
+        .filter(id => mongoose.Types.ObjectId.isValid(id))
+    ));
+    const outsourcedArtistIdStrings = Array.from(new Set(
+      items
+        .map(it => String(it.outsourcedArtistId || '').trim())
+        .filter(id => mongoose.Types.ObjectId.isValid(id))
+    ));
+
+    const [priceRules, services, printers, outsourcedArtists, compoundBooks] = await Promise.all([
+      ServicePrice.find({ _id: { $in: itemPriceRuleIdStrings.map(id => new mongoose.Types.ObjectId(id)) } })
+        .populate('selections.unit selections.subUnit')
+        .lean(),
+      Service.find({ _id: { $in: itemServiceIdStrings.map(id => new mongoose.Types.ObjectId(id)) } })
+        .populate('category', '_id name nameNormalized')
+        .lean(),
+      itemPrinterIdStrings.length
+        ? Printer.find({ _id: { $in: itemPrinterIdStrings.map(id => new mongoose.Types.ObjectId(id)) } }).lean()
+        : Promise.resolve([]),
+      outsourcedArtistIdStrings.length
+        ? Customer.find({ _id: { $in: outsourcedArtistIdStrings.map(id => new mongoose.Types.ObjectId(id)) } })
+          .select('_id category businessName firstName phone')
+          .lean()
+        : Promise.resolve([]),
+      allowedCategoryObjectIds.length
+        ? Book.find({
+          category: { $in: allowedCategoryObjectIds },
+          'items.service': { $in: itemServiceIdStrings.map(id => new mongoose.Types.ObjectId(id)) },
+          'items.priceRule': { $in: itemPriceRuleIdStrings.map(id => new mongoose.Types.ObjectId(id)) }
+        }).select('items.service items.priceRule').lean()
+        : Promise.resolve([])
+    ]);
+
+    const priceRuleMap = new Map(priceRules.map(pr => [String(pr._id), pr]));
+    const serviceMap = new Map(services.map(svc => [String(svc._id), svc]));
+    const printerMap = new Map(printers.map(prn => [String(prn._id), prn]));
+    const outsourcedArtistMap = new Map(outsourcedArtists.map(artist => [String(artist._id), artist]));
+    const compoundAllowedPairs = new Set();
+    (compoundBooks || []).forEach(book => {
+      (book.items || []).forEach(item => {
+        if (item && item.service && item.priceRule) {
+          compoundAllowedPairs.add(`${String(item.service)}:${String(item.priceRule)}`);
+        }
+      });
+    });
+
     const builtItems = [];
     let total = 0;
 
-for (const it of items) {
-  if (!mongoose.Types.ObjectId.isValid(it.serviceId) || !mongoose.Types.ObjectId.isValid(it.priceRuleId)) {
-    return res.status(400).json({ error: 'Invalid IDs in items' });
-  }
+    for (const it of items) {
+      const pr = priceRuleMap.get(String(it.priceRuleId));
+      if (!pr) return res.status(404).json({ error: `Price rule ${it.priceRuleId} not found` });
 
-  // populate selections/unit/subUnit so we can store and later match materials
-  const pr = await ServicePrice.findById(it.priceRuleId).populate('selections.unit selections.subUnit').lean();
-  if (!pr) return res.status(404).json({ error: `Price rule ${it.priceRuleId} not found` });
-
-  // Determine which price to use: use price2 only when client requested FB and price2 exists
-// Check whether this service requires a printer
-const svc = await Service.findById(it.serviceId).populate('category', '_id name nameNormalized').lean();
-if (!svc) {
-  return res.status(404).json({ error: `Service ${it.serviceId} not found` });
-}
-if (!svc.category) {
-  return res.status(400).json({ error: `Service "${svc.name || it.serviceId}" is not assigned to a category` });
-}
-
-const svcCategoryId = String(
-  svc.category && svc.category._id ? svc.category._id : svc.category
-);
-let isAuthorizedByCategory = allowedCategoryIds.has(svcCategoryId);
-
-// Compound-service fallback:
-// when a book is placed, its underlying services may belong to other categories.
-// In that case, allow the item if it belongs to a Book that is in an allowed category.
-if (!isAuthorizedByCategory && allowedCategoryObjectIds.length) {
-  const compoundMatch = await Book.findOne({
-    category: { $in: allowedCategoryObjectIds },
-    items: {
-      $elemMatch: {
-        service: new mongoose.Types.ObjectId(it.serviceId),
-        priceRule: new mongoose.Types.ObjectId(it.priceRuleId)
+      const svc = serviceMap.get(String(it.serviceId));
+      if (!svc) {
+        return res.status(404).json({ error: `Service ${it.serviceId} not found` });
       }
+      if (!svc.category) {
+        return res.status(400).json({ error: `Service "${svc.name || it.serviceId}" is not assigned to a category` });
+      }
+
+      const svcCategoryId = String(
+        svc.category && svc.category._id ? svc.category._id : svc.category
+      );
+      let isAuthorizedByCategory = allowedCategoryIds.has(svcCategoryId);
+
+      // Compound-service fallback:
+      // when a book is placed, its underlying services may belong to other categories.
+      // In that case, allow the item if it belongs to a Book that is in an allowed category.
+      if (!isAuthorizedByCategory && allowedCategoryObjectIds.length) {
+        isAuthorizedByCategory = compoundAllowedPairs.has(`${String(it.serviceId)}:${String(it.priceRuleId)}`);
+      }
+
+      if (!isAuthorizedByCategory) {
+        return res.status(400).json({ error: 'One or more selected services are outside secretary-assigned categories.' });
+      }
+
+      const svcRequiresPrinter = !!(svc && svc.requiresPrinter);
+      const outsourcedCategory = svc && svc.category ? (svc.category.nameNormalized || svc.category.name || '') : '';
+      const isOutSourcedCategory = isOutSourcedCategoryName(outsourcedCategory);
+
+      let outsourcedArtist = null;
+      let outsourcedArtistName = '';
+      let outsourcedQty = 0;
+      let outsourcedAmount = 0;
+      let outsourcedTotal = 0;
+      if (isOutSourcedCategory) {
+        const rawQty = Number(it.outsourcedQty);
+        const rawAmount = Number(it.outsourcedAmount);
+        const customerRequestedQty = Math.max(
+          1,
+          Math.floor(Number(svcRequiresPrinter ? it.factor : it.pages) || 1)
+        );
+        const hasOutsourcedInput =
+          (it.outsourcedArtistId && String(it.outsourcedArtistId).trim()) ||
+          (it.outsourcedArtistName && String(it.outsourcedArtistName).trim()) ||
+          (!isNaN(rawQty) && rawQty > 0) ||
+          (!isNaN(rawAmount) && rawAmount > 0);
+
+        if (hasOutsourcedInput) {
+          if (!it.outsourcedArtistId || !mongoose.Types.ObjectId.isValid(it.outsourcedArtistId)) {
+            return res.status(400).json({ error: 'Select a valid artist for outsourced service.' });
+          }
+
+          const artist = outsourcedArtistMap.get(String(it.outsourcedArtistId));
+          if (!artist || String(artist.category || '').toLowerCase() !== 'artist') {
+            return res.status(400).json({ error: 'Selected outsourced handler must be an Artist customer.' });
+          }
+
+          outsourcedArtist = artist._id;
+          outsourcedArtistName = String(
+            artist.businessName || artist.firstName || artist.phone || it.outsourcedArtistName || ''
+          ).trim();
+          outsourcedQty = customerRequestedQty;
+          outsourcedAmount = Math.max(0, Number(rawAmount || 0));
+
+          if (outsourcedQty <= 0 || outsourcedAmount <= 0) {
+            return res.status(400).json({ error: 'Enter valid outsourced Amount for outsourced service.' });
+          }
+
+          outsourcedTotal = Number((outsourcedQty * outsourcedAmount).toFixed(2));
+        }
+      }
+
+      // normalize factor (pricing factor comes from client)
+      let pricingFactor = 1;
+      if (svcRequiresPrinter && it.factor !== undefined && it.factor !== null && String(it.factor).trim() !== '') {
+        const f = Number(it.factor);
+        pricingFactor = (isNaN(f) || f < 1) ? 1 : Math.floor(f);
+      }
+
+      // Determine which price to use: use price2 only when client requested FB and price2 exists
+      let unitPrice = Number(pr.price);
+      let usedFB = false;
+      if (it.fb && pr.price2 !== undefined && pr.price2 !== null) {
+        unitPrice = Number(pr.price2);
+        usedFB = true;
+      }
+
+      const pages = Number(it.pages) || 1;
+
+      // determine effective quantity for pricing: if FB was used for this line
+      const effectiveQtyForPrice = usedFB ? Math.ceil(pages / 2) : pages;
+
+      // APPLY pricing factor HERE
+      const subtotal = Number(
+        (unitPrice * effectiveQtyForPrice * pricingFactor).toFixed(2)
+      );
+
+      // Build human-friendly selection label (append F/B suffix always when usedFB)
+      const baseLabel = (pr.customLabel && String(pr.customLabel).trim()) || ((pr.selections || []).map(s => {
+        const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
+        const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
+        return `${u}: ${su}`;
+      }).join(' + '));
+      const selectionLabel = baseLabel + (usedFB ? ' (F/B)' : '');
+
+      // store selections as unit/subUnit objectIds (not populated objects)
+      const selectionsForOrder = (pr.selections || []).map(s => ({
+        unit: s.unit && s.unit._id ? s.unit._id : s.unit,
+        subUnit: s.subUnit && s.subUnit._id ? s.subUnit._id : s.subUnit
+      }));
+
+      // Determine printer-type for this price rule (inspect populated subUnit names)
+      let printerType = null;
+      try {
+        // prefer 'colour' if any subunit indicates colour, otherwise monochrome if present
+        const subs = (pr.selections || []).map(s => (s.subUnit && s.subUnit.name) ? String(s.subUnit.name) : '');
+        const hasColour = subs.some(n => /(colour|color|c\/l|\bcol\b)/i.test(n));
+        const hasMono = subs.some(n => /(monochrome|\bmono\b|black\s*and\s*white|b\/w)/i.test(n));
+        if (hasColour) printerType = 'colour';
+        else if (hasMono) printerType = 'monochrome';
+      } catch (e) {
+        printerType = null;
+      }
+
+      // validate printer if required
+      let printerId = null;
+      if (svcRequiresPrinter) {
+        if (!it.printerId || !mongoose.Types.ObjectId.isValid(it.printerId)) {
+          return res.status(400).json({ error: 'Printer required for one or more items' });
+        }
+        const prDoc = printerMap.get(String(it.printerId));
+        if (!prDoc) return res.status(400).json({ error: `Printer ${it.printerId} not found` });
+        printerId = new mongoose.Types.ObjectId(it.printerId);
+      } else {
+        // if provided but invalid, ignore or validate format
+        if (it.printerId && mongoose.Types.ObjectId.isValid(it.printerId) && printerMap.has(String(it.printerId))) {
+          // allow storing if client provided printer for non-required service (optional)
+          printerId = new mongoose.Types.ObjectId(it.printerId);
+        }
+      }
+
+      // store pages as original pages so other parts (material matching, printer usage) still use original pages
+      // compute print factor from populated pr.selections -> subUnit.factor (default 1)
+      let printFactor = 1;
+      try {
+        if (pr && Array.isArray(pr.selections)) {
+          // multiply factors of any populated subUnits (most cases only one relevant subUnit like size)
+          printFactor = pr.selections.reduce((acc, s) => {
+            const f = (s && s.subUnit && (s.subUnit.factor !== undefined && s.subUnit.factor !== null)) ? Number(s.subUnit.factor) : 1;
+            const fv = (isNaN(f) || f <= 0) ? 1 : f;
+            return acc * fv;
+          }, 1);
+          // coerce to integer
+          printFactor = Math.max(1, Math.floor(printFactor));
+        }
+      } catch (pfErr) {
+        printFactor = 1;
+      }
+
+      builtItems.push({
+        service: it.serviceId,
+        printer: printerId, // may be null
+        selections: selectionsForOrder,
+        selectionLabel,
+        unitPrice,
+        pages,               // raw pages entered by user (kept for material/printer logic)
+        effectiveQty: effectiveQtyForPrice, // server-authoritative quantity used for pricing (e.g. ceil(pages/2) when F/B)
+        factor: pricingFactor,             // NEW: quantity multiplier for printer-required services
+        subtotal,            // computed using effectiveQty (server authoritative)
+        spoiled: Number(it.spoiled) || 0,
+        fb: !!(it.fb || usedFB),  // store original intent (client flag) OR our usedFB calc
+        printerType, // NEW: 'monochrome' | 'colour' | null
+        printFactor, // NEW: multiplier for printer counts (default 1)
+        outsourcedArtist,
+        outsourcedArtistName,
+        outsourcedQty,
+        outsourcedAmount,
+        outsourcedTotal
+      });
+      total += subtotal;
     }
-  }).select('_id').lean();
-
-  if (compoundMatch) isAuthorizedByCategory = true;
-}
-
-if (!isAuthorizedByCategory) {
-  return res.status(400).json({ error: 'One or more selected services are outside secretary-assigned categories.' });
-}
-const svcRequiresPrinter = !!(svc && svc.requiresPrinter);
-const outsourcedCategory = svc && svc.category ? (svc.category.nameNormalized || svc.category.name || '') : '';
-const isOutSourcedCategory = isOutSourcedCategoryName(outsourcedCategory);
-
-let outsourcedArtist = null;
-let outsourcedArtistName = '';
-let outsourcedQty = 0;
-let outsourcedAmount = 0;
-let outsourcedTotal = 0;
-if (isOutSourcedCategory) {
-  const rawQty = Number(it.outsourcedQty);
-  const rawAmount = Number(it.outsourcedAmount);
-  const customerRequestedQty = Math.max(
-    1,
-    Math.floor(Number(svcRequiresPrinter ? it.factor : it.pages) || 1)
-  );
-  const hasOutsourcedInput =
-    (it.outsourcedArtistId && String(it.outsourcedArtistId).trim()) ||
-    (it.outsourcedArtistName && String(it.outsourcedArtistName).trim()) ||
-    (!isNaN(rawQty) && rawQty > 0) ||
-    (!isNaN(rawAmount) && rawAmount > 0);
-
-  if (hasOutsourcedInput) {
-    if (!it.outsourcedArtistId || !mongoose.Types.ObjectId.isValid(it.outsourcedArtistId)) {
-      return res.status(400).json({ error: 'Select a valid artist for outsourced service.' });
-    }
-
-    const artist = await Customer.findById(it.outsourcedArtistId)
-      .select('_id category businessName firstName phone')
-      .lean();
-    if (!artist || String(artist.category || '').toLowerCase() !== 'artist') {
-      return res.status(400).json({ error: 'Selected outsourced handler must be an Artist customer.' });
-    }
-
-    outsourcedArtist = artist._id;
-    outsourcedArtistName = String(
-      artist.businessName || artist.firstName || artist.phone || it.outsourcedArtistName || ''
-    ).trim();
-    outsourcedQty = customerRequestedQty;
-    outsourcedAmount = Math.max(0, Number(rawAmount || 0));
-
-    if (outsourcedQty <= 0 || outsourcedAmount <= 0) {
-      return res.status(400).json({ error: 'Enter valid outsourced Amount for outsourced service.' });
-    }
-
-    outsourcedTotal = Number((outsourcedQty * outsourcedAmount).toFixed(2));
-  }
-}
-
-// normalize factor (pricing factor comes from client)
-let pricingFactor = 1;
-if (svcRequiresPrinter && it.factor !== undefined && it.factor !== null && String(it.factor).trim() !== '') {
-  const f = Number(it.factor);
-  pricingFactor = (isNaN(f) || f < 1) ? 1 : Math.floor(f);
-}
-
-// Determine which price to use: use price2 only when client requested FB and price2 exists
-let unitPrice = Number(pr.price);
-let usedFB = false;
-if (it.fb && pr.price2 !== undefined && pr.price2 !== null) {
-  unitPrice = Number(pr.price2);
-  usedFB = true;
-}
-
-const pages = Number(it.pages) || 1;
-
-// determine effective quantity for pricing: if FB was used for this line
-const effectiveQtyForPrice = usedFB ? Math.ceil(pages / 2) : pages;
-
-// ✅ APPLY pricing factor HERE
-const subtotal = Number(
-  (unitPrice * effectiveQtyForPrice * pricingFactor).toFixed(2)
-);
-
-// Build human-friendly selection label (append F/B suffix always when usedFB)
-const baseLabel = (pr.customLabel && String(pr.customLabel).trim()) || ((pr.selections || []).map(s => {
-  const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
-  const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
-  return `${u}: ${su}`;
-}).join(' + '));
-const selectionLabel = baseLabel + (usedFB ? ' (F/B)' : '');
-
-// store selections as unit/subUnit objectIds (not populated objects)
-const selectionsForOrder = (pr.selections || []).map(s => ({
-  unit: s.unit && s.unit._id ? s.unit._id : s.unit,
-  subUnit: s.subUnit && s.subUnit._id ? s.subUnit._id : s.subUnit
-}));
-  // Determine printer-type for this price rule (inspect populated subUnit names)
-  let printerType = null;
-  try {
-    // prefer 'colour' if any subunit indicates colour, otherwise monochrome if present
-    const subs = (pr.selections || []).map(s => (s.subUnit && s.subUnit.name) ? String(s.subUnit.name) : '');
-    const hasColour = subs.some(n => /(colour|color|c\/l|\bcol\b)/i.test(n));
-    const hasMono = subs.some(n => /(monochrome|\bmono\b|black\s*and\s*white|b\/w)/i.test(n));
-    if (hasColour) printerType = 'colour';
-    else if (hasMono) printerType = 'monochrome';
-  } catch (e) {
-    printerType = null;
-  }
-
-
-  // validate printer if required
-  let printerId = null;
-  if (svcRequiresPrinter) {
-    if (!it.printerId || !mongoose.Types.ObjectId.isValid(it.printerId)) {
-      return res.status(400).json({ error: 'Printer required for one or more items' });
-    }
-    const prDoc = await Printer.findById(it.printerId).lean();
-    if (!prDoc) return res.status(400).json({ error: `Printer ${it.printerId} not found` });
-    printerId = new mongoose.Types.ObjectId(it.printerId);
-  } else {
-    // if provided but invalid, ignore or validate format
-    if (it.printerId && mongoose.Types.ObjectId.isValid(it.printerId)) {
-      // allow storing if client provided printer for non-required service (optional)
-      const maybePrinter = await Printer.findById(it.printerId).lean();
-      if (maybePrinter) printerId = new mongoose.Types.ObjectId(it.printerId);
-    }
-  }
-
-  // store pages as original pages so other parts (material matching, printer usage) still use original pages
-  // compute print factor from populated pr.selections -> subUnit.factor (default 1)
-  let printFactor = 1;
-  try {
-    if (pr && Array.isArray(pr.selections)) {
-      // multiply factors of any populated subUnits (most cases only one relevant subUnit like size)
-      printFactor = pr.selections.reduce((acc, s) => {
-        const f = (s && s.subUnit && (s.subUnit.factor !== undefined && s.subUnit.factor !== null)) ? Number(s.subUnit.factor) : 1;
-        const fv = (isNaN(f) || f <= 0) ? 1 : f;
-        return acc * fv;
-      }, 1);
-      // coerce to integer
-      printFactor = Math.max(1, Math.floor(printFactor));
-    }
-  } catch (pfErr) {
-    printFactor = 1;
-  }
-
-  builtItems.push({
-    service: it.serviceId,
-    printer: printerId, // may be null
-    selections: selectionsForOrder,
-    selectionLabel,
-    unitPrice,
-    pages,               // raw pages entered by user (kept for material/printer logic)
-    effectiveQty: effectiveQtyForPrice, // server-authoritative quantity used for pricing (e.g. ceil(pages/2) when F/B)
-    factor: pricingFactor,             // NEW: quantity multiplier for printer-required services
-    subtotal,            // computed using effectiveQty (server authoritative)
-    spoiled: Number(it.spoiled) || 0,
-    fb: !!(it.fb || usedFB),  // store original intent (client flag) OR our usedFB calc
-    printerType, // NEW: 'monochrome' | 'colour' | null
-    printFactor, // NEW: multiplier for printer counts (default 1)
-    outsourcedArtist,
-    outsourcedArtistName,
-    outsourcedQty,
-    outsourcedAmount,
-    outsourcedTotal
-  });
-  total += subtotal;
-}
     total = Number(total.toFixed(2));
 
     const bodyCustomerId = String(req.body && req.body.customerId ? req.body.customerId : '').trim();
@@ -1134,63 +1319,36 @@ const selectionsForOrder = (pr.selections || []).map(s => ({
 // Only the OPERATIONAL store is consumable.
 // Track only materials added (active) in operational store.
 // -----------------------------
+let stockContext = { opStore: null, opStocks: [] };
+let materialRequirements = [];
 try {
-  const opStore = await Store.findOne({ isOperational: true }).lean();
-  if (!opStore) {
+  stockContext = await loadOperationalStockContext();
+  if (!stockContext.opStore) {
     return res.status(409).json({
       error: 'No operational store configured. Ask Admin to set an operational store in Stock dashboard.'
     });
   }
 
-  const opStocks = await StoreStock.find({ store: opStore._id, active: true })
-    .populate('material', '_id name selections')
-    .lean();
-
-  if (opStocks && opStocks.length) {
+  materialRequirements = buildMaterialRequirements(builtItems, stockContext.opStocks);
+  if (materialRequirements.length) {
     const requiredByMaterial = new Map(); // materialId -> needed
 
     // cache source stock info
     const stockInfo = new Map(); // materialId -> { name, stocked }
-    for (const st of opStocks) {
+    for (const st of stockContext.opStocks) {
       if (st && st.material && st.material._id) {
         stockInfo.set(String(st.material._id), { name: st.material.name, stocked: Number(st.stocked || 0) });
       }
     }
 
-    // compute required needs
-    for (let idx = 0; idx < builtItems.length; idx++) {
-      const it = builtItems[idx];
-      const itemSelections = it.selections || [];
-
-      const pages = Number(it.pages) || 1;
-      const isFb = !!it.fb;
-      const baseCount = (!pages || pages <= 0) ? 1 : (isFb ? Math.ceil(pages / 2) : pages);
-
-      const spoiled = (it.spoiled !== undefined && it.spoiled !== null)
-        ? Math.floor(Number(it.spoiled) || 0)
-        : 0;
-
-      const factorMul = (it.printer && it.factor !== undefined && it.factor !== null)
-        ? Math.max(1, Math.floor(Number(it.factor) || 1))
-        : 1;
-
-      const countNeeded = (Math.max(0, baseCount) + Math.max(0, spoiled)) * factorMul;
-      if (countNeeded <= 0) continue;
-
-      for (const st of opStocks) {
-        const m = st.material;
-        if (!m || !m.selections || !m.selections.length) continue;
-
-        if (materialMatchesItem(m.selections, itemSelections)) {
-          const mid = String(m._id);
-          requiredByMaterial.set(mid, (requiredByMaterial.get(mid) || 0) + countNeeded);
-        }
-      }
+    for (const reqLine of materialRequirements) {
+      const mid = String(reqLine.material._id);
+      requiredByMaterial.set(mid, (requiredByMaterial.get(mid) || 0) + Number(reqLine.count || 0));
     }
 
     if (requiredByMaterial.size) {
       const matIds = Array.from(requiredByMaterial.keys()).map(id => new mongoose.Types.ObjectId(id));
-      const aggDocs = await MaterialAggregate.find({ store: opStore._id, material: { $in: matIds } }).lean();
+      const aggDocs = await MaterialAggregate.find({ store: stockContext.opStore._id, material: { $in: matIds } }).lean();
 
       const aggMap = {};
       aggDocs.forEach(a => { aggMap[String(a.material)] = Number(a.total || 0); });
@@ -1211,7 +1369,7 @@ try {
         return res.status(409).json({
           error: 'Some materials in this order are out of stock in the operational store. Contact Admin to restock or transfer stock.',
           details: blocks,
-          operationalStore: { _id: opStore._id, name: opStore.name }
+          operationalStore: { _id: stockContext.opStore._id, name: stockContext.opStore.name }
         });
       }
     }
@@ -1314,12 +1472,9 @@ if (manual) {
 
   const serviceCategoryIds = new Set();
   try {
-    const svcDocs = await Service.find({ _id: { $in: Array.from(serviceIds) } })
-      .select('_id category')
-      .lean();
-
-    (svcDocs || []).forEach(s => {
-      if (s && s.category) serviceCategoryIds.add(String(s.category));
+    Array.from(serviceIds).forEach(sid => {
+      const s = serviceMap.get(String(sid));
+      if (s && s.category) serviceCategoryIds.add(String(s.category._id || s.category));
     });
   } catch (e) {
     console.error('Discount: failed to load service categories', e);
@@ -1389,16 +1544,18 @@ order.total = finalTotal;
 
         let customer = null;
         let apply = 0;
+        let availableCredit = 0;
         try {
           customer = await Customer.findById(order.customer);
           if (customer) {
-            const bal = await getUsableCustomerCredit(customer._id);
+            availableCredit = await getUsableCustomerCredit(customer._id);
             const canApply = Math.max(0, Number(order.total || 0));
-            apply = Number(Math.min(bal, canApply).toFixed(2));
+            apply = Number(Math.min(availableCredit, canApply).toFixed(2));
           }
         } catch (e) {
           customer = null;
           apply = 0;
+          availableCredit = 0;
         }
 
         // Every customer order increases debtor side.
@@ -1436,7 +1593,7 @@ order.total = finalTotal;
               order.paidAt = new Date();
             }
 
-            customer.accountBalance = Number((bal - apply).toFixed(2));
+            customer.accountBalance = Number((availableCredit - apply).toFixed(2));
             await customer.save();
 
             // IMPORTANT:
@@ -1444,16 +1601,6 @@ order.total = finalTotal;
             // and account-based settlement is represented by reducing accountBalance plus
             // order payment method='account'. Adding a credit here would cancel out the
             // debit and incorrectly preserve the prior net balance.
-
-            // Ensure order entry is visibly tagged as account-settled in ledger.
-            await CustomerAccountTxn.updateMany(
-              {
-                customer: order.customer,
-                type: 'debit',
-                note: `Order placed ${order.orderId}`
-              },
-              { $set: { note: `Order placed ${order.orderId} (A/C)` } }
-            );
           }
         }
       }
@@ -1463,21 +1610,15 @@ order.total = finalTotal;
 
     await order.save();
 
-    try {
-      const accountingActor = actorFromReq(req);
-      await postOrderRevenue(order, accountingActor);
-      for (const payment of (order.payments || [])) {
-        await postOrderPayment(order, payment, accountingActor);
-      }
-    } catch (acctErr) {
-      console.error('Accounting order revenue/payment posting failed', acctErr);
-    }
+    const accountingActor = actorFromReq(req);
+    const materialUsageIdsForAccounting = [];
+    const printerUsageIdsForAccounting = [];
+    const outsourcedArtistTotalsForAccounting = [];
 
     // Credit outsourced artists for work rendered to us.
     try {
       const recBy = req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : null;
       const recByName = (req.user?.name || req.user?.username || '').toString();
-      const accountingActor = actorFromReq(req);
       const artistTotals = new Map();
 
       for (const item of (order.items || [])) {
@@ -1489,6 +1630,7 @@ order.total = finalTotal;
 
       for (const [artistId, amount] of artistTotals.entries()) {
         if (amount <= 0) continue;
+        outsourcedArtistTotalsForAccounting.push({ artistId, amount: Number(amount.toFixed(2)) });
         await CustomerAccountTxn.create([{
           customer: new mongoose.Types.ObjectId(artistId),
           type: 'credit',
@@ -1497,7 +1639,6 @@ order.total = finalTotal;
           recordedBy: recBy,
           recordedByName: recByName
         }]);
-        await postOutsourcedCost(order, artistId, amount, accountingActor);
       }
     } catch (outsourceCreditErr) {
       console.error('Failed to credit outsourced artists', outsourceCreditErr);
@@ -1534,139 +1675,44 @@ order.total = finalTotal;
       console.error('Failed to consume registration submission/invoice', consumeErr);
     }
 
-// If the order has a customer attached, re-evaluate their 'regular' status
-// AND send a thank-you SMS with the customer's current type.
-try {
-  if (order.customer) {
-    const customerController = require('./customer');
-
-    // 1) Update regular status and wait (so category is accurate)
-    let updatedCustomer = null;
-    try {
-      updatedCustomer = await customerController.updateRegularStatus(order.customer);
-    } catch (e) {
-      console.error('updateRegularStatus failed for customer', String(order.customer), e);
-    }
-
-    // 2) Load latest customer (ensure we have phone + category)
-    let cust = updatedCustomer;
-    if (!cust) {
-      try {
-        cust = await Customer.findById(order.customer).select('_id phone category accountBalance').lean();
-      } catch (e) {
-        console.error('Failed to reload customer after order', String(order.customer), e);
-      }
-    }
-
-    // 3) Send SMS (do not block order success if SMS fails)
-    try {
-      if (cust && cust.phone) {
-      const { sendSms } = require('../utilities/hubtel_sms');
-      const messagingController = require('./messaging');
-
-      // Ask messaging config what to send (or whether to send)
-      const auto = await messagingController.buildAutoMessageForCustomer(
-        cust,
-        'order',
-        {
-          orderId: order.orderId,
-          amount: order.total, // final payable total
-          totalBeforeDiscount: order.totalBeforeDiscount ?? '',
-          discountAmount: order.discountAmount ?? ''
-        }
-      );
-
-      // auto.enabled false => admin disabled auto messages
-      if (auto && auto.enabled === false) {
-        // do nothing
-      } else {
-        // If no configured content, fallback to old hardcoded message
-        const msg = (auto && auto.content) ? auto.content : buildThankYouSms(cust.category);
-        if (msg && String(msg).trim()) {
-          await sendSms({ to: cust.phone, content: msg });
-        }
-      }
-            }
-          } catch (smsErr) {
-            console.error('Failed to send customer thank-you SMS', smsErr);
-          }
-        }
-      } catch (e) {
-        console.error('post-order regular update + SMS error', e);
-      }
-
 // --- MATERIAL MATCHING & RECORDING (OPERATIONAL STORE ONLY) ---
 try {
-  const opStore = await Store.findOne({ isOperational: true }).lean();
-  if (!opStore) {
-    // No operational store => no tracking
-    return;
-  }
+  const opStore = stockContext.opStore;
+  if (opStore && materialRequirements.length) {
+    for (const reqLine of materialRequirements) {
+      const st = reqLine.stock;
+      const m = reqLine.material;
+      const count = Number(reqLine.count || 0);
+      if (!st || !m || !m._id || count <= 0) continue;
 
-  const opStocks = await StoreStock.find({ store: opStore._id, active: true })
-    .populate('material', '_id selections')
-    .lean();
+      const lotCost = await consumeStockLots({
+        store: opStore._id,
+        stock: st._id,
+        material: m._id,
+        quantity: count,
+        sourceRef: order.orderId
+      });
+      const unitCostSnapshot = lotCost.weightedUnitCost;
+      const totalCost = lotCost.totalCost;
 
-  if (!opStocks.length) return;
+      const usage = await MaterialUsage.create({
+        store: opStore._id,
+        material: m._id,
+        orderId: order.orderId,
+        orderRef: order._id,
+        itemIndex: reqLine.itemIndex,
+        count,
+        unitCostSnapshot,
+        totalCost,
+        lots: lotCost.lots || []
+      });
+      materialUsageIdsForAccounting.push(usage._id);
 
-  for (let idx = 0; idx < builtItems.length; idx++) {
-    const it = builtItems[idx];
-    const itemSelections = it.selections || [];
-
-    for (const st of opStocks) {
-      const m = st.material;
-      if (!m || !m.selections || !m.selections.length) continue;
-
-      if (materialMatchesItem(m.selections, itemSelections)) {
-        const pages = Number(it.pages) || 1;
-        const isFb = !!it.fb;
-        const baseCount = (!pages || pages <= 0) ? 1 : (isFb ? Math.ceil(pages / 2) : pages);
-
-        const spoiled = (it.spoiled !== undefined && it.spoiled !== null)
-          ? Math.floor(Number(it.spoiled) || 0)
-          : 0;
-
-        const factorMul = (it.printer && it.factor !== undefined && it.factor !== null)
-          ? Math.max(1, Math.floor(Number(it.factor) || 1))
-          : 1;
-
-        const count = (Math.max(0, baseCount) + Math.max(0, spoiled)) * factorMul;
-        if (count <= 0) continue;
-
-        const lotCost = await consumeStockLots({
-          store: opStore._id,
-          stock: st._id,
-          material: m._id,
-          quantity: count,
-          sourceRef: order.orderId
-        });
-        const unitCostSnapshot = lotCost.weightedUnitCost;
-        const totalCost = lotCost.totalCost;
-
-        const usage = await MaterialUsage.create({
-          store: opStore._id,
-          material: m._id,
-          orderId: order.orderId,
-          orderRef: order._id,
-          itemIndex: idx,
-          count,
-          unitCostSnapshot,
-          totalCost,
-          lots: lotCost.lots || []
-        });
-
-        try {
-          await postMaterialUsageCost(usage, actorFromReq(req));
-        } catch (acctErr) {
-          console.error('Accounting material usage posting failed', acctErr);
-        }
-
-        await MaterialAggregate.findOneAndUpdate(
-          { store: opStore._id, material: m._id },
-          { $inc: { total: count } },
-          { upsert: true, new: true }
-        );
-      }
+      await MaterialAggregate.findOneAndUpdate(
+        { store: opStore._id, material: m._id },
+        { $inc: { total: count } },
+        { upsert: true, new: true }
+      );
     }
   }
 } catch (matErr) {
@@ -1675,7 +1721,6 @@ try {
 
         // --- PRINTER USAGE RECORDING ---
 try {
-  const PrinterUsage = require('../models/printer_usage');
   // for each order item, if printer exists, increment that printer by pages (QTY)
 for (let idx = 0; idx < builtItems.length; idx++) {
   const it = builtItems[idx];
@@ -1701,12 +1746,7 @@ for (let idx = 0; idx < builtItems.length; idx++) {
     type: usageType,
     note: 'order-created'
   });
-
-  try {
-    await postPrinterDepreciation(printerUsage, actorFromReq(req));
-  } catch (acctErr) {
-    console.error('Accounting printer depreciation posting failed', acctErr);
-  }
+  printerUsageIdsForAccounting.push(printerUsage._id);
 
   // update printer aggregate (atomic increment) with usageCount
   try {
@@ -1724,6 +1764,15 @@ for (let idx = 0; idx < builtItems.length; idx++) {
 } catch (puErr) {
   console.error('Printer usage recording error', puErr);
 }
+
+    scheduleOrderPostResponseTasks({
+      orderId: order.orderId,
+      materialUsageIds: materialUsageIdsForAccounting,
+      printerUsageIds: printerUsageIdsForAccounting,
+      outsourcedArtistTotals: outsourcedArtistTotalsForAccounting,
+      actor: accountingActor
+    });
+
     // return order info
     return res.json({
       ok: true,

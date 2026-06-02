@@ -18,4 +18,7 @@ const CustomerAccountTxnSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now, index: true }
 });
 
+CustomerAccountTxnSchema.index({ customer: 1, type: 1, createdAt: -1 });
+CustomerAccountTxnSchema.index({ customer: 1, type: 1, note: 1 });
+
 module.exports = mongoose.model('CustomerAccountTxn', CustomerAccountTxnSchema);

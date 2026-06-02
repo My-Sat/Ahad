@@ -16,4 +16,6 @@ const AccruedExpensePaymentSchema = new mongoose.Schema({
   recordedByName: { type: String, trim: true, default: '' }
 }, { timestamps: true });
 
+AccruedExpensePaymentSchema.index({ date: -1, createdAt: -1 });
+
 module.exports = mongoose.model('AccruedExpensePayment', AccruedExpensePaymentSchema);

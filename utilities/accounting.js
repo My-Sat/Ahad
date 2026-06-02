@@ -71,14 +71,15 @@ function actorFromReq(req) {
 }
 
 async function ensureDefaultAccounts(session = null) {
-  const opts = session ? { session } : {};
-  for (const acc of DEFAULT_ACCOUNTS) {
-    await AccountingAccount.updateOne(
-      { code: acc.code },
-      { $setOnInsert: Object.assign({}, acc, { system: true, active: true }) },
-      Object.assign({ upsert: true }, opts)
-    );
-  }
+  const operations = DEFAULT_ACCOUNTS.map(acc => ({
+    updateOne: {
+      filter: { code: acc.code },
+      update: { $setOnInsert: Object.assign({}, acc, { system: true, active: true }) },
+      upsert: true
+    }
+  }));
+  if (!operations.length) return;
+  await AccountingAccount.bulkWrite(operations, session ? { session, ordered: false } : { ordered: false });
 }
 
 async function getAccountsMap(codes, session = null) {
