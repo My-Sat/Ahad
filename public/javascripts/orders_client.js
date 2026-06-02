@@ -146,7 +146,7 @@
     if (Array.isArray(draft.cart)) {
       cart = draft.cart;
     }
-    if (draft.manualDiscount) {
+    if (window._isAdmin && draft.manualDiscount) {
       manualDiscount = draft.manualDiscount;
       if (manualAdjustmentType) manualAdjustmentType.value = manualDiscount.kind === 'premium' ? 'premium' : 'discount';
       if (manualDiscountMode) manualDiscountMode.value = manualDiscount.mode || 'amount';
@@ -156,7 +156,7 @@
       if (manualAdjustmentType) manualAdjustmentType.value = 'discount';
       if (manualDiscountValue) manualDiscountValue.value = '';
     }
-    if (draft.manualTax) {
+    if (window._isAdmin && draft.manualTax) {
       manualTax = draft.manualTax;
       if (cartTaxMode) cartTaxMode.value = manualTax.mode || 'amount';
       if (cartTaxValue) cartTaxValue.value = manualTax.value != null ? manualTax.value : '';
@@ -551,8 +551,8 @@ function loadInvoiceIntoCart(inv) {
   setSelectedCustomerFromSubmission(invoiceToSubmission(inv), { preserveCart: true, fromInvoice: true });
 
   cart = inv.cart;
-  manualDiscount = inv.manualDiscount || null;
-  manualTax = inv.manualTax || null;
+  manualDiscount = window._isAdmin ? (inv.manualDiscount || null) : null;
+  manualTax = window._isAdmin ? (inv.manualTax || null) : null;
   if (manualAdjustmentType) manualAdjustmentType.value = manualDiscount && manualDiscount.kind === 'premium' ? 'premium' : 'discount';
   if (manualDiscountMode) manualDiscountMode.value = manualDiscount ? (manualDiscount.mode || 'amount') : 'amount';
   if (manualDiscountValue) manualDiscountValue.value = manualDiscount && manualDiscount.value != null ? manualDiscount.value : '';
@@ -582,8 +582,8 @@ async function saveCurrentCartInvoice(showNotice) {
     submissionId: submissionId || null,
     customerId: getCurrentCustomerId() || null,
     cart,
-    manualDiscount,
-    manualTax,
+    manualDiscount: window._isAdmin ? manualDiscount : null,
+    manualTax: window._isAdmin ? manualTax : null,
     totals: cartTotalsSnapshot(),
     jobNote: orderJobNoteEl ? String(orderJobNoteEl.value || '').trim() : ''
   };
@@ -1060,6 +1060,11 @@ async function loadServicesForCategory(catId) {
   }
 
   function updateTaxUI(taxableTotal) {
+    if (!window._isAdmin || !cartTaxSummary) {
+      if (cartTaxSummary) cartTaxSummary.style.display = 'none';
+      if (clearCartTaxBtn) clearCartTaxBtn.style.display = 'none';
+      return;
+    }
     const taxAmt = computeTaxAmount(taxableTotal, manualTax);
     if (cartTaxSummary && taxAmt > 0) {
       cartTaxSummary.style.display = '';
@@ -1855,7 +1860,7 @@ function addToCart({
     const discAmt = (window._isAdmin && manualDiscount) ? computeManualDiscountAmount(baseTotal, manualDiscount) : 0;
     const signedAdjustment = (manualAdjustmentKind() === 'premium') ? (-discAmt) : discAmt;
     const taxableTotal = Number(Math.max(0, baseTotal - signedAdjustment).toFixed(2));
-    const taxAmt = computeTaxAmount(taxableTotal, manualTax);
+    const taxAmt = (window._isAdmin && manualTax) ? computeTaxAmount(taxableTotal, manualTax) : 0;
     const finalTotal = Number((taxableTotal + taxAmt).toFixed(2));
 
     // show final in main total
@@ -1879,7 +1884,7 @@ function addToCart({
     const adjustmentAmount = (window._isAdmin && manualDiscount) ? computeManualDiscountAmount(baseTotal, manualDiscount) : 0;
     const isPremium = manualAdjustmentKind() === 'premium';
     const taxableTotal = Number(Math.max(0, baseTotal - (isPremium ? -adjustmentAmount : adjustmentAmount)).toFixed(2));
-    const taxAmount = computeTaxAmount(taxableTotal, manualTax);
+    const taxAmount = (window._isAdmin && manualTax) ? computeTaxAmount(taxableTotal, manualTax) : 0;
     const finalTotal = Number((taxableTotal + taxAmount).toFixed(2));
     return {
       baseTotal,
@@ -1888,7 +1893,7 @@ function addToCart({
       adjustmentKind: isPremium ? 'premium' : 'discount',
       taxableTotal,
       taxAmount,
-      tax: manualTax,
+      tax: window._isAdmin ? manualTax : null,
       finalTotal
     };
   }
@@ -2426,7 +2431,7 @@ function addToCart({
     });
   }
 
-  if (applyCartTaxBtn) {
+  if (window._isAdmin && applyCartTaxBtn) {
     applyCartTaxBtn.addEventListener('click', function () {
       if (!cart || !cart.length) return showAlertModal('Add items to cart before applying VAT.');
 
@@ -2451,7 +2456,7 @@ function addToCart({
     });
   }
 
-  if (clearCartTaxBtn) {
+  if (window._isAdmin && clearCartTaxBtn) {
     clearCartTaxBtn.addEventListener('click', function () {
       manualTax = null;
       if (cartTaxValue) cartTaxValue.value = '';
@@ -3164,7 +3169,7 @@ async function placeOrderFlow() {
     }
 
     try {
-      if (manualTax && typeof manualTax === 'object') {
+      if (window._isAdmin && manualTax && typeof manualTax === 'object') {
         const mode = String(manualTax.mode || '').trim().toLowerCase();
         const value = Number(manualTax.value);
         const validMode = (mode === 'amount' || mode === 'percent');
@@ -3282,8 +3287,8 @@ async function placeOrderFlow() {
       if (!cart || !cart.length) return showAlertModal('Add items to the cart before saving.');
       const ok = writeDraft(customerId, {
         cart,
-        manualDiscount,
-        manualTax,
+        manualDiscount: window._isAdmin ? manualDiscount : null,
+        manualTax: window._isAdmin ? manualTax : null,
         savedAt: new Date().toISOString()
       });
       if (ok) {

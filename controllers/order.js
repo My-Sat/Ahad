@@ -836,9 +836,18 @@ exports.apiSaveCartInvoice = async (req, res) => {
     const invoiceId = String(body.invoiceId || '').trim();
     const submissionId = String(body.submissionId || '').trim();
     const jobNote = String(body.jobNote || '').trim().slice(0, 140);
-    const manualDiscount = body.manualDiscount && typeof body.manualDiscount === 'object' ? body.manualDiscount : null;
-    const manualTax = body.manualTax && typeof body.manualTax === 'object' ? body.manualTax : null;
-    const totals = body.totals && typeof body.totals === 'object' ? body.totals : {};
+    const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
+    const manualDiscount = isAdmin && body.manualDiscount && typeof body.manualDiscount === 'object' ? body.manualDiscount : null;
+    const manualTax = isAdmin && body.manualTax && typeof body.manualTax === 'object' ? body.manualTax : null;
+    const totals = body.totals && typeof body.totals === 'object' ? Object.assign({}, body.totals) : {};
+    if (!isAdmin) {
+      const baseTotal = Number(cart.reduce((sum, item) => sum + Number(item && item.subtotal || 0), 0).toFixed(2));
+      totals.adjustmentAmount = 0;
+      totals.taxAmount = 0;
+      totals.tax = null;
+      totals.taxableTotal = baseTotal;
+      totals.finalTotal = baseTotal;
+    }
 
     let invoice = null;
     let source = null;
@@ -1397,8 +1406,8 @@ const baseTotal = Number(total || 0);
 
 // 1) Manual discount (admin only)
 let manual = null;
+const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
 try {
-  const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
   if (isAdmin && req.body && req.body.manualDiscount && typeof req.body.manualDiscount === 'object') {
     const md = req.body.manualDiscount;
     const kindRaw = String(md.kind || 'discount').trim().toLowerCase();
@@ -1420,7 +1429,7 @@ try {
 
 let manualTax = null;
 try {
-  if (req.body && req.body.tax && typeof req.body.tax === 'object') {
+  if (isAdmin && req.body && req.body.tax && typeof req.body.tax === 'object') {
     const tx = req.body.tax;
     const mode = String(tx.mode || '').trim();
     const value = Number(tx.value);
