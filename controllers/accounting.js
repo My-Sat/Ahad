@@ -55,6 +55,16 @@ function isoDate(d) {
 }
 
 function getRange(req) {
+  if (truthyInput(req.query.allTime || req.query.allTimes || req.query.all)) {
+    const end = new Date();
+    return {
+      start: new Date(0),
+      end,
+      from: 'All time',
+      to: isoDate(end),
+      allTime: true
+    };
+  }
   const today = new Date();
   const start = parseDateStart(req.query.from) || new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
   const end = parseDateEnd(req.query.to) || new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0, 23, 59, 59, 999));

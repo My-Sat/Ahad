@@ -620,17 +620,33 @@
       renderBalanceSheet(j);
     }
 
-    async function loadProfitLoss() {
-      const j = await fetchJson(`/admin/accounting/api/profit-loss${query()}`);
+    function renderProfitLoss(prefix, data) {
+      const j = data || {};
       const t = j.totals || {};
-      setText('plRevenue', fmt(t.revenueTotal));
-      setText('plCogs', fmt(t.cogsTotal));
-      setText('plGross', fmt(t.grossProfit));
-      setText('plOperating', fmt(t.operatingExpensesTotal));
-      setText('plNet', fmt(t.netProfit));
-      renderRows('plRevenueTable', j.revenue || []);
-      renderRows('plCogsTable', j.cogs || []);
-      renderRows('plOperatingTable', j.operatingExpenses || []);
+      setText(`${prefix}Revenue`, fmt(t.revenueTotal));
+      setText(`${prefix}Cogs`, fmt(t.cogsTotal));
+      setText(`${prefix}Gross`, fmt(t.grossProfit));
+      setText(`${prefix}Operating`, fmt(t.operatingExpensesTotal));
+      setText(`${prefix}Net`, fmt(t.netProfit));
+      renderRows(`${prefix}RevenueTable`, j.revenue || []);
+      renderRows(`${prefix}CogsTable`, j.cogs || []);
+      renderRows(`${prefix}OperatingTable`, j.operatingExpenses || []);
+    }
+
+    async function loadProfitLoss() {
+      setTableLoading('plAllRevenueTable', 1);
+      setTableLoading('plAllCogsTable', 1);
+      setTableLoading('plAllOperatingTable', 1);
+      setTableLoading('plRevenueTable', 1);
+      setTableLoading('plCogsTable', 1);
+      setTableLoading('plOperatingTable', 1);
+
+      const [allTime, period] = await Promise.all([
+        fetchJson('/admin/accounting/api/profit-loss?allTime=1'),
+        fetchJson(`/admin/accounting/api/profit-loss${query()}`)
+      ]);
+      renderProfitLoss('plAll', allTime);
+      renderProfitLoss('pl', period);
     }
 
     const loadedSections = Object.create(null);

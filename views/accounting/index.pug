@@ -84,6 +84,21 @@ block content
     #accountingCashBooks .ledger-entries-panel > h6 {
       margin-bottom: .65rem;
     }
+    .pl-range-separator {
+      position: relative;
+      margin: 1.25rem 0 1rem;
+      border-top: 1px solid rgba(96, 165, 250, .45);
+    }
+    .pl-range-separator::before {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: 0;
+      width: 120px;
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #60a5fa, rgba(96, 165, 250, 0));
+    }
   .container
     .d-none(data-main-width='wide')
     .row
@@ -120,6 +135,60 @@ block content
                     button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabBalanceSheet') Balance Sheet
                 .tab-content
                   #tabProfitLoss.tab-pane.fade.show.active
+                    .d-flex.justify-content-between.align-items-center.mb-2
+                      div
+                        h6.text-white.mb-0 All-Time Profit & Loss
+                        p.text-muted-light.small.mb-0 Lifetime records from the start of the ledger.
+                    .row.g-2.mb-3
+                      .col-6.col-lg-2
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Revenue
+                            strong#plAllRevenue GH₵ 0.00
+                      .col-6.col-lg-2
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Cost of Sales
+                            strong#plAllCogs GH₵ 0.00
+                      .col-6.col-lg-2
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Gross Profit
+                            strong#plAllGross GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Operating Expenses
+                            strong#plAllOperating GH₵ 0.00
+                      .col-6.col-lg-3
+                        .card.dark-surface.border-0
+                          .card-body.p-2.dark-card-body
+                            div.small.text-muted-light Net Profit / Loss
+                            strong#plAllNet GH₵ 0.00
+                    .row.g-3
+                      .col-lg-4
+                        h6.text-white Revenue
+                        table.table.table-sm#plAllRevenueTable
+                          tbody
+                            tr
+                              td.text-muted Loading...
+                      .col-lg-4
+                        h6.text-white Cost of Sales
+                        table.table.table-sm#plAllCogsTable
+                          tbody
+                            tr
+                              td.text-muted Loading...
+                      .col-lg-4
+                        h6.text-white Operating Expenses
+                        table.table.table-sm#plAllOperatingTable
+                          tbody
+                            tr
+                              td.text-muted Loading...
+                    .pl-range-separator
+                    .d-flex.justify-content-between.align-items-center.mb-2
+                      div
+                        h6.text-white.mb-0 Date Range Profit & Loss
+                        p.text-muted-light.small.mb-0 Use the filter below to load a specific month or custom period.
                     .d-flex.gap-2.align-items-end.mb-3
                       div
                         label.form-label.small.text-muted-light(for='accountingFrom') From
