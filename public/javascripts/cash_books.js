@@ -320,6 +320,8 @@ function initCashBooksPage() {
   if (ledgerNextBtn) {
     ledgerNextBtn.addEventListener('click', () => loadLedger(ledgerPage + 1));
   }
+
+  loadCashBooks();
 }
 
 if (document.readyState === 'loading') {

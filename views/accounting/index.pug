@@ -1,6 +1,89 @@
 extends ../layout
 
 block content
+  style.
+    #accountingCapital .ledger-form-panel form,
+    #accountingExpenseAdjustment .ledger-form-panel form,
+    #accountingCashBooks .ledger-form-panel form {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: .75rem 1rem;
+      align-items: end;
+      padding: .95rem;
+      border: 1px solid rgba(148, 163, 184, .22);
+      border-radius: 1rem;
+      background:
+        linear-gradient(135deg, rgba(59, 130, 246, .08), rgba(15, 23, 42, .08)),
+        rgba(255, 255, 255, .025);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+    }
+    #accountingCapital .ledger-form-panel form > .row,
+    #accountingCapital .ledger-form-panel form > .card,
+    #accountingCapital .ledger-form-panel form > p,
+    #accountingExpenseAdjustment .ledger-form-panel form > .row,
+    #accountingExpenseAdjustment .ledger-form-panel form > .card,
+    #accountingExpenseAdjustment .ledger-form-panel form > p,
+    #accountingCashBooks .ledger-form-panel form > .row,
+    #accountingCashBooks .ledger-form-panel form > .card,
+    #accountingCashBooks .ledger-form-panel form > p {
+      grid-column: 1 / -1;
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    #accountingCapital .ledger-form-panel form > .mb-2,
+    #accountingExpenseAdjustment .ledger-form-panel form > .mb-2,
+    #accountingCashBooks .ledger-form-panel form > .mb-2 {
+      margin-bottom: 0 !important;
+    }
+    #accountingCapital .ledger-form-panel form > button,
+    #accountingExpenseAdjustment .ledger-form-panel form > button,
+    #accountingCashBooks .ledger-form-panel form > button {
+      justify-self: start;
+      min-width: 150px;
+    }
+    #equityFixedAssetWrap .card-body,
+    #manualExpenseAutoReleaseWrap .card-body {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: .65rem .9rem;
+      align-items: end;
+    }
+    #equityFixedAssetWrap .card-body > h6,
+    #equityFixedAssetWrap .card-body > p,
+    #equityFixedAssetWrap .card-body > small,
+    #manualExpenseAutoReleaseWrap .card-body > .form-check {
+      grid-column: 1 / -1;
+      margin-bottom: 0 !important;
+    }
+    #equityFixedAssetWrap .card-body > .row,
+    #manualExpenseAutoReleaseWrap .card-body > .row {
+      grid-column: 1 / -1;
+    }
+    #accountingCapital .ledger-entries-panel,
+    #accountingExpenseAdjustment .ledger-entries-panel,
+    #accountingCashBooks .ledger-entries-panel {
+      position: relative;
+      margin-top: .35rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(96, 165, 250, .45);
+    }
+    #accountingCapital .ledger-entries-panel::before,
+    #accountingExpenseAdjustment .ledger-entries-panel::before,
+    #accountingCashBooks .ledger-entries-panel::before {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: 0;
+      width: 96px;
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #60a5fa, rgba(96, 165, 250, 0));
+    }
+    #accountingCapital .ledger-entries-panel > h6,
+    #accountingExpenseAdjustment .ledger-entries-panel > h6,
+    #accountingCashBooks .ledger-entries-panel > h6 {
+      margin-bottom: .65rem;
+    }
   .container
     .d-none(data-main-width='wide')
     .row
@@ -21,6 +104,8 @@ block content
                 button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#accountingExpenseAdjustment') Expenses Adjustment
               li.nav-item(role='presentation')
                 button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#accountingFinancialControl') Financial Control
+              li.nav-item(role='presentation')
+                button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#accountingCashBooks') Cash Books
 
             .tab-content
               #accountingFinancialStatement.tab-pane.fade.show.active
@@ -173,8 +258,8 @@ block content
                     button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabFixedAssets') Fixed Assets
                 .tab-content
                   #tabEquity.tab-pane.fade.show.active
-                    .row.g-3
-                      .col-lg-4
+                    .row.g-3.ledger-stacked-section
+                      .col-lg-12.ledger-form-panel
                         h6.text-white Owner Equity & Opening Balances
                         p.small.text-muted-light.mb-2 Use this for owner investments, owner withdrawals, and existing asset/liability balances from before the accounting system started.
                         form#equityTransactionForm(data-disable-spinner='true')
@@ -253,7 +338,7 @@ block content
                               input.form-control.form-control-dark#equityDepositDetails(type='text')
                           button.btn.btn-primary#saveEquityTransactionBtn(type='submit') Save Equity Entry
                           p.small.mt-2#equityTransactionStatus
-                      .col-lg-8
+                      .col-lg-12.ledger-entries-panel
                         h6.text-white Recent Equity Entries
                         .table-responsive
                           table.table.table-sm.table-hover#equityTransactionsTable
@@ -283,8 +368,8 @@ block content
                                   td.text-muted(colspan='6') No equity entries yet.
 
                   #tabFixedAssets.tab-pane.fade
-                    .row.g-3
-                      .col-lg-4
+                    .row.g-3.ledger-stacked-section
+                      .col-lg-12.ledger-form-panel
                         h6.text-white Create Fixed Asset
                         form#fixedAssetForm(data-disable-spinner='true')
                           .mb-2
@@ -345,7 +430,7 @@ block content
                             input.form-control.form-control-dark#fixedAssetNote(type='text')
                           button.btn.btn-primary#saveFixedAssetBtn(type='submit') Save Asset
                           p.small.mt-2#fixedAssetStatus
-                      .col-lg-8
+                      .col-lg-12.ledger-entries-panel
                         h6.text-white Fixed Assets
                         .table-responsive
                           table.table.table-sm.table-hover#fixedAssetsTable
@@ -393,8 +478,8 @@ block content
                     button.nav-link(type='button', data-bs-toggle='tab', data-bs-target='#tabPrepaidExpenses') Prepaid Expenditure
                 .tab-content
                   #tabManualExpenses.tab-pane.fade.show.active
-                    .row.g-3
-                      .col-lg-4
+                    .row.g-3.ledger-stacked-section
+                      .col-lg-12.ledger-form-panel
                         h6.text-white Record Manual Expense
                         form#manualExpenseForm(data-disable-spinner='true')
                           .mb-2
@@ -451,7 +536,7 @@ block content
                               input.form-control.form-control-dark#manualExpenseDepositDetails(type='text')
                           button.btn.btn-primary#saveManualExpenseBtn(type='submit') Save Expense
                           p.small.mt-2#manualExpenseStatus
-                      .col-lg-8
+                      .col-lg-12.ledger-entries-panel
                         h6.text-white Recent Manual Expenses
                         .table-responsive
                           table.table.table-sm.table-hover#manualExpensesTable
@@ -476,8 +561,8 @@ block content
                                   td.text-muted(colspan='5') No manual expenses yet.
 
                   #tabAccruedExpenses.tab-pane.fade
-                    .row.g-3
-                      .col-lg-4
+                    .row.g-3.ledger-stacked-section
+                      .col-lg-12.ledger-form-panel
                         h6.text-white Pay Accrued Expense
                         form#accruedPaymentForm(data-disable-spinner='true')
                           .mb-2
@@ -519,7 +604,7 @@ block content
                             input.form-control.form-control-dark#accruedPaymentNote(type='text', placeholder='e.g. Salary paid')
                           button.btn.btn-outline-primary#accruedPaymentBtn(type='submit') Pay Accrued
                           p.small.mt-2#accruedPaymentStatus
-                      .col-lg-8
+                      .col-lg-12.ledger-entries-panel
                         h6.text-white Accrued Payables
                         .table-responsive.mb-3
                           table.table.table-sm.table-hover#accruedExpensesTable
@@ -576,8 +661,8 @@ block content
                                   td.text-muted(colspan='6') No accrued payments yet.
 
                   #tabPrepaidExpenses.tab-pane.fade
-                    .row.g-3
-                      .col-lg-4
+                    .row.g-3.ledger-stacked-section
+                      .col-lg-12.ledger-form-panel
                         h6.text-white Release Prepaid Expense
                         form#prepaidReleaseForm(data-disable-spinner='true')
                           .mb-2
@@ -599,7 +684,7 @@ block content
                             input.form-control.form-control-dark#prepaidReleaseNote(type='text', placeholder='e.g. May rent release')
                           button.btn.btn-outline-primary#savePrepaidReleaseBtn(type='submit') Release To Expense
                           p.small.mt-2#prepaidReleaseStatus
-                      .col-lg-8
+                      .col-lg-12.ledger-entries-panel
                         h6.text-white Prepaid Balances
                         .table-responsive.mb-3
                           table.table.table-sm.table-hover#prepaidExpensesTable
@@ -738,6 +823,110 @@ block content
                           else
                             tr
                               td.text-muted(colspan='4') No journal entries yet.
+
+              #accountingCashBooks.tab-pane.fade
+                .d-flex.justify-content-between.align-items-center.mb-2
+                  div
+                    h5.text-white.mb-0 Cash Books
+                    p.text-muted-light.small.mb-0 Create and review the books used when money is received or paid out.
+                #cashBooksPage
+                  .row.g-3.ledger-stacked-section
+                    .col-lg-12.ledger-form-panel
+                      h6.text-white.mb-2#cashBookFormTitle New Cash Book
+                      form#cashBookForm(data-disable-spinner='true')
+                        input#cashBookId(type='hidden')
+                        .mb-2
+                          label.form-label.text-muted-light(for='cashBookName') Name
+                          input.form-control.form-control-dark#cashBookName(type='text', placeholder='e.g. Main Cash, Bank A/C, MTN MoMo', required)
+                        .mb-2
+                          label.form-label.text-muted-light(for='cashBookKind') Type
+                          select.form-select.form-select-dark#cashBookKind
+                            option(value='cash' selected) Normal cash book
+                            option(value='bank') Bank
+                            option(value='momo') MoMo
+                        .mb-2#openingBalanceWrap
+                          label.form-label.text-muted-light(for='cashBookOpeningBalance') Opening balance
+                          input.form-control.form-control-dark#cashBookOpeningBalance(type='number', min='0', step='0.01', value='0')
+                        .form-check.mb-2
+                          input.form-check-input#cashBookActive(type='checkbox', checked)
+                          label.form-check-label(for='cashBookActive') Active
+                        .d-flex.gap-2
+                          button.btn.btn-primary#saveCashBookBtn(type='submit') Create
+                          button.btn.btn-outline-light-custom#resetCashBookBtn(type='button') Reset
+                        p.small.mt-2.mb-0#cashBookStatus
+
+                    .col-lg-12.ledger-entries-panel
+                      .d-flex.justify-content-between.align-items-center.mb-3
+                        h6.text-white.mb-0 Existing Cash Books
+                        button.btn.btn-outline-light-custom.btn-sm#reloadCashBooksBtn(type='button') Refresh
+                      .table-responsive
+                        table.table.table-sm.table-hover.align-middle#cashBooksTable
+                          thead
+                            tr
+                              th Name
+                              th Type
+                              th.text-end Balance
+                              th Status
+                              th.text-end Actions
+                          tbody
+                            if cashBooks && cashBooks.length
+                              each book in cashBooks
+                                tr(data-cash-book-id=String(book._id), data-name=book.name, data-kind=book.kind || 'cash', data-active=(book.active === false ? '0' : '1'))
+                                  td.fw-semibold.text-white= book.name
+                                  td.text-capitalize= book.kind === 'momo' ? 'MoMo' : (book.kind === 'bank' ? 'Bank' : 'Normal')
+                                  td.text-end GH₵ #{Number(book.balance || 0).toFixed(2)}
+                                  td
+                                    if book.active === false
+                                      span.badge.bg-secondary Inactive
+                                    else
+                                      span.badge.bg-success Active
+                                  td.text-end
+                                    .btn-group.btn-group-sm
+                                      button.btn.btn-outline-info.ledger-cash-book(type='button') Ledger
+                                      button.btn.btn-outline-light-custom.edit-cash-book(type='button') Edit
+                                      if book.active === false
+                                        button.btn.btn-outline-success.toggle-cash-book(type='button', data-action='restore') Restore
+                                      else
+                                        button.btn.btn-outline-warning.toggle-cash-book(type='button', data-action='archive') Archive
+                            else
+                              tr
+                                td.text-muted(colspan='5') No cash books yet.
+
+                .modal.fade(id='cashBookLedgerModal', tabindex='-1', aria-hidden='true')
+                  .modal-dialog.modal-xl.modal-dialog-centered.modal-dialog-scrollable
+                    .modal-content.dark-surface
+                      .modal-header
+                        h5.modal-title.text-white#cashBookLedgerTitle Cash Book Ledger
+                        button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+                      .modal-body.dark-card-body
+                        .d-flex.justify-content-between.align-items-center.mb-3
+                          div
+                            div.small.text-muted-light#cashBookLedgerMeta Select a cash book to view transactions.
+                            div.small.text-muted-light
+                              | Debit increases cash book balance. Credit decreases it.
+                          .btn-group.btn-group-sm
+                            button.btn.btn-outline-light-custom#cashBookLedgerPrevBtn(type='button', disabled)
+                              i.bi.bi-chevron-left.me-1
+                              | Previous
+                            button.btn.btn-outline-light-custom#cashBookLedgerNextBtn(type='button', disabled)
+                              | Next
+                              i.bi.bi-chevron-right.ms-1
+                        .table-responsive
+                          table.table.table-sm.table-hover.align-middle
+                            thead
+                              tr
+                                th Date
+                                th Entry
+                                th Source
+                                th.text-end Debit
+                                th.text-end Credit
+                                th.text-end Balance
+                                th Recorded By
+                            tbody#cashBookLedgerTbody
+                              tr
+                                td.text-muted(colspan='7') Select Ledger from a cash book.
+                      .modal-footer
+                        button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 
     .modal.fade#journalHelpModal(tabindex='-1', aria-hidden='true')
       .modal-dialog.modal-xl.modal-dialog-scrollable
@@ -1007,3 +1196,4 @@ block content
             button.btn.btn-outline-light-custom(type='button', data-bs-dismiss='modal') Close
 
   script(src='/javascripts/accounting.js')
+  script(src='/javascripts/cash_books.js')
