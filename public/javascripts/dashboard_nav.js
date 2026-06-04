@@ -325,38 +325,6 @@ function setActiveTabByUrl(url) {
       }
     }
 
-    // initialize assign-price form (works for radios OR checkboxes)
-    const assignBtn = document.getElementById('assignBtn');
-    const formAssign = document.getElementById('assign-price');
-    const selectionsInput = document.getElementById('selectionsInput');
-
-    // remove previous handlers (defensive)
-    if (assignBtn) {
-      const newAssignBtn = assignBtn.cloneNode(true);
-      assignBtn.parentNode.replaceChild(newAssignBtn, assignBtn);
-    }
-
-    if (newAssignBtnAvailable()) {
-      const btn = document.getElementById('assignBtn');
-      btn.addEventListener('click', function() {
-        const radioChecked = Array.from(document.querySelectorAll('.unit-sub-radio:checked'));
-        const checkboxChecked = Array.from(document.querySelectorAll('.unit-sub-checkbox:checked'));
-        const checked = radioChecked.length ? radioChecked : checkboxChecked;
-        const selections = checked.map(el => ({ unit: el.dataset.unit, subUnit: el.dataset.subunit }));
-        if (selections.length === 0) {
-          alert('Please select at least one sub-unit before assigning a price.');
-          return;
-        }
-        if (!selectionsInput) {
-          console.error('selectionsInput hidden field not found');
-          return;
-        }
-        selectionsInput.value = JSON.stringify(selections);
-        // submit the form (normal POST)
-        if (formAssign) formAssign.submit();
-      });
-    }
-
     // show toast if query params present
     (function showAssignToast() {
       try {
@@ -390,10 +358,6 @@ function setActiveTabByUrl(url) {
         console.error('toast error', err);
       }
     })();
-  }
-
-  function newAssignBtnAvailable() {
-    return !!document.getElementById('assignBtn');
   }
 
   // Intercept clicks on tabs / links marked data-ajax=true

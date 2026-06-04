@@ -2299,6 +2299,14 @@ exports.apiPayOrder = async (req, res) => {
       // Always store what was received + what was credited (if any)
       meta.receivedAmount = Number(receivedAmount.toFixed(2));
       if (creditExcess > 0) meta.creditExcess = Number(creditExcess.toFixed(2));
+      const receiptContextInput = (body.receiptContext && typeof body.receiptContext === 'object')
+        ? body.receiptContext
+        : {};
+      const receiptNumber = (value, fallback) => {
+        const n = Number(value);
+        return isNaN(n) ? Number(fallback || 0) : Number(n.toFixed(2));
+      };
+      const receiptPreviousDebt = receiptNumber(receiptContextInput.previousCustomerDebt, 0);
 
       // Build note
       const baseNote = String(body.note || (isPart ? 'part-payment' : 'full-payment')).trim();
@@ -2335,6 +2343,20 @@ exports.apiPayOrder = async (req, res) => {
       // Recompute after adding payment
       const newPaidSoFar = order.payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
       const outstandingAfter = Number((total - newPaidSoFar).toFixed(2));
+
+      meta.receiptContext = {
+        previousOutstanding: receiptNumber(receiptContextInput.previousOutstanding, outstandingBefore),
+        previousCustomerDebt: receiptPreviousDebt,
+        receivedAmount: Number(receivedAmount.toFixed(2)),
+        remainingAfter: Number(Math.max(0, outstandingAfter).toFixed(2)),
+        totalBalance: Number((Math.max(0, receiptPreviousDebt) + Math.max(0, outstandingAfter)).toFixed(2)),
+        paymentMethod: method,
+        receiptDate: payment.createdAt,
+        recordedByName: payment.recordedByName || ''
+      };
+      if (order.payments && order.payments.length) {
+        order.payments[order.payments.length - 1].meta = meta;
+      }
 
       let becamePaidNow = false;
       if (outstandingAfter <= 0) {
@@ -2433,6 +2455,7 @@ exports.apiPayOrder = async (req, res) => {
         status: order.status,
         receivedAmount: Number(receivedAmount.toFixed(2)),
         creditedToAccount: Number(creditExcess.toFixed(2)),
+        paymentId: savedPayment && savedPayment._id ? String(savedPayment._id) : '',
         becamePaidNow,
         _totalBeforeDiscount: order.totalBeforeDiscount ?? null,
         _discountAmount: order.discountAmount ?? null,

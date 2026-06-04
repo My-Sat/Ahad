@@ -48,63 +48,72 @@ block content
 
             // Items
             h6.mb-2.text-white Items
-            if order.items && order.items.length
+            - var orderItemGroups = []
+            - var orderItemGroupMap = {}
+            - var currencySymbol = 'GH' + String.fromCharCode(0x20B5)
+            - if (order.items && order.items.length) {
+            -   for (var oi = 0; oi < order.items.length; oi++) {
+            -     var it = order.items[oi] || {}
+            -     var rawLabel = it.selectionLabel || ''
+            -     var subs = '(no label)'
+            -     if (rawLabel && rawLabel.length) {
+            -       var parts = String(rawLabel).split(' + ')
+            -       var out = []
+            -       for (var pi = 0; pi < parts.length; pi++) {
+            -         var part = parts[pi]
+            -         var idx = part.indexOf(':')
+            -         var s = (idx >= 0) ? part.slice(idx + 1) : part
+            -         s = String(s || '').trim()
+            -         if (s) out.push(s)
+            -       }
+            -       if (out.length) subs = out.join(', ')
+            -     }
+            -     var rawPages = Number(it.pages || 1)
+            -     var qty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (it.fb ? Math.ceil(rawPages / 2) : rawPages)
+            -     var factor = Number(it.factor || 1)
+            -     if (isNaN(factor) || factor < 1) factor = 1
+            -     var sheets = it.printer ? (qty * factor) : qty
+            -     if (isNaN(sheets) || sheets < 0) sheets = 0
+            -     var qtyLabel = it.printer ? 'Sheets' : 'QTY'
+            -     var subtotal = Number(it.subtotal || 0)
+            -     var serviceTitle = String(it.serviceName || 'Service').trim() || 'Service'
+            -     var serviceKey = serviceTitle.toLowerCase()
+            -     if (!orderItemGroupMap[serviceKey]) {
+            -       orderItemGroupMap[serviceKey] = { title: serviceTitle, items: [], subtotal: 0 }
+            -       orderItemGroups.push(orderItemGroupMap[serviceKey])
+            -     }
+            -     orderItemGroupMap[serviceKey].items.push({ item: it, label: subs, qtyLabel: qtyLabel, sheets: sheets, rawPages: rawPages, factor: factor, subtotal: subtotal })
+            -     orderItemGroupMap[serviceKey].subtotal += subtotal
+            -   }
+            -   for (var gi = 0; gi < orderItemGroups.length; gi++) {
+            -     orderItemGroups[gi].subtotal = Number(orderItemGroups[gi].subtotal || 0)
+            -   }
+            - }
+            if orderItemGroups.length
               .list-group.mb-3
-                each it in order.items
-                  - var rawLabel = it.selectionLabel || ''
-                  - var subs = '(no label)'
-                  - if (rawLabel && rawLabel.length) {
-                  -   var parts = String(rawLabel).split(' + ')
-                  -   var out = []
-                  -   for (var i = 0; i < parts.length; i++) {
-                  -     var part = parts[i]
-                  -     var idx = part.indexOf(':')
-                  -     var s = (idx >= 0) ? part.slice(idx + 1) : part
-                  -     s = String(s || '').trim()
-                  -     if (s) out.push(s)
-                  -   }
-                  -   if (out.length) subs = out.join(', ')
-                  - }
-
-                  .list-group-item.d-flex.justify-content-between.align-items-center
-                    .me-2(style='min-width:0;flex:1;')
-                      div.small.text-muted-light.mb-1 #{it.serviceName || 'Service'}
-
-                      div(style='white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:480px;')
-                        span.text-white #{subs}
-
-                      if it.spoiled
-                        span.text-danger.ms-2 Spoiled: #{it.spoiled}
-
-                    .text-end(style='min-width:200px;')
-                      - var rawPages = Number(it.pages || 1)
-
-                      // qty = effective quantity used for pricing (FB-aware)
-                      - var qty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (it.fb ? Math.ceil(rawPages / 2) : rawPages)
-
-                      // factor (copies/QTY multiplier) — only meaningful when printer exists
-                      - var factor = Number(it.factor || 1)
-                      - if (isNaN(factor) || factor < 1) factor = 1
-
-                      // sheets = qty × factor for printing services
-                      - var sheets = it.printer ? (qty * factor) : qty
-                      - if (isNaN(sheets) || sheets < 0) sheets = 0
-
-                      - var qtyLabel = it.printer ? 'Sheets' : 'QTY'
-
-                      div #{qtyLabel}: #{sheets}
-
-                      if it.printer
-                        div Pages: #{rawPages}
-
-                      if it.printer && factor > 1
-                        div QTY ×#{factor}
-
-                      div Unit: GH₵ #{Number(it.unitPrice || 0).toFixed(2)}
-                      div Subtotal: GH₵ #{Number(it.subtotal || 0).toFixed(2)}
-
-                      if it.printerName
-                        div.small.text-muted-light Printer: #{it.printerName}
+                each group in orderItemGroups
+                  .list-group-item(style='background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:0.55rem 0.75rem;')
+                    strong.text-white #{group.title}
+                  each row in group.items
+                    - var it = row.item || {}
+                    .list-group-item.d-flex.justify-content-between.align-items-center
+                      .me-2(style='min-width:0;flex:1;')
+                        div(style='white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:480px;')
+                          span.text-white #{row.label}
+                        if it.spoiled
+                          span.text-danger.ms-2 Spoiled: #{it.spoiled}
+                      .text-end(style='min-width:200px;')
+                        div #{row.qtyLabel}: #{row.sheets}
+                        if it.printer
+                          div Pages: #{row.rawPages}
+                        if it.printer && row.factor > 1
+                          div QTY x#{row.factor}
+                        div Unit: #{currencySymbol} #{Number(it.unitPrice || 0).toFixed(2)}
+                        div Subtotal: #{currencySymbol} #{Number(row.subtotal || 0).toFixed(2)}
+                        if it.printerName
+                          div.small.text-muted-light Printer: #{it.printerName}
+                  .list-group-item.d-flex.justify-content-end(style='background:rgba(255,255,255,.04);border-bottom:2px solid rgba(255,255,255,.16);padding:0.45rem 0.75rem;')
+                    strong.text-white #{group.title} subtotal: #{currencySymbol} #{Number(group.subtotal || 0).toFixed(2)}
             else
               p.text-muted-light No items listed.
 

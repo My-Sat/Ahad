@@ -1327,6 +1327,85 @@ function renderPrices(bookMode = false) {
 
   const container = document.createElement('div');
   container.className = 'list-group';
+  const wrapper = document.createElement('div');
+  const sharedControls = document.createElement('div');
+  sharedControls.className = 'd-flex align-items-center gap-3 flex-wrap mb-2 px-2 py-2 rounded-3';
+  sharedControls.style.background = 'rgba(255,255,255,.06)';
+  sharedControls.style.border = '1px solid rgba(255,255,255,.10)';
+  sharedControls.innerHTML = `
+    <span class="small text-muted-light me-1">Use one entry for all loaded rules:</span>
+    ${serviceRequiresPrinter ? `
+      <label class="form-check form-check-inline small mb-0">
+        <input class="form-check-input same-pages-toggle" type="checkbox">
+        <span class="form-check-label">Use Same Pages</span>
+      </label>
+    ` : ''}
+    <label class="form-check form-check-inline small mb-0">
+      <input class="form-check-input same-qty-toggle" type="checkbox">
+      <span class="form-check-label">Use Same QTY</span>
+    </label>
+    ${serviceRequiresPrinter ? `
+      <label class="form-check form-check-inline small mb-0">
+        <input class="form-check-input same-printer-toggle" type="checkbox">
+        <span class="form-check-label">Use Same Printer</span>
+      </label>
+    ` : ''}
+  `;
+  wrapper.appendChild(sharedControls);
+  wrapper.appendChild(container);
+
+  function sharedToggleChecked(selector) {
+    const toggle = sharedControls.querySelector(selector);
+    return !!(toggle && toggle.checked);
+  }
+
+  function syncRuleInputs(selector, value, sourceEl) {
+    container.querySelectorAll(selector).forEach(el => {
+      if (el === sourceEl || el.disabled) return;
+      el.value = value;
+    });
+  }
+
+  function syncFromFirstFilled(selector) {
+    const first = Array.from(container.querySelectorAll(selector))
+      .find(el => !el.disabled && String(el.value || '').trim() !== '');
+    if (first) syncRuleInputs(selector, first.value, first);
+  }
+
+  const qtySyncSelector = serviceRequiresPrinter ? '.factor-input' : '.pages-input';
+  sharedControls.addEventListener('change', function (e) {
+    const target = e.target;
+    if (!target || !target.checked) return;
+    if (target.classList.contains('same-pages-toggle')) syncFromFirstFilled('.pages-input');
+    if (target.classList.contains('same-qty-toggle')) syncFromFirstFilled(qtySyncSelector);
+    if (target.classList.contains('same-printer-toggle')) syncFromFirstFilled('.printer-select');
+  });
+
+  container.addEventListener('input', function (e) {
+    const target = e.target;
+    if (!target) return;
+    if (serviceRequiresPrinter && target.classList.contains('pages-input') && sharedToggleChecked('.same-pages-toggle')) {
+      syncRuleInputs('.pages-input', target.value, target);
+    }
+    if (target.matches(qtySyncSelector) && sharedToggleChecked('.same-qty-toggle')) {
+      syncRuleInputs(qtySyncSelector, target.value, target);
+    }
+  });
+
+  container.addEventListener('change', function (e) {
+    const target = e.target;
+    if (!target) return;
+    if (target.classList.contains('printer-select') && sharedToggleChecked('.same-printer-toggle')) {
+      syncRuleInputs('.printer-select', target.value, target);
+    }
+    if (serviceRequiresPrinter && target.classList.contains('pages-input') && sharedToggleChecked('.same-pages-toggle')) {
+      syncRuleInputs('.pages-input', target.value, target);
+    }
+    if (target.matches(qtySyncSelector) && sharedToggleChecked('.same-qty-toggle')) {
+      syncRuleInputs(qtySyncSelector, target.value, target);
+    }
+  });
+
   prices.forEach(p => {
     const row = document.createElement('div');
     row.className = 'list-group-item d-flex align-items-center gap-3 flex-nowrap';
@@ -1496,7 +1575,7 @@ function renderPrices(bookMode = false) {
   });
 
   pricesList.innerHTML = '';
-  pricesList.appendChild(container);
+  pricesList.appendChild(wrapper);
 }
 
   // ---------- Load price rules for service ----------
@@ -1797,7 +1876,40 @@ function addToCart({
   }
     let total = 0;
     let outsourcedCostTotal = 0;
+
+    const groups = [];
+    const groupMap = new Map();
     cart.forEach((it, idx) => {
+      const rawTitle = it && it.isBook
+        ? 'Compound Services'
+        : String((it && it.serviceName) || 'Service').trim();
+      const title = rawTitle || 'Service';
+      const groupKey = `${it && it.isBook ? 'book' : 'service'}:${title.toLowerCase()}`;
+      let group = groupMap.get(groupKey);
+      if (!group) {
+        group = { key: groupKey, title, type: it && it.isBook ? 'book' : 'service', items: [] };
+        groupMap.set(groupKey, group);
+        groups.push(group);
+      }
+      group.items.push({ item: it, index: idx });
+    });
+
+    groups.forEach(group => {
+      const groupSubtotal = Number(group.items.reduce((sum, row) => {
+        return sum + Number(row && row.item ? row.item.subtotal || 0 : 0);
+      }, 0).toFixed(2));
+      const headerTr = document.createElement('tr');
+      headerTr.className = 'cart-service-group-row';
+      headerTr.innerHTML = `
+        <td colspan="7" class="pt-3 pb-1">
+          <div class="d-flex align-items-center gap-2 flex-wrap px-2 py-2 rounded-3" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);">
+            <strong class="text-white">${escapeHtml(group.title)}</strong>
+          </div>
+        </td>
+      `;
+      cartTbody.appendChild(headerTr);
+
+      group.items.forEach(({ item: it, index: idx }) => {
       total += it.subtotal;
       outsourcedCostTotal += Number(it.outsourcedTotal || 0);
       const tr = document.createElement('tr');
@@ -1805,13 +1917,13 @@ function addToCart({
 
       let displayLabel = '';
       if (it.isBook) {
-        displayLabel = `<div class="small text-muted">Book</div><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.bookName)}</div>`;
+        displayLabel = `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.bookName)}</div>`;
       } else {
         const toneClass = (it.tone === 'color') ? 'text-danger' : '';
         const outsourcedMeta = (Number(it.outsourcedTotal || 0) > 0)
           ? `<br/><small class="text-info">Out-Sourced: ${escapeHtml(it.outsourcedArtistName || 'Artist')} | QTY ${escapeHtml(String(it.outsourcedQty || 0))} | GH₵ ${escapeHtml(formatMoney(it.outsourcedAmount || 0))} = GH₵ ${escapeHtml(formatMoney(it.outsourcedTotal || 0))}</small>`
           : '';
-        displayLabel = `<div class="small text-muted">${escapeHtml(it.serviceName || '')}</div><div class="${toneClass}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.selectionLabel || '')}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
+        displayLabel = `<div class="${toneClass}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.selectionLabel || '')}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
       }
 
       let qtyCell = '';
@@ -1851,6 +1963,20 @@ function addToCart({
         <td class="text-center"><button class="btn btn-sm btn-outline-danger remove-cart-btn" type="button">Remove</button></td>
       `;
       cartTbody.appendChild(tr);
+    });
+
+      const subtotalTr = document.createElement('tr');
+      subtotalTr.className = 'cart-service-subtotal-row';
+      subtotalTr.innerHTML = `
+        <td colspan="5" class="text-end pt-1 pb-3">
+          <span class="small text-muted-light">${escapeHtml(group.title)} subtotal:</span>
+        </td>
+        <td class="text-end pt-1 pb-3">
+          <strong class="text-white">GH\u20b5 ${formatMoney(groupSubtotal)}</strong>
+        </td>
+        <td></td>
+      `;
+      cartTbody.appendChild(subtotalTr);
     });
     // existing:
     // cartTotalEl.textContent = 'GH₵ ' + total.toFixed(2);
@@ -1938,6 +2064,27 @@ function addToCart({
     };
   }
 
+  function groupInvoiceLines(lines) {
+    const groups = [];
+    const groupMap = new Map();
+    (Array.isArray(lines) ? lines : []).forEach(line => {
+      const title = String((line && line.service) || 'Service').trim() || 'Service';
+      const key = title.toLowerCase();
+      let group = groupMap.get(key);
+      if (!group) {
+        group = { title, items: [], subtotal: 0 };
+        groupMap.set(key, group);
+        groups.push(group);
+      }
+      group.items.push(line);
+      group.subtotal += Number((line && line.subtotal) || 0);
+    });
+    groups.forEach(group => {
+      group.subtotal = Number(group.subtotal.toFixed(2));
+    });
+    return groups;
+  }
+
   function formatCediPlain(n) {
     return `GH\u20B5 ${formatMoney(n)}`;
   }
@@ -1975,6 +2122,7 @@ function addToCart({
     const customer = selectedCustomerSnapshot();
     const totals = cartTotalsSnapshot();
     const lines = (cart || []).map(cartLineSnapshot);
+    const groups = groupInvoiceLines(lines);
     const now = new Date();
     const invNo = invoiceNumber();
     const adjustmentLabel = totals.adjustmentKind === 'premium' ? 'Premium' : 'Discount';
@@ -1982,21 +2130,36 @@ function addToCart({
     const taxLabel = totals.tax && totals.tax.mode === 'percent'
       ? `VAT (${Number(totals.tax.value || 0)}%)`
       : 'VAT';
-    const rows = lines.map((line, idx) => `
-      <tr>
-        <td>${idx + 1}</td>
-        <td>
-          <strong>${escapeHtml(line.service || '')}</strong>
-          <div>${escapeHtml(line.description || '')}</div>
-          ${line.note ? `<div class="muted">${escapeHtml(line.note)}</div>` : ''}
-        </td>
-        <td>${escapeHtml(line.pages || '')}</td>
-        <td>${escapeHtml(line.qty || '')}</td>
-        <td>${escapeHtml(line.sheets || '')}</td>
-        <td class="right">${formatCediPlain(line.unitPrice)}</td>
-        <td class="right">${formatCediPlain(line.subtotal)}</td>
-      </tr>
-    `).join('');
+    let rowNo = 0;
+    const rows = groups.map(group => {
+      const itemRows = group.items.map(line => {
+        rowNo += 1;
+        return `
+          <tr>
+            <td>${rowNo}</td>
+            <td>
+              <div>${escapeHtml(line.description || '')}</div>
+              ${line.note ? `<div class="muted">${escapeHtml(line.note)}</div>` : ''}
+            </td>
+            <td>${escapeHtml(line.pages || '')}</td>
+            <td>${escapeHtml(line.qty || '')}</td>
+            <td>${escapeHtml(line.sheets || '')}</td>
+            <td class="right">${formatCediPlain(line.unitPrice)}</td>
+            <td class="right">${formatCediPlain(line.subtotal)}</td>
+          </tr>
+        `;
+      }).join('');
+      return `
+        <tr class="invoice-service-header">
+          <td colspan="7"><strong>${escapeHtml(group.title)}</strong></td>
+        </tr>
+        ${itemRows}
+        <tr class="invoice-service-subtotal">
+          <td colspan="6" class="right"><strong>${escapeHtml(group.title)} subtotal:</strong></td>
+          <td class="right"><strong>${formatCediPlain(group.subtotal)}</strong></td>
+        </tr>
+      `;
+    }).join('');
 
     return `<!doctype html>
 <html>
@@ -2024,6 +2187,8 @@ function addToCart({
     th, td { border-bottom: 1px solid #ddd; padding: 8px 6px; vertical-align: top; }
     th { background: #f2f4f7; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
     .right { text-align: right; white-space: nowrap; }
+    .invoice-service-header td { background: #eef2ff; border-top: 1px solid #c7d2fe; border-bottom: 1px solid #c7d2fe; padding-top: 9px; padding-bottom: 9px; }
+    .invoice-service-subtotal td { background: #fafafa; border-bottom: 2px solid #d1d5db; }
     .totals { margin-left: auto; width: 310px; margin-top: 16px; }
     .totals div { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; }
     .totals .grand { font-weight: 700; font-size: 15px; border-bottom: 2px solid #111; }
@@ -2078,7 +2243,6 @@ function addToCart({
     <tbody>${rows}</tbody>
   </table>
   <div class="totals">
-    <div><span>Subtotal</span><strong>${formatCediPlain(totals.baseTotal)}</strong></div>
     ${totals.adjustmentAmount > 0 ? `<div><span>${adjustmentLabel}</span><strong>${adjustmentSign} ${formatCediPlain(totals.adjustmentAmount)}</strong></div>` : ''}
     ${totals.taxAmount > 0 ? `<div><span>VATable amount</span><strong>${formatCediPlain(totals.taxableTotal)}</strong></div><div><span>${taxLabel}</span><strong>+ ${formatCediPlain(totals.taxAmount)}</strong></div>` : ''}
     ${totals.outsourcedCostTotal > 0 ? `<div><span>Out-Sourced Cost Total</span><strong>${formatCediPlain(totals.outsourcedCostTotal)}</strong></div>` : ''}
@@ -2186,6 +2350,7 @@ function addToCart({
     const customer = selectedCustomerSnapshot();
     const totals = cartTotalsSnapshot();
     const rows = (cart || []).map(cartLineSnapshot);
+    const groups = groupInvoiceLines(rows);
     const logo = await loadInvoiceLogoForPdf();
     const lines = [];
     const pad = (text, width) => sanitizePdfText(text).slice(0, width).padEnd(width, ' ');
@@ -2206,25 +2371,31 @@ function addToCart({
     lines.push('ITEMS');
     lines.push('No  Selection                              Pg   Qty  Shts        Unit     Subtotal');
     lines.push('--  -------------------------------------- ---- ---- ----- ---------- ------------');
-    rows.forEach((line, idx) => {
-      const selection = `${line.service || ''} ${line.description || ''}`.trim() || 'Selection';
-      const wrappedSelection = wrapPdfLine(selection, 38);
-      const first = wrappedSelection.shift() || '';
-      lines.push(
-        `${String(idx + 1).padEnd(3)} ${pad(first, 38)} ${pad(line.pages || '-', 4)} ${pad(line.qty || '-', 4)} ${pad(line.sheets || '-', 5)} ${money(line.unitPrice).padStart(10)} ${money(line.subtotal).padStart(12)}`
-      );
-      wrappedSelection.forEach(extra => {
-        lines.push(`    ${pad(extra, 38)}`);
-      });
-      if (line.note) {
-        wrapPdfLine(line.note.replace(/GH\u20B5/g, 'GHS'), 84).forEach(noteLine => {
-          lines.push(`    ${noteLine}`);
+    let rowNo = 0;
+    groups.forEach(group => {
+      lines.push('');
+      lines.push(sanitizePdfText(group.title).toUpperCase());
+      group.items.forEach(line => {
+        rowNo += 1;
+        const selection = String(line.description || '').trim() || 'Selection';
+        const wrappedSelection = wrapPdfLine(selection, 38);
+        const first = wrappedSelection.shift() || '';
+        lines.push(
+          `${String(rowNo).padEnd(3)} ${pad(first, 38)} ${pad(line.pages || '-', 4)} ${pad(line.qty || '-', 4)} ${pad(line.sheets || '-', 5)} ${money(line.unitPrice).padStart(10)} ${money(line.subtotal).padStart(12)}`
+        );
+        wrappedSelection.forEach(extra => {
+          lines.push(`    ${pad(extra, 38)}`);
         });
-      }
+        if (line.note) {
+          wrapPdfLine(line.note.replace(/GH\u20B5/g, 'GHS'), 84).forEach(noteLine => {
+            lines.push(`    ${noteLine}`);
+          });
+        }
+      });
+      lines.push(`${pad(`${group.title} subtotal:`, 64)}${money(group.subtotal).padStart(24)}`);
     });
     lines.push('');
     lines.push('--------------------------------------------------------------------------------');
-    totalLine('Subtotal', totals.baseTotal);
     if (totals.adjustmentAmount > 0) {
       totalLine(totals.adjustmentKind === 'premium' ? 'Premium' : 'Discount', totals.adjustmentAmount, totals.adjustmentKind === 'premium' ? '+' : '-');
     }

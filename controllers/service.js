@@ -412,7 +412,8 @@ exports.addComponent = async (req, res) => {
   }
 };
 
-// ASSIGN PRICE — create or update a composite ServicePrice for the exact selection set
+// ASSIGN PRICE — create a composite ServicePrice for the exact selection set.
+// Existing rules are edited through the dedicated PUT route.
 exports.assignPrice = async (req, res) => {
   try {
     const serviceId = req.params.id;
@@ -482,6 +483,7 @@ exports.assignPrice = async (req, res) => {
       price2 = parseOptionalAmount(price2, 'price2');
     }
     customLabel = (customLabel || '').toString().trim();
+    const labelKey = ServicePrice.normalizeLabelKey(customLabel);
 
     // Validate and normalize selections
     const normalized = [];
@@ -502,38 +504,58 @@ exports.assignPrice = async (req, res) => {
     const parts = normalized.map(s => `${s.unit.toString()}:${s.subUnit.toString()}`).sort();
     const key = parts.join('|');
 
-    // Upsert composite price rule: findOneAndUpdate with upsert:true
-    const filter = { service: serviceId, key };
-    const update = {
-      $set: {
-        service: serviceId,
-        selections: normalized,
-        key,
-        customLabel,
-        updatedAt: new Date()
-      },
-      $setOnInsert: { createdAt: new Date() }
-    };
-    if (hasBatchPayload) {
-      update.$set.price = resolvedCustomerPrice;
-      update.$set.price2 = resolvedCustomerPrice2;
-      update.$set['categoryPrices.artist.price'] = resolvedArtistPrice;
-      update.$set['categoryPrices.artist.price2'] = resolvedArtistPrice2;
-      update.$set['categoryPrices.organisation.price'] = resolvedOrganisationPrice;
-      update.$set['categoryPrices.organisation.price2'] = resolvedOrganisationPrice2;
-    } else if (target === 'customer') {
-      update.$set.price = price;
-      update.$set.price2 = price2;
-    } else {
-      update.$set[`categoryPrices.${target}.price`] = price;
-      update.$set[`categoryPrices.${target}.price2`] = price2;
-      // Ensure legacy/default customer price is initialized on first insert.
-      update.$setOnInsert.price = price;
-      update.$setOnInsert.price2 = price2;
-    }
-    const opts = { new: true, upsert: true, setDefaultsOnInsert: true };
+    await ServicePrice.ensureFlexibleSelectionIndexes();
 
-    const saved = await ServicePrice.findOneAndUpdate(filter, update, opts).lean();
+    // Creating a price rule must never overwrite an existing one. Updates are
+    // handled by PUT /prices/:priceId from the edit modal. The same selection
+    // can be reused only when admins provide a different short rule name.
+    const existingRules = await ServicePrice.find({ service: serviceId, key })
+      .select('_id customLabel labelKey')
+      .lean();
+    const hasSameSelection = existingRules.length > 0;
+    const hasSameLabel = existingRules.some(rule => (
+      ServicePrice.normalizeLabelKey(rule.labelKey || rule.customLabel) === labelKey
+    ));
+    if ((hasSameSelection && !labelKey) || hasSameLabel) {
+      const err = new Error(
+        labelKey
+          ? 'A price rule for this exact selection and short rule name already exists. Use a different short rule name or Edit to change it.'
+          : 'A price rule for this exact selection already exists. Add a different Optional Short Rule Name to create another rule.'
+      );
+      err.statusCode = 409;
+      throw err;
+    }
+
+    const createDoc = {
+      service: serviceId,
+      selections: normalized,
+      key,
+      customLabel,
+      labelKey
+    };
+
+    if (hasBatchPayload) {
+      createDoc.price = resolvedCustomerPrice;
+      createDoc.price2 = resolvedCustomerPrice2;
+      createDoc.categoryPrices = {
+        artist: { price: resolvedArtistPrice, price2: resolvedArtistPrice2 },
+        organisation: { price: resolvedOrganisationPrice, price2: resolvedOrganisationPrice2 }
+      };
+    } else if (target === 'customer') {
+      createDoc.price = price;
+      createDoc.price2 = price2;
+    } else {
+      // Legacy support: target-specific POST still creates a new rule and
+      // initializes the default customer price to the same value.
+      createDoc.price = price;
+      createDoc.price2 = price2;
+      createDoc.categoryPrices = {
+        [target]: { price, price2 }
+      };
+    }
+
+    const created = await ServicePrice.create(createDoc);
+    const saved = await ServicePrice.findById(created._id).lean();
 
     // Build a human-friendly label for the selection (Unit: SubUnit + ...)
     const hydratedParts = [];
@@ -570,10 +592,10 @@ exports.assignPrice = async (req, res) => {
     console.error(err);
     const status = err.statusCode || 500;
     if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
-      if (err.code === 11000) return res.status(409).json({ ok: false, error: 'A price rule for this exact selection already exists' });
+      if (err.code === 11000) return res.status(409).json({ ok: false, error: 'A price rule with this selection and short rule name already exists' });
       return res.status(status).json({ ok: false, error: err.message || 'Error assigning price' });
     }
-    if (err.code === 11000) return res.status(409).send('A price rule for this exact selection already exists');
+    if (err.code === 11000) return res.status(409).send('A price rule with this selection and short rule name already exists');
     res.status(status).send(err.message || 'Error assigning price');
   }
 };

@@ -191,6 +191,7 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
   let currentOrderId = null;
   let currentOrderTotal = 0;
   let currentOrderStatus = null;
+  let currentOrder = null;
 
   // --- NEW: customer account context for fetched order ---
   let currentHasCustomer = false;
@@ -648,6 +649,39 @@ function discountAppliedLabel(order) {
     });
   }
 
+  function buildSavedReceiptsHtml(order) {
+    const payments = order && Array.isArray(order.payments) ? order.payments : [];
+    if (!payments.length) return '';
+    const rows = payments.map((payment, idx) => {
+      const meta = payment && payment.meta && typeof payment.meta === 'object' ? payment.meta : {};
+      const amount = Number(meta.receivedAmount || payment.amount || 0);
+      const method = payment.cashBookKind || payment.method || '';
+      const paymentId = paymentIdValue(payment);
+      const title = `Receipt ${idx + 1}`;
+      const date = payment.createdAt ? formatDateTime(payment.createdAt) : '-';
+      return `
+        <div class="list-group-item d-flex align-items-center justify-content-between gap-2">
+          <div>
+            <div class="fw-semibold text-white">${escapeHtml(title)}</div>
+            <div class="small text-muted-light">${escapeHtml(date)} | ${escapeHtml(paymentMethodLabel(method))} | ${formatCedi(amount)}</div>
+          </div>
+          <button class="btn btn-sm btn-outline-light-custom print-saved-receipt-btn" type="button" data-payment-id="${escapeHtml(paymentId)}">
+            Print
+          </button>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="mt-3">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <h6 class="mb-0 text-white">Saved Receipts</h6>
+          <small class="text-muted-light">${payments.length} receipt${payments.length === 1 ? '' : 's'}</small>
+        </div>
+        <div class="list-group saved-receipts-list">${rows}</div>
+      </div>
+    `;
+  }
+
   // Render a single order's details into the #orderInfo element.
   // Shows only sub-unit names (comma separated). Single-line selection (no wrapping).
   // Hides Pay button if order.status === 'paid'
@@ -660,6 +694,7 @@ function discountAppliedLabel(order) {
       payNowBtn.disabled = true;
       setPayManualDiscountVisibility(false);
       currentOrderId = null;
+      currentOrder = null;
       currentOrderTotal = 0;
       currentOrderStatus = null;
       currentHasCustomer = false;
@@ -672,6 +707,7 @@ function discountAppliedLabel(order) {
     }
 
     currentOrderId = order.orderId;
+    currentOrder = order;
     currentOrderTotal = order.total;
     currentOrderStatus = order.status;
 
@@ -685,77 +721,44 @@ function discountAppliedLabel(order) {
 
     let itemsHtml = '';
     if (order.items && order.items.length) {
-      itemsHtml += `<div class="list-group mb-2">`;
-      order.items.forEach(it => {
-        const rawLabel = it.selectionLabel || '';
-        let selLabel = subUnitsOnlyFromLabel(rawLabel);
-        if (!selLabel && it.selections && it.selections.length) {
-          selLabel = it.selections.map(s => {
-            if (s.subUnit && typeof s.subUnit === 'object' && s.subUnit.name) return s.subUnit.name;
-            if (s.subUnit && typeof s.subUnit === 'string') return s.subUnit;
-            return '';
-          }).filter(Boolean).join(', ');
-        }
-        if (!selLabel) selLabel = '(no label)';
-        const isFb = (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
-        const fbBadge = isFb ? ' <span class="badge bg-secondary ms-2">F/B</span>' : '';
-        // prefer server-stored effectiveQty if available
-        // prefer server-stored effectiveQty if available (this is "effective sheets" BEFORE factor)
-        const rawPages = Number(it.pages || 1);
-        const baseSheets =
-          (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null)
-            ? Number(it.effectiveQty)
-            : (isFb ? Math.ceil(rawPages / 2) : rawPages);
-
-        const requiresPrinter = !!it.printer;
-        const factor = Math.max(1, Math.floor(Number(it.factor || 1)));
-
-        // DISPLAY FIX:
-        // - non-printing: QTY = baseSheets
-        // - printing: Sheets = baseSheets × factor
-        const displayQty = requiresPrinter ? (baseSheets * factor) : baseSheets;
-
-        const qtyLabel = requiresPrinter ? 'Sheets' : 'QTY';
-        const pages = requiresPrinter ? rawPages : null;
-
-        const unit = Number(it.unitPrice || 0);
-
-        // prefer server-subtotal; otherwise compute from DISPLAY qty for consistency
-        const subtotal = Number(
-          (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal)))
-            ? Number(it.subtotal)
-            : (displayQty * unit)
-        );
-
-        const serviceName = it.serviceName || 'Service';
-
+      itemsHtml += '<div class="list-group mb-2">';
+      const groups = groupReceiptRows(order.items.map(it => receiptItemData(it || {})));
+      groups.forEach(group => {
         itemsHtml += `
-          <div class="list-group-item d-flex align-items-start justify-content-between" style="padding:0.5rem 0.75rem;">
-            <div style="flex:1;min-width:0;">
-              <div class="fw-semibold">
-                ${escapeHtml(serviceName)}
+          <div class="list-group-item" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:0.55rem 0.75rem;">
+            <strong class="text-white">${escapeHtml(group.title)}</strong>
+          </div>
+        `;
+        group.items.forEach(row => {
+          const qtyText = row.pages
+            ? `${row.qtyLabel}: ${row.qty} / Pages: ${row.pages}`
+            : `${row.qtyLabel}: ${row.qty}`;
+          itemsHtml += `
+            <div class="list-group-item d-flex align-items-start justify-content-between" style="padding:0.5rem 0.75rem;">
+              <div style="flex:1;min-width:0;">
+                <span style="display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:520px;">
+                  ${escapeHtml(row.selectionLabel)}
+                </span>
               </div>
 
-              <span style="display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:520px;">
-                ${escapeHtml(selLabel)}
-              </span>
+              <div class="text-end ms-3" style="min-width:200px;">
+                <div>${escapeHtml(qtyText)}</div>
+                <div>Unit: ${formatCedi(row.unit)}</div>
+                <div>Subtotal: ${formatCedi(row.subtotal)}</div>
+              </div>
             </div>
-
-            <div class="text-end ms-3" style="min-width:200px;">
-            <div>${qtyLabel}: ${escapeHtml(String(displayQty))}</div>
-            ${ requiresPrinter ? `<div>Pages: ${escapeHtml(String(pages))}</div>` : '' }
-            ${ (requiresPrinter && factor > 1) ? `<div>QTY ×${factor}</div>` : '' }
-              <div>Unit: GH₵ ${escapeHtml(fmt(unit))}</div>
-              <div>Subtotal: GH₵ ${escapeHtml(fmt(subtotal))}</div>
-            </div>
+          `;
+        });
+        itemsHtml += `
+          <div class="list-group-item d-flex justify-content-end" style="background:rgba(255,255,255,.04);border-bottom:2px solid rgba(255,255,255,.16);padding:0.45rem 0.75rem;">
+            <strong class="text-white">${escapeHtml(group.title)} subtotal: ${formatCedi(group.subtotal)}</strong>
           </div>
         `;
       });
-      itemsHtml += `</div>`;
+      itemsHtml += '</div>';
     } else {
       itemsHtml = '<p class="text-muted">No items in this order.</p>';
     }
-
     const statusLabel = order.status ? escapeHtml(order.status) : 'unknown';
 
     const outstanding = computeOutstanding(order);
@@ -931,11 +934,13 @@ function discountAppliedLabel(order) {
         </div>
       </div>
     ` : '';
+    const savedReceiptsHtml = buildSavedReceiptsHtml(order);
 
 
     orderInfo.innerHTML = `
       ${detailsTableHtml}
       ${itemsHtml}
+      ${savedReceiptsHtml}
       ${discountHtml}
       ${taxHtml}
       <p class="text-end"><strong>Total to pay: GH₵ ${fmt(order.total)}</strong></p>
@@ -994,6 +999,58 @@ function discountAppliedLabel(order) {
     return payments.length ? payments[payments.length - 1] : {};
   }
 
+  function paymentIdValue(payment) {
+    if (!payment) return '';
+    if (payment._id && typeof payment._id === 'object' && payment._id.toString) return payment._id.toString();
+    return String(payment._id || payment.id || '');
+  }
+
+  function paymentFromOrder(order, paymentId) {
+    const payments = order && Array.isArray(order.payments) ? order.payments : [];
+    const target = String(paymentId || '').trim();
+    if (!target) return latestPaymentFromOrder(order);
+    return payments.find(p => paymentIdValue(p) === target) || latestPaymentFromOrder(order);
+  }
+
+  function selectedPaymentFromOrder(order, context) {
+    const ctx = context || {};
+    return paymentFromOrder(order, ctx.paymentId || ctx.receiptPaymentId || '');
+  }
+
+  function receiptContextFromPayment(order, payment) {
+    const meta = payment && payment.meta && typeof payment.meta === 'object' ? payment.meta : {};
+    const saved = meta.receiptContext && typeof meta.receiptContext === 'object' ? meta.receiptContext : {};
+    const received = Number(saved.receivedAmount || meta.receivedAmount || payment?.amount || 0);
+    const payments = order && Array.isArray(order.payments) ? order.payments : [];
+    const targetId = paymentIdValue(payment);
+    const idx = payments.findIndex(p => paymentIdValue(p) === targetId);
+    const paidBefore = idx > -1
+      ? payments.slice(0, idx).reduce((sum, p) => sum + (Number((p && p.amount) || 0) || 0), 0)
+      : 0;
+    const paidThrough = idx > -1
+      ? payments.slice(0, idx + 1).reduce((sum, p) => sum + (Number((p && p.amount) || 0) || 0), 0)
+      : Number((payment && payment.amount) || 0);
+    const orderTotal = Number((order && order.total) || 0);
+    const previousOutstandingFallback = Number(Math.max(0, orderTotal - paidBefore).toFixed(2));
+    const remainingAfterFallback = Number(Math.max(0, orderTotal - paidThrough).toFixed(2));
+    return {
+      paymentId: paymentIdValue(payment),
+      previousOutstanding: typeof saved.previousOutstanding !== 'undefined' ? saved.previousOutstanding : previousOutstandingFallback,
+      previousCustomerDebt: saved.previousCustomerDebt,
+      remainingAfter: typeof saved.remainingAfter !== 'undefined' ? saved.remainingAfter : remainingAfterFallback,
+      totalBalance: saved.totalBalance,
+      receivedAmount: isNaN(received) ? 0 : received,
+      method: saved.paymentMethod || payment?.cashBookKind || payment?.method || '',
+      meta,
+      momoNumber: meta.momoNumber || '',
+      momoTxId: meta.momoTxId || '',
+      chequeNumber: meta.chequeNumber || '',
+      depositDetails: meta.depositDetails || '',
+      receiptDate: saved.receiptDate || payment?.createdAt || '',
+      recordedByName: saved.recordedByName || payment?.recordedByName || ''
+    };
+  }
+
   function receiptItemData(it) {
     const rawLabel = it && it.selectionLabel ? String(it.selectionLabel) : '';
     let selLabel = subUnitsOnlyFromLabel(rawLabel);
@@ -1033,20 +1090,43 @@ function discountAppliedLabel(order) {
     };
   }
 
+  function groupReceiptRows(rows) {
+    const groups = [];
+    const groupMap = new Map();
+    (Array.isArray(rows) ? rows : []).forEach(row => {
+      const title = String((row && row.serviceName) || 'Service').trim() || 'Service';
+      const key = title.toLowerCase();
+      let group = groupMap.get(key);
+      if (!group) {
+        group = { title, items: [], subtotal: 0 };
+        groupMap.set(key, group);
+        groups.push(group);
+      }
+      group.items.push(row);
+      group.subtotal += Number((row && row.subtotal) || 0);
+    });
+    groups.forEach(group => {
+      group.subtotal = Number(group.subtotal.toFixed(2));
+    });
+    return groups;
+  }
+
   function buildPaymentReceiptHtml(order, paymentResult, context) {
     const ctx = context || {};
     const result = paymentResult || {};
-    const latestPayment = latestPaymentFromOrder(order);
+    const latestPayment = selectedPaymentFromOrder(order, ctx);
     const paymentMeta = Object.assign({}, ctx.meta || {}, latestPayment.meta || {});
     const paymentMethod = latestPayment.cashBookKind || latestPayment.method || ctx.method || 'cash';
     const latestPaymentAmount = Number((latestPayment && latestPayment.amount) || 0) || 0;
     const receivedAmount = Number(result.receivedAmount || ctx.receivedAmount || latestPaymentAmount) || 0;
     const remaining = Number(
-      order && typeof order.outstanding !== 'undefined'
-        ? order.outstanding
-        : (typeof result.outstanding !== 'undefined' ? result.outstanding : computeOutstanding(order))
+      typeof ctx.remainingAfter !== 'undefined' && ctx.remainingAfter !== null
+        ? ctx.remainingAfter
+        : (order && typeof order.outstanding !== 'undefined'
+          ? order.outstanding
+          : (typeof result.outstanding !== 'undefined' ? result.outstanding : computeOutstanding(order)))
     ) || 0;
-    const receiptDate = latestPayment.createdAt || new Date().toISOString();
+    const receiptDate = ctx.receiptDate || latestPayment.createdAt || new Date().toISOString();
 
     const detailsRows = [
       ['Receipt Date', formatDateTime(receiptDate)],
@@ -1074,21 +1154,35 @@ function discountAppliedLabel(order) {
       </tr>
     `).join('');
 
-    const itemRows = ((order && Array.isArray(order.items)) ? order.items : []).map((it, idx) => {
-      const row = receiptItemData(it || {});
-      const qtyText = row.pages
-        ? `${row.qtyLabel}: ${row.qty} / Pages: ${row.pages}`
-        : `${row.qtyLabel}: ${row.qty}`;
+    const receiptRows = ((order && Array.isArray(order.items)) ? order.items : []).map(it => receiptItemData(it || {}));
+    const receiptGroups = groupReceiptRows(receiptRows);
+    let itemNo = 0;
+    const itemRows = receiptGroups.map(group => {
+      const rows = group.items.map(row => {
+        itemNo += 1;
+        const qtyText = row.pages
+          ? `${row.qtyLabel}: ${row.qty} / Pages: ${row.pages}`
+          : `${row.qtyLabel}: ${row.qty}`;
+        return `
+          <tr>
+            <td class="text-center">${itemNo}</td>
+            <td>
+              <div class="receipt-muted">${escapeHtml(row.selectionLabel)}</div>
+            </td>
+            <td>${escapeHtml(qtyText)}</td>
+            <td class="text-end">${formatCedi(row.unit)}</td>
+            <td class="text-end">${formatCedi(row.subtotal)}</td>
+          </tr>
+        `;
+      }).join('');
       return `
-        <tr>
-          <td class="text-center">${idx + 1}</td>
-          <td>
-            <strong>${escapeHtml(row.serviceName)}</strong>
-            <div class="receipt-muted">${escapeHtml(row.selectionLabel)}</div>
-          </td>
-          <td>${escapeHtml(qtyText)}</td>
-          <td class="text-end">${formatCedi(row.unit)}</td>
-          <td class="text-end">${formatCedi(row.subtotal)}</td>
+        <tr class="receipt-service-header">
+          <td colspan="5" style="background:#eef2ff;border-top:1px solid #c7d2fe;border-bottom:1px solid #c7d2fe;font-weight:800;">${escapeHtml(group.title)}</td>
+        </tr>
+        ${rows}
+        <tr class="receipt-service-subtotal">
+          <td colspan="4" class="text-end" style="background:#fafafa;border-bottom:2px solid #d1d5db;font-weight:800;">${escapeHtml(group.title)} subtotal:</td>
+          <td class="text-end" style="background:#fafafa;border-bottom:2px solid #d1d5db;font-weight:800;">${formatCedi(group.subtotal)}</td>
         </tr>
       `;
     }).join('');
@@ -1105,7 +1199,11 @@ function discountAppliedLabel(order) {
         ? ctx.previousCustomerDebt
         : fallbackPreviousDebt
     ) || 0;
-    const totalDebts = Number((Math.max(0, previousDebt) + Math.max(0, remaining)).toFixed(2));
+    const totalDebts = Number(
+      typeof ctx.totalBalance !== 'undefined' && ctx.totalBalance !== null
+        ? Number(ctx.totalBalance || 0)
+        : (Math.max(0, previousDebt) + Math.max(0, remaining)).toFixed(2)
+    );
 
     const summaryRows = [
       ['Order Amount', formatCedi(order && order.total ? order.total : 0)],
@@ -1192,6 +1290,8 @@ function discountAppliedLabel(order) {
         .text-center { text-align: center; }
         .text-end { text-align: right; }
         .receipt-muted { color: #6b7280; font-size: 12px; }
+        .receipt-service-header td { background: #eef2ff; border-top: 1px solid #c7d2fe; border-bottom: 1px solid #c7d2fe; font-weight: 800; }
+        .receipt-service-subtotal td { background: #fafafa; border-bottom: 2px solid #d1d5db; font-weight: 800; }
         .receipt-summary-table { width: 360px; margin-left: auto; }
         .receipt-total-row th, .receipt-total-row td { border-top: 2px solid #111827; font-weight: 800; }
         @media print { body { padding: 12px; } }
@@ -1274,6 +1374,25 @@ function discountAppliedLabel(order) {
     } catch (err) {
       showAlertModal('Payment recorded. Receipt is ready, but the receipt modal could not be opened.', 'Payment recorded');
     }
+  }
+
+  if (orderInfo) {
+    orderInfo.addEventListener('click', function (ev) {
+      const btn = ev.target && ev.target.closest ? ev.target.closest('.print-saved-receipt-btn') : null;
+      if (!btn) return;
+      const paymentId = btn.dataset ? (btn.dataset.paymentId || '') : '';
+      const payment = paymentFromOrder(currentOrder, paymentId);
+      if (!currentOrder || !payment || !paymentIdValue(payment)) {
+        showAlertModal('Receipt could not be found for this order.', 'Receipt not found');
+        return;
+      }
+      const receiptContext = receiptContextFromPayment(currentOrder, payment);
+      showPaymentReceiptModal(currentOrder, {
+        orderId: currentOrder.orderId,
+        receivedAmount: receiptContext.receivedAmount,
+        outstanding: receiptContext.remainingAfter
+      }, receiptContext);
+    });
   }
 
   async function applyManualDiscountToOrder(orderId, kind, mode, value) {
@@ -1473,6 +1592,7 @@ function discountAppliedLabel(order) {
             depositDetails: payload.depositDetails || ''
           }
         };
+        payload.receiptContext = receiptContext;
 
         // send as JSON; existing server action will still mark paid as before.
         const res = await fetch(`/orders/${encodeURIComponent(paidOrderId)}/pay`, {
@@ -1485,6 +1605,10 @@ function discountAppliedLabel(order) {
           showAlertModal((j && j.error) ? j.error : 'Pay failed', 'Payment error');
           return;
         }
+        receiptContext.paymentId = j && j.paymentId ? j.paymentId : '';
+        receiptContext.remainingAfter = Number(j && typeof j.outstanding !== 'undefined' ? j.outstanding : 0);
+        receiptContext.totalBalance = Number((Math.max(0, Number(receiptContext.previousCustomerDebt || 0)) + Math.max(0, Number(receiptContext.remainingAfter || 0))).toFixed(2));
+        receiptContext.receiptDate = new Date().toISOString();
 
         // re-fetch order to display updated status and data
         const updatedOrder = await fetchOrderById(paidOrderId);

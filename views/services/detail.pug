@@ -67,7 +67,7 @@ block content
   //- Price assignment (placed in a content-card so inputs/dropdowns follow dark styles)
   .content-card.mt-3
     .dark-card-body
-      form#assign-price(method='post', action=`/admin/services/${service._id}/prices`, class='mb-4 needs-validation', novalidate)
+      form#assign-price(method='post', action=`/admin/services/${service._id}/prices`, class='mb-4 needs-validation', novalidate, data-disable-spinner='true')
         input(type='hidden', name='selections', id='selectionsInput')
         .row.g-2.align-items-center
           .col-md-5

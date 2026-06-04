@@ -178,6 +178,7 @@ function initServiceDetailPage() {
 
   // ————— core helpers & elements —————
   const assignForm = document.getElementById('assign-price');
+  if (assignForm) assignForm.dataset.disableSpinner = 'true';
   const assignBtn = document.getElementById('assignBtn');
   const assignSpinner = document.getElementById('assignSpinner');
   const priceInput = document.getElementById('priceInput');
@@ -282,10 +283,40 @@ function initServiceDetailPage() {
     return Object.keys(map).map(u => ({ unit: u, subUnit: map[u] }));
   }
 
+  function resetAssignButton() {
+    if (!assignBtn) return;
+    if (window.__FormSpinner && typeof window.__FormSpinner.hide === 'function') {
+      try { window.__FormSpinner.hide(assignBtn); } catch (e) { /* fallback below */ }
+    }
+    assignBtn.disabled = false;
+    assignBtn.removeAttribute('disabled');
+    assignBtn.removeAttribute('aria-disabled');
+    assignBtn.removeAttribute('data-spinner-active');
+    assignBtn.removeAttribute('data-last-clicked');
+    assignBtn.classList.remove('loading');
+    assignBtn.querySelectorAll('.spinner-border').forEach(spinner => {
+      spinner.style.display = 'none';
+    });
+  }
+
   function setAssignLoading(loading) {
     if (!assignBtn) return;
-    assignBtn.disabled = !!loading;
-    if (assignSpinner) assignSpinner.style.display = loading ? 'inline-block' : 'none';
+    if (loading) {
+      if (window.__FormSpinner && typeof window.__FormSpinner.show === 'function') {
+        try {
+          window.__FormSpinner.show(assignBtn);
+          return;
+        } catch (e) {
+          // Fall through to the local spinner if the shared helper is unavailable.
+        }
+      }
+      assignBtn.disabled = true;
+      assignBtn.setAttribute('aria-disabled', 'true');
+      assignBtn.classList.add('loading');
+      if (assignSpinner) assignSpinner.style.display = 'inline-block';
+      return;
+    }
+    resetAssignButton();
   }
 
   function normalizeTarget(v) {
@@ -508,6 +539,7 @@ function initServiceDetailPage() {
       const selections = gatherSelections();
       if (!selections.length) {
         if (priceInput) priceInput.classList.add('is-invalid');
+        resetAssignButton();
         return;
       }
       stageCurrentTargetInputs();
@@ -517,6 +549,7 @@ function initServiceDetailPage() {
         loadInputsFromTarget('customer');
         if (priceInput) priceInput.classList.add('is-invalid');
         showError('Set a valid Customers price before assigning.');
+        resetAssignButton();
         return;
       }
       const customLabelVal = customLabelInput && customLabelInput.value ? customLabelInput.value : '';
@@ -546,8 +579,12 @@ function initServiceDetailPage() {
         });
         if (res.ok) {
           await refreshPricesSection();
-          // Keep selected sub-units intact so admins can quickly assign
-          // Artist/Organisation prices for the same rule without reselecting.
+          // The current flow saves all customer-type prices in one create, so
+          // clear selections after success to avoid accidentally editing the
+          // same exact rule on the next create.
+          document.querySelectorAll('.unit-sub-checkbox:checked').forEach(cb => { cb.checked = false; });
+          const selectionsInput = document.getElementById('selectionsInput');
+          if (selectionsInput) selectionsInput.value = '';
           stagedPricesByTarget.customer = { price: '', price2: '' };
           stagedPricesByTarget.artist = { price: '', price2: '' };
           stagedPricesByTarget.organisation = { price: '', price2: '' };

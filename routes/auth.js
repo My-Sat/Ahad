@@ -45,7 +45,7 @@ router.post('/login', async (req, res, next) => {
       }
 
       const role = (user.role || '').toLowerCase();
-      if (role === 'admin') return res.redirect('/admin/services');
+      if (role === 'admin') return res.redirect('/registrations');
       if (role === 'clerk') return res.redirect('/orders/new');
       if (role === 'cashier') return res.redirect('/orders/pay');
       if (role === 'secretary') return res.redirect('/registrations');
@@ -243,7 +243,7 @@ router.post('/create-first-admin', async (req, res, next) => {
 
     // auto-login
     req.session.userId = u._id.toString();
-    return res.redirect('/admin/services');
+    return res.redirect('/registrations');
   } catch (err) { next(err); }
 });
 

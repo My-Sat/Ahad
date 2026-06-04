@@ -82,6 +82,7 @@ exports.createPrice = async (req, res) => {
       price2 = null;
     }
     customLabel = (customLabel || '').toString().trim();
+    const labelKey = ServicePrice.normalizeLabelKey(customLabel);
 
     // validate each selection: unit/subUnit exist and belong together, and (optionally) belong to service component
     for (const s of selections) {
@@ -110,8 +111,28 @@ exports.createPrice = async (req, res) => {
       }
     }
 
+    const parts = selections.map(s => `${String(s.unit)}:${String(s.subUnit)}`).sort();
+    const key = parts.join('|');
+
+    await ServicePrice.ensureFlexibleSelectionIndexes();
+
+    const existingRules = await ServicePrice.find({ service: serviceId, key })
+      .select('_id customLabel labelKey')
+      .lean();
+    const hasSameSelection = existingRules.length > 0;
+    const hasSameLabel = existingRules.some(rule => (
+      ServicePrice.normalizeLabelKey(rule.labelKey || rule.customLabel) === labelKey
+    ));
+    if ((hasSameSelection && !labelKey) || hasSameLabel) {
+      return res.status(409).json({
+        error: labelKey
+          ? 'A price rule for this exact selection and short rule name already exists'
+          : 'A price rule for this exact selection already exists. Add a different Optional Short Rule Name to create another rule.'
+      });
+    }
+
     // Create the ServicePrice doc (include price2)
-    const createDoc = { service: serviceId, selections, price, price2, customLabel };
+    const createDoc = { service: serviceId, selections, key, price, price2, customLabel, labelKey };
     if (target === 'artist' || target === 'organisation') {
       createDoc.categoryPrices = createDoc.categoryPrices || {};
       createDoc.categoryPrices[target] = { price, price2 };
@@ -126,7 +147,7 @@ exports.createPrice = async (req, res) => {
   } catch (err) {
     console.error('price.createPrice error', err);
     if (err.code === 11000) {
-      return res.status(409).json({ error: 'A price for this exact selection already exists' });
+      return res.status(409).json({ error: 'A price rule with this selection and short rule name already exists' });
     }
     return res.status(400).json({ error: err.message || 'Error creating price' });
   }
@@ -206,8 +227,48 @@ exports.updatePrice = async (req, res) => {
       price2 = null;
     }
     customLabel = (customLabel || '').toString().trim();
+    const labelKey = ServicePrice.normalizeLabelKey(customLabel);
 
-    const setObj = { customLabel, updatedAt: new Date() };
+    await ServicePrice.ensureFlexibleSelectionIndexes();
+
+    const current = await ServicePrice.findOne({ _id: priceId, service: serviceId })
+      .select('_id key')
+      .lean();
+    if (!current) {
+      if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
+        return res.status(404).json({ ok: false, error: 'Price rule not found' });
+      }
+      return res.status(404).send('Price rule not found');
+    }
+
+    if (!labelKey) {
+      const otherSameSelection = await ServicePrice.findOne({
+        service: serviceId,
+        key: current.key,
+        _id: { $ne: priceId }
+      }).select('_id').lean();
+      if (otherSameSelection) {
+        if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
+          return res.status(409).json({ ok: false, error: 'A short rule name is required when this selection has more than one price rule.' });
+        }
+        return res.status(409).send('A short rule name is required when this selection has more than one price rule.');
+      }
+    }
+
+    const duplicateLabel = await ServicePrice.findOne({
+      service: serviceId,
+      key: current.key,
+      labelKey,
+      _id: { $ne: priceId }
+    }).select('_id').lean();
+    if (duplicateLabel) {
+      if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
+        return res.status(409).json({ ok: false, error: 'A price rule with this selection and short rule name already exists.' });
+      }
+      return res.status(409).send('A price rule with this selection and short rule name already exists.');
+    }
+
+    const setObj = { customLabel, labelKey, updatedAt: new Date() };
     if (target === 'customer') {
       setObj.price = price;
       setObj.price2 = price2;
@@ -222,13 +283,6 @@ exports.updatePrice = async (req, res) => {
       { new: true }
     ).lean();
 
-    if (!doc) {
-      if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
-        return res.status(404).json({ ok: false, error: 'Price rule not found' });
-      }
-      return res.status(404).send('Price rule not found');
-    }
-
     // optionally populate selections for client
     const populated = await ServicePrice.findById(doc._id).populate('selections.unit selections.subUnit').lean();
 
@@ -240,8 +294,10 @@ exports.updatePrice = async (req, res) => {
   } catch (err) {
     console.error('price.updatePrice error', err);
     if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
+      if (err.code === 11000) return res.status(409).json({ ok: false, error: 'A price rule with this selection and short rule name already exists' });
       return res.status(500).json({ ok: false, error: 'Error updating price' });
     }
+    if (err.code === 11000) return res.status(409).send('A price rule with this selection and short rule name already exists');
     return res.status(500).send('Error updating price');
   }
 };
