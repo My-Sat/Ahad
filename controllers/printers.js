@@ -4,6 +4,11 @@ const PrinterUsage = require('../models/printer_usage');
 const mongoose = require('mongoose');
 const Order = require('../models/order');
 
+function parsePrinterCount(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Number(n.toFixed(4)) : null;
+}
+
 exports.list = async (req, res) => {
   try {
     const printers = await Printer.find().sort('name').lean();
@@ -128,12 +133,11 @@ exports.adjustCount = async (req, res) => {
     // parse inputs
     let delta = null;
     if (req.body.delta !== undefined && req.body.delta !== null && String(req.body.delta).trim() !== '') {
-      delta = Math.floor(Number(req.body.delta) || 0);
+      delta = parsePrinterCount(req.body.delta);
     }
     let setTo = null;
     if (req.body.setTo !== undefined && req.body.setTo !== null && String(req.body.setTo).trim() !== '') {
-      setTo = Math.floor(Number(req.body.setTo));
-      if (isNaN(setTo)) setTo = null;
+      setTo = parsePrinterCount(req.body.setTo);
     }
 
     const target = (req.body.target && String(req.body.target).toLowerCase()) ? String(req.body.target).toLowerCase() : 'total';

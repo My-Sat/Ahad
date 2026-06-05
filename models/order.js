@@ -28,6 +28,7 @@ const OrderItemSchema = new mongoose.Schema({
   fb: { type: Boolean, default: false },
   spoiled: { type: Number, default: 0 },
   printerType: { type: String, enum: ['monochrome', 'colour', null], default: null },
+  printFactor: { type: Number, default: 1 },
   outsourcedArtist: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', default: null },
   outsourcedArtistName: { type: String, default: '' },
   outsourcedQty: { type: Number, default: 0 },

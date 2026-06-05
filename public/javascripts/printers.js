@@ -613,8 +613,8 @@
       try {
         const body = new URLSearchParams();
         body.append('target', String(target));
-        if (mode === 'set') body.append('setTo', String(Math.floor(v)));
-        else body.append('delta', String(Math.floor(v)));
+        if (mode === 'set') body.append('setTo', String(v));
+        else body.append('delta', String(v));
 
         const res = await fetch(`/admin/printers/${encodeURIComponent(pid)}/adjust`, {
           method: 'POST',

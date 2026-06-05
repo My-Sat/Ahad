@@ -150,7 +150,7 @@ block content
                 option(value='set') Set absolute total
             .mb-2
               label.form-label(for='adjustPrinterValue') Value
-              input.form-control.form-control-dark(type='number', id='adjustPrinterValue', name='value', required)
+              input.form-control.form-control-dark(type='number', id='adjustPrinterValue', name='value', step='0.01', required)
               .form-text.small.text-muted-light Enter positive or negative number when using delta; for Set provide the absolute total.
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel

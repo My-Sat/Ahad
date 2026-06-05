@@ -42,6 +42,16 @@ function isOutSourcedCategoryName(name) {
   return /out[\s-]*sourced/i.test(String(name || '').trim());
 }
 
+function positiveCountFactor(value, fallback = 1) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function roundCount(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Number(n.toFixed(4)) : 0;
+}
+
 async function resolveMaterialUnitCostSnapshot(stockDoc, storeId, materialId) {
   const stored = roundUnitCost(stockDoc && stockDoc.averageUnitCost ? stockDoc.averageUnitCost : 0);
   if (!stockDoc || !storeId || !materialId || stored <= 0) return stored;
@@ -1264,8 +1274,8 @@ return {
             const fv = (isNaN(f) || f <= 0) ? 1 : f;
             return acc * fv;
           }, 1);
-          // coerce to integer
-          printFactor = Math.max(1, Math.floor(printFactor));
+          // Keep configured decimal print factors intact (e.g. 0.5, 1.5).
+          printFactor = positiveCountFactor(roundCount(printFactor), 1);
         }
       } catch (pfErr) {
         printFactor = 1;
@@ -1738,9 +1748,9 @@ for (let idx = 0; idx < builtItems.length; idx++) {
   const pages = Number(it.pages) || 1;
   // base count is floor(pages) (we intentionally don't include 'spoiled' for printer usage)
   const baseCount = Math.max(0, Math.floor(pages));
-  const factor = (it.printFactor && !isNaN(Number(it.printFactor))) ? Math.max(1, Math.floor(Number(it.printFactor))) : 1;
-  // final usage count applied to printer = baseCount * factor
-  const usageCount = Math.max(0, Math.floor(baseCount * factor));
+  const factor = positiveCountFactor(it.printFactor, 1);
+  // final usage count applied to printer = baseCount * configured service factor
+  const usageCount = Math.max(0, roundCount(baseCount * factor));
 
   // determine type for this usage (may be 'monochrome'|'colour'|null)
   const usageType = (it.printerType === 'monochrome' || it.printerType === 'colour') ? it.printerType : null;
