@@ -326,6 +326,14 @@ let outsourcedOrderDetailsByKey = Object.create(null);
     return /out[\s-]*sourced/i.test(String(name || '').trim());
   }
 
+  function isClassBasedCategoryName(name) {
+    return String(name || '')
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toUpperCase() === 'CLASS BASED';
+  }
+
 async function loadServiceCategories() {
   if (!serviceCategorySelect) return;
   const cats = (activeSubmission && Array.isArray(activeSubmission.categories))
@@ -1328,33 +1336,38 @@ function renderPrices(bookMode = false) {
   const container = document.createElement('div');
   container.className = 'list-group';
   const wrapper = document.createElement('div');
-  const sharedControls = document.createElement('div');
-  sharedControls.className = 'd-flex align-items-center gap-3 flex-wrap mb-2 px-2 py-2 rounded-3';
-  sharedControls.style.background = 'rgba(255,255,255,.06)';
-  sharedControls.style.border = '1px solid rgba(255,255,255,.10)';
-  sharedControls.innerHTML = `
-    <span class="small text-muted-light me-1">Use one entry for all loaded rules:</span>
-    ${serviceRequiresPrinter ? `
+  const allowSharedRuleInputs = isClassBasedCategoryName(selectedServiceCategoryName);
+  let sharedControls = null;
+  if (allowSharedRuleInputs) {
+    sharedControls = document.createElement('div');
+    sharedControls.className = 'd-flex align-items-center gap-3 flex-wrap mb-2 px-2 py-2 rounded-3';
+    sharedControls.style.background = 'rgba(255,255,255,.06)';
+    sharedControls.style.border = '1px solid rgba(255,255,255,.10)';
+    sharedControls.innerHTML = `
+      <span class="small text-muted-light me-1">Use one entry for all loaded rules:</span>
+      ${serviceRequiresPrinter ? `
+        <label class="form-check form-check-inline small mb-0">
+          <input class="form-check-input same-pages-toggle" type="checkbox">
+          <span class="form-check-label">Use Same Pages</span>
+        </label>
+      ` : ''}
       <label class="form-check form-check-inline small mb-0">
-        <input class="form-check-input same-pages-toggle" type="checkbox">
-        <span class="form-check-label">Use Same Pages</span>
+        <input class="form-check-input same-qty-toggle" type="checkbox">
+        <span class="form-check-label">Use Same QTY</span>
       </label>
-    ` : ''}
-    <label class="form-check form-check-inline small mb-0">
-      <input class="form-check-input same-qty-toggle" type="checkbox">
-      <span class="form-check-label">Use Same QTY</span>
-    </label>
-    ${serviceRequiresPrinter ? `
-      <label class="form-check form-check-inline small mb-0">
-        <input class="form-check-input same-printer-toggle" type="checkbox">
-        <span class="form-check-label">Use Same Printer</span>
-      </label>
-    ` : ''}
-  `;
-  wrapper.appendChild(sharedControls);
+      ${serviceRequiresPrinter ? `
+        <label class="form-check form-check-inline small mb-0">
+          <input class="form-check-input same-printer-toggle" type="checkbox">
+          <span class="form-check-label">Use Same Printer</span>
+        </label>
+      ` : ''}
+    `;
+    wrapper.appendChild(sharedControls);
+  }
   wrapper.appendChild(container);
 
   function sharedToggleChecked(selector) {
+    if (!sharedControls) return false;
     const toggle = sharedControls.querySelector(selector);
     return !!(toggle && toggle.checked);
   }
@@ -1373,13 +1386,15 @@ function renderPrices(bookMode = false) {
   }
 
   const qtySyncSelector = serviceRequiresPrinter ? '.factor-input' : '.pages-input';
-  sharedControls.addEventListener('change', function (e) {
-    const target = e.target;
-    if (!target || !target.checked) return;
-    if (target.classList.contains('same-pages-toggle')) syncFromFirstFilled('.pages-input');
-    if (target.classList.contains('same-qty-toggle')) syncFromFirstFilled(qtySyncSelector);
-    if (target.classList.contains('same-printer-toggle')) syncFromFirstFilled('.printer-select');
-  });
+  if (sharedControls) {
+    sharedControls.addEventListener('change', function (e) {
+      const target = e.target;
+      if (!target || !target.checked) return;
+      if (target.classList.contains('same-pages-toggle')) syncFromFirstFilled('.pages-input');
+      if (target.classList.contains('same-qty-toggle')) syncFromFirstFilled(qtySyncSelector);
+      if (target.classList.contains('same-printer-toggle')) syncFromFirstFilled('.printer-select');
+    });
+  }
 
   container.addEventListener('input', function (e) {
     const target = e.target;

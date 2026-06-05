@@ -337,11 +337,46 @@ block content
               const o = document.createElement('option');
               o.value = c._id;
               o.textContent = c.name + (c.showInOrders ? '' : ' (hidden)');
+              o.dataset.protected = (c.isProtected || isProtectedCategoryName(c.name)) ? '1' : '0';
+              o.dataset.systemKey = c.systemKey || '';
               serviceCategorySelect.appendChild(o);
             });
+            refreshCategoryActionButtons();
           } catch (err) {
             // fail silently - page still operates
             console.warn('Unable to load categories', err);
+          }
+        }
+
+        function isProtectedCategoryName(text) {
+          return String(text || '')
+            .replace(/\s+\(hidden\)\s*$/i, '')
+            .replace(/[-_]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toUpperCase() === 'CLASS BASED';
+        }
+
+        function selectedCategoryIsProtected() {
+          const opt = serviceCategorySelect && serviceCategorySelect.selectedIndex >= 0
+            ? serviceCategorySelect.options[serviceCategorySelect.selectedIndex]
+            : null;
+          if (!opt || !opt.value) return false;
+          if (opt.dataset && opt.dataset.protected === '1') return true;
+          return isProtectedCategoryName(opt.textContent || '');
+        }
+
+        function refreshCategoryActionButtons() {
+          const hasCategory = !!(serviceCategorySelect && serviceCategorySelect.value);
+          const protectedCategory = selectedCategoryIsProtected();
+          const protectedTitle = 'CLASS BASED is a protected system category.';
+          if (editCategoryBtn) {
+            editCategoryBtn.disabled = !hasCategory || protectedCategory;
+            editCategoryBtn.title = protectedCategory ? protectedTitle : 'Edit selected category';
+          }
+          if (deleteCategoryBtn) {
+            deleteCategoryBtn.disabled = !hasCategory || protectedCategory;
+            deleteCategoryBtn.title = protectedCategory ? protectedTitle : 'Delete selected category';
           }
         }
 
@@ -485,6 +520,7 @@ block content
             editCategoryBtn.addEventListener('click', function () {
               const id = serviceCategorySelect ? serviceCategorySelect.value : '';
               if (!id) { alert('Select a category to edit'); return; }
+              if (selectedCategoryIsProtected()) { alert('CLASS BASED is a protected system category and cannot be edited.'); return; }
               // try to fetch details
               fetch(`/admin/service-categories/${encodeURIComponent(id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(r => r.ok ? r.json().catch(() => null) : null)
@@ -516,6 +552,7 @@ block content
             deleteCategoryBtn.addEventListener('click', function () {
               const id = serviceCategorySelect ? serviceCategorySelect.value : '';
               if (!id) { alert('Select a category to delete'); return; }
+              if (selectedCategoryIsProtected()) { alert('CLASS BASED is a protected system category and cannot be deleted.'); return; }
               if (!confirm('Delete this category? Services in it will not be removed.')) return;
               fetch(`/admin/service-categories/${encodeURIComponent(id)}`, {
                 method: 'DELETE',
@@ -566,6 +603,7 @@ block content
 
           // When category changes, filter services table to match category AND set hidden category input used by add-service form.
           serviceCategorySelect.addEventListener('change', function () {
+            refreshCategoryActionButtons();
             applyCategoryFilter(this.value);
           });
 

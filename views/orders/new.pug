@@ -112,45 +112,63 @@ block content
               // NOTE: This block now contains ONLY the inputs/buttons.
               // The discount breakdown (#manualDiscountSummary) is rendered under Cart totals instead.
               if currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin'
-                .card.mb-3.dark-surface(style='border:1px solid rgba(255,255,255,.08);')
-                  .card-body.dark-card-body.py-2
-                    .row.g-2.align-items-end
-                      .col-12.col-md-3
-                        label.form-label.mb-1(for='manualAdjustmentType') Adjustment
-                        select.form-select.form-select-sm.form-select-dark#manualAdjustmentType
-                          option(value='discount' selected) Discount
-                          option(value='premium') Premium
-                      .col-12.col-md-3
-                        label.form-label.mb-1(for='manualDiscountMode') Mode
-                        select.form-select.form-select-sm.form-select-dark#manualDiscountMode
-                          option(value='amount') Amount (GH₵)
-                          option(value='percent') Percent (%)
-                      .col-12.col-md-3
-                        label.form-label.mb-1(for='manualDiscountValue') Value
-                        input.form-control.form-control-sm.form-control-dark#manualDiscountValue(type='number', min='0', step='0.01', placeholder='e.g. 5 or 10')
-                      .col-12.col-md-3.d-flex.gap-2.justify-content-end
-                        button.btn.btn-sm.btn-outline-light-custom#applyManualDiscountBtn(type='button') Apply Discount
-                        button.btn.btn-sm.btn-outline-light-custom#clearManualDiscountBtn(type='button', style='display:none;') Clear
+                .card.mb-3.dark-surface(style='border:1px solid rgba(33,188,255,.22);box-shadow:0 12px 30px rgba(0,0,0,.10);')
+                  .card-header.bg-transparent.border-0.p-2
+                    button.btn.btn-sm.btn-outline-light-custom.w-100.d-flex.align-items-center.justify-content-between(type='button', data-bs-toggle='collapse', data-bs-target='#manualAdjustmentCollapse', aria-expanded='false', aria-controls='manualAdjustmentCollapse')
+                      span.d-flex.align-items-center.gap-2
+                        i.bi.bi-sliders
+                        span.fw-semibold Adjustments
+                        span.badge.rounded-pill.bg-info.text-dark Optional
+                      span.small.text-muted-light Discount / Premium
+                  .collapse#manualAdjustmentCollapse
+                    .card-body.dark-card-body.pt-0
+                      .rounded-3.p-3(style='background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);')
+                        .row.g-2.align-items-end
+                          .col-12.col-md-3
+                            label.form-label.mb-1(for='manualAdjustmentType') Adjustment
+                            select.form-select.form-select-sm.form-select-dark#manualAdjustmentType
+                              option(value='discount' selected) Discount
+                              option(value='premium') Premium
+                          .col-12.col-md-3
+                            label.form-label.mb-1(for='manualDiscountMode') Mode
+                            select.form-select.form-select-sm.form-select-dark#manualDiscountMode
+                              option(value='amount') Amount (GH₵)
+                              option(value='percent') Percent (%)
+                          .col-12.col-md-3
+                            label.form-label.mb-1(for='manualDiscountValue') Value
+                            input.form-control.form-control-sm.form-control-dark#manualDiscountValue(type='number', min='0', step='0.01', placeholder='e.g. 5 or 10')
+                          .col-12.col-md-3.d-flex.gap-2.justify-content-end
+                            button.btn.btn-sm.btn-outline-light-custom#applyManualDiscountBtn(type='button') Apply Discount
+                            button.btn.btn-sm.btn-outline-light-custom#clearManualDiscountBtn(type='button', style='display:none;') Clear
 
-                    p.text-muted-light.small.mt-2.mb-0
-                      | This adjustment applies only to this order and will not be saved. You must re-apply it for each order when needed.
+                        p.text-muted-light.small.mt-2.mb-0
+                          | This adjustment applies only to this order and will not be saved. You must re-apply it for each order when needed.
 
               if currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin'
-                .card.mb-3.dark-surface(style='border:1px solid rgba(255,255,255,.08);')
-                  .card-body.dark-card-body.py-2
-                    .row.g-2.align-items-end
-                      .col-12.col-md-3
-                        label.form-label.mb-1(for='cartTaxMode') VAT Mode
-                        select.form-select.form-select-sm.form-select-dark#cartTaxMode
-                          option(value='amount') Amount (GH₵)
-                          option(value='percent') Percent (%)
-                      .col-12.col-md-3
-                        label.form-label.mb-1(for='cartTaxValue') VAT Value
-                        input.form-control.form-control-sm.form-control-dark#cartTaxValue(type='number', min='0', step='0.01', placeholder='e.g. 5 or 10')
-                      .col-12.col-md-6.d-flex.gap-2.justify-content-end
-                        button.btn.btn-sm.btn-outline-light-custom#applyCartTaxBtn(type='button') Apply VAT
-                        button.btn.btn-sm.btn-outline-light-custom#clearCartTaxBtn(type='button', style='display:none;') Clear VAT
-                    p.text-muted-light.small.mt-2.mb-0 VAT is applied after adjustment/discount/premium, if any.
+                .card.mb-3.dark-surface(style='border:1px solid rgba(255,255,255,.12);box-shadow:0 12px 30px rgba(0,0,0,.10);')
+                  .card-header.bg-transparent.border-0.p-2
+                    button.btn.btn-sm.btn-outline-light-custom.w-100.d-flex.align-items-center.justify-content-between(type='button', data-bs-toggle='collapse', data-bs-target='#cartVatCollapse', aria-expanded='false', aria-controls='cartVatCollapse')
+                      span.d-flex.align-items-center.gap-2
+                        i.bi.bi-percent
+                        span.fw-semibold VAT
+                        span.badge.rounded-pill.bg-secondary Optional
+                      span.small.text-muted-light Apply after adjustment
+                  .collapse#cartVatCollapse
+                    .card-body.dark-card-body.pt-0
+                      .rounded-3.p-3(style='background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);')
+                        .row.g-2.align-items-end
+                          .col-12.col-md-3
+                            label.form-label.mb-1(for='cartTaxMode') VAT Mode
+                            select.form-select.form-select-sm.form-select-dark#cartTaxMode
+                              option(value='amount') Amount (GH₵)
+                              option(value='percent') Percent (%)
+                          .col-12.col-md-3
+                            label.form-label.mb-1(for='cartTaxValue') VAT Value
+                            input.form-control.form-control-sm.form-control-dark#cartTaxValue(type='number', min='0', step='0.01', placeholder='e.g. 5 or 10')
+                          .col-12.col-md-6.d-flex.gap-2.justify-content-end
+                            button.btn.btn-sm.btn-outline-light-custom#applyCartTaxBtn(type='button') Apply VAT
+                            button.btn.btn-sm.btn-outline-light-custom#clearCartTaxBtn(type='button', style='display:none;') Clear VAT
+                        p.text-muted-light.small.mt-2.mb-0 VAT is applied after adjustment/discount/premium, if any.
 
               .table-responsive
                 table.table.table-sm.table-borderless#cartTable
@@ -194,7 +212,7 @@ block content
                     div.small.text-muted-light Out-Sourced Cost Total:
                     strong#outsourcedCartTotal.text-info GH₵ 0.00
                   span.me-3.fs-5.text-white Total:
-                  strong.fs-5#cartTotal.text-white GH₵ 0.00        
+                  strong.fs-5#cartTotal.text-white GH₵ 0.00
 
 
                 .d-flex.justify-content-end.mt-3.gap-2

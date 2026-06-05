@@ -62,6 +62,45 @@ function ensureServiceCategoryActionHandlers() {
     return String(text || '').replace(/\s+\(hidden\)\s*$/i, '').trim();
   }
 
+  function isProtectedCategoryName(text) {
+    return cleanCategoryLabel(text)
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toUpperCase() === 'CLASS BASED';
+  }
+
+  function selectedCategoryOption() {
+    const e = els();
+    return e.select && e.select.selectedIndex >= 0 ? e.select.options[e.select.selectedIndex] : null;
+  }
+
+  function selectedCategoryIsProtected() {
+    const opt = selectedCategoryOption();
+    if (!opt || !opt.value) return false;
+    if (opt.dataset && opt.dataset.protected === '1') return true;
+    return isProtectedCategoryName(opt.textContent || '');
+  }
+
+  function refreshCategoryActionButtons() {
+    const e = els();
+    const hasCategory = !!(e.select && e.select.value);
+    const protectedCategory = selectedCategoryIsProtected();
+    const protectedTitle = 'CLASS BASED is a protected system category.';
+
+    const editBtn = document.getElementById('editCategoryBtn');
+    const deleteBtn = document.getElementById('deleteCategoryBtn');
+
+    if (editBtn) {
+      editBtn.disabled = !hasCategory || protectedCategory;
+      editBtn.title = protectedCategory ? protectedTitle : 'Edit selected category';
+    }
+    if (deleteBtn) {
+      deleteBtn.disabled = !hasCategory || protectedCategory;
+      deleteBtn.title = protectedCategory ? protectedTitle : 'Delete selected category';
+    }
+  }
+
   function showToast(message) {
     if (window.showGlobalToast) {
       try { window.showGlobalToast(message, 2200); return; } catch (e) {}
@@ -170,15 +209,19 @@ function ensureServiceCategoryActionHandlers() {
       const opt = document.createElement('option');
       opt.value = cat._id;
       opt.textContent = cat.name + (cat.showInOrders ? '' : ' (hidden)');
+      opt.dataset.protected = (cat.isProtected || isProtectedCategoryName(cat.name)) ? '1' : '0';
+      opt.dataset.systemKey = cat.systemKey || '';
       e.select.appendChild(opt);
     });
 
     e.select.value = wantedId;
     if (e.hiddenServiceCategory) e.hiddenServiceCategory.value = e.select.value || '';
+    refreshCategoryActionButtons();
 
     if (window.__initServiceCategories) {
       try {
         window.__initServiceCategories({ selectedCategoryId: e.select.value || '', applyFilter: true });
+        refreshCategoryActionButtons();
         return;
       } catch (err) {
         console.warn('Service category re-init failed; using local filter fallback', err);
@@ -193,6 +236,10 @@ function ensureServiceCategoryActionHandlers() {
     const categoryId = e.select ? String(e.select.value || '') : '';
     if (!categoryId) {
       alert('Select a category to edit');
+      return;
+    }
+    if (selectedCategoryIsProtected()) {
+      alert('CLASS BASED is a protected system category and cannot be edited.');
       return;
     }
 
@@ -278,6 +325,10 @@ function ensureServiceCategoryActionHandlers() {
       alert('Select a category to delete');
       return;
     }
+    if (selectedCategoryIsProtected()) {
+      alert('CLASS BASED is a protected system category and cannot be deleted.');
+      return;
+    }
     if (!confirm('Delete this category? Services in it will not be removed.')) return;
 
     try {
@@ -350,6 +401,12 @@ function ensureServiceCategoryActionHandlers() {
     }
   }, true);
 
+  document.addEventListener('change', function (event) {
+    if (!isServicesPage()) return;
+    if (!event.target || event.target.id !== 'serviceCategorySelect') return;
+    refreshCategoryActionButtons();
+  }, true);
+
   document.addEventListener('submit', function (event) {
     if (!isServicesPage()) return;
     if (!event.target || event.target.id !== 'categoryForm') return;
@@ -357,6 +414,8 @@ function ensureServiceCategoryActionHandlers() {
     event.stopImmediatePropagation();
     saveCategory();
   }, true);
+
+  setTimeout(refreshCategoryActionButtons, 0);
 }
 
 function initServicesAdmin() {
