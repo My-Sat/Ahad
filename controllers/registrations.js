@@ -20,7 +20,34 @@ function customerDisplayName(c) {
 }
 
 exports.page = async function page(req, res) {
-  return res.render('registrations/index', { title: 'Registerations' });
+  try {
+    let preselectedCustomer = null;
+    const customerId = String(req.query.customerId || '').trim();
+
+    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+      const customer = await Customer.findById(customerId)
+        .select('_id category firstName businessName phone')
+        .lean();
+
+      if (customer) {
+        preselectedCustomer = {
+          _id: String(customer._id),
+          category: customer.category || '',
+          firstName: customer.firstName || '',
+          businessName: customer.businessName || '',
+          phone: customer.phone || ''
+        };
+      }
+    }
+
+    return res.render('registrations/index', {
+      title: 'Registerations',
+      preselectedCustomer
+    });
+  } catch (err) {
+    console.error('registrations.page error', err);
+    return res.status(500).send('Error loading registrations page');
+  }
 };
 
 exports.apiCategories = async function apiCategories(req, res) {

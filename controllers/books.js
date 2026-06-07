@@ -105,14 +105,11 @@ exports.getNewPage = async (req, res) => {
   try {
     const categories = await ServiceCategory.find().sort('name').lean();
 
-    // load services & price rules to let the "Add and Cost Book" page populate UI
-    const services = await Service.find().select('_id name requiresPrinter components').lean();
-    // we will not eagerly load every price rule here; client will request /admin/services/:id/prices as before
-return res.render('books/new', {
-  title: 'Add and Cost Compound Service',
-  services,
-  categories
-});  } catch (err) {
+    return res.render('books/new', {
+      title: 'Add and Cost Compound Service',
+      categories
+    });
+  } catch (err) {
     console.error('books.getNewPage error', err);
     return res.status(500).send('Error loading book editor');
   }

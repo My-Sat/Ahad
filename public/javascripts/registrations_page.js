@@ -73,6 +73,17 @@
       return 'One-Time';
     }
 
+    function readPreselectedCustomer() {
+      const raw = String(root.dataset.preselectedCustomer || '').trim();
+      if (!raw) return null;
+      try {
+        const c = JSON.parse(raw);
+        return c && c._id ? c : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
     function setSelectedCustomer(c) {
       selected = { mode: 'customer', customer: c };
       selectedName.textContent = customerName(c);
@@ -457,6 +468,12 @@
     updateRegFields();
     loadCategories();
     loadPending();
+
+    const preselectedCustomer = readPreselectedCustomer();
+    if (preselectedCustomer) {
+      setSelectedCustomer(preselectedCustomer);
+      if (lookupInput) lookupInput.value = preselectedCustomer.phone || customerName(preselectedCustomer);
+    }
   }
 
   if (document.readyState === 'loading') {

@@ -96,7 +96,7 @@ function initCustomersIndex() {
             ? (c.businessName || '-')
             : (c.firstName || '-');
         const accountUrl = `/customers/${encodeURIComponent(c._id)}/account`;
-        const newJobUrl = `/orders/new?customerId=${encodeURIComponent(c._id)}`;
+        const newJobUrl = `/registrations?customerId=${encodeURIComponent(c._id)}`;
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
