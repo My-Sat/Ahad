@@ -13,11 +13,12 @@ block content
             p.text-muted-light.small Create a named "Compound Service" by selecting price rules and specifying quantities. The server will compute authoritative per-item pricing when saving.
             .row.mb-2
               .col-md-8
-                label.form-label(for='categorySelect') Service Category
+                label.form-label(for='categorySelect') Compound Service Category
                 select.form-select.form-select-dark#categorySelect
                   option(value='') -- Select category --
                   each c in categories
                     option(value=c._id)= c.name
+                small.text-muted-light This is where the new compound service will appear.
 
             // book name + save button (same alignment row)
             .row.g-2
@@ -35,11 +36,17 @@ block content
             hr
 
             .row.g-2.mb-3
+              .col-md-4
+                label.form-label(for='serviceFilterCategorySelect') Filter Service Category
+                select.form-select.form-select-dark#serviceFilterCategorySelect
+                  option(value='') -- Select category --
+                  each c in categories
+                    option(value=c._id)= c.name
               .col-md-6
                 label.form-label(for='serviceSelect') Service (select to load price rules)
                 select.form-select.form-select-dark#serviceSelect(disabled)
                   option(value='') -- Select category first --
-              .col-md-6.d-flex.align-items-end
+              .col-md-2.d-flex.align-items-end
                 small.text-muted-light.ms-auto Select a service to show its price rules; configure items and click "Add" to include in the book.
 
             // price rules list (loaded via AJAX)
@@ -77,6 +84,7 @@ block content
       'use strict';
       const serviceSelect = document.getElementById('serviceSelect');
       const categorySelect = document.getElementById('categorySelect');
+      const serviceFilterCategorySelect = document.getElementById('serviceFilterCategorySelect');
       const pricesList = document.getElementById('pricesList');
       const bookItemsTbody = document.getElementById('bookItemsTbody');
       const bookUnitPriceEl = document.getElementById('bookUnitPrice');
@@ -445,7 +453,6 @@ block content
           const catId = b.category && b.category._id ? b.category._id : b.category;
           if (categorySelect && catId) {
             categorySelect.value = String(catId);
-            await loadServicesForCategory(String(catId));
           }
 
           bookItems = (b.items || []).map(it => {
@@ -498,7 +505,7 @@ block content
         }
         if (!bookItems.length) { alert('Add at least one item to the service'); return; }
         if (!categorySelect || !categorySelect.value) {
-          showInlineAlert('Select a service category', 'Service category required');
+          showInlineAlert('Select the category where this compound service should appear.', 'Compound service category required');
           return;
         }
 
@@ -552,8 +559,8 @@ block content
         });
       }
 
-      if (categorySelect) {
-        categorySelect.addEventListener('change', function(){
+      if (serviceFilterCategorySelect) {
+        serviceFilterCategorySelect.addEventListener('change', function(){
           loadServicesForCategory(this.value);
         });
       }
