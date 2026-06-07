@@ -2221,20 +2221,56 @@ setDebtorsSummary(
   Number(summaryTotalPaid.toFixed(2)),
   Number(summaryTotalOutstanding.toFixed(2))
 );
-// -------- Group by debtor name --------
+// -------- Group registered customers by customer/name; group walk-ins by order date --------
+function isWalkInDebtorRow(row) {
+  const customerId = String(row && row.customerId ? row.customerId : '').trim();
+  const name = String(row && row.debtorName ? row.debtorName : '').trim();
+  return !customerId && /^walk[\s-]*in\b/i.test(name || 'Walk-in');
+}
+
+function debtorDateKey(value) {
+  const d = value ? new Date(value) : null;
+  if (!d || isNaN(d.getTime())) return 'unknown-date';
+  return d.toISOString().slice(0, 10);
+}
+
+function debtorDateLabel(value) {
+  const d = value ? new Date(value) : null;
+  if (!d || isNaN(d.getTime())) return 'Unknown date';
+  try {
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
+  } catch (e) {
+    return d.toISOString().slice(0, 10);
+  }
+}
+
 const grouped = {};
 filtered.forEach(d => {
-  const key = d.debtorName || 'Unknown';
-  if (!grouped[key]) grouped[key] = [];
-  grouped[key].push(d);
+  const isWalkIn = isWalkInDebtorRow(d);
+  const key = isWalkIn
+    ? `walk-in:${debtorDateKey(d.createdAt)}`
+    : `customer:${String(d.customerId || d.debtorName || 'Unknown')}`;
+
+  if (!grouped[key]) {
+    grouped[key] = {
+      debtorName: isWalkIn ? `Walk-ins - ${debtorDateLabel(d.createdAt)}` : (d.debtorName || 'Unknown'),
+      isWalkIn,
+      items: []
+    };
+  }
+  grouped[key].items.push(d);
 });
 
 let html = '';
 let groupIndex = 0;
 
-Object.entries(grouped).forEach(([debtorName, items]) => {
-  // SINGLE record → keep existing logic exactly
-  if (items.length === 1) {
+Object.values(grouped).forEach(group => {
+  const debtorName = group.debtorName || 'Unknown';
+  const items = Array.isArray(group.items) ? group.items : [];
+
+  // SINGLE registered customer record -> keep existing logic exactly.
+  // Walk-ins are always shown under a date group, even when the date has only one walk-in.
+  if (items.length === 1 && !group.isWalkIn) {
     const d = items[0];
     const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
     const rowNote = String(d.jobNote || '').trim();
@@ -2273,7 +2309,7 @@ Object.entries(grouped).forEach(([debtorName, items]) => {
     return;
   }
 
-  // MULTIPLE records → expandable group
+  // Multiple registered records or any walk-in date group -> expandable group
   const groupId = `debtor-group-${groupIndex++}`;
 
 const totalDue = items.reduce((s, i) => s + Number(i.amountDue || 0), 0);
@@ -2284,23 +2320,9 @@ const totalOutstanding = items.reduce(
 );
 const accountCustomerId = (items.find(i => i.customerId) || {}).customerId || '';
 const accountUrl = accountCustomerId ? `/customers/${encodeURIComponent(accountCustomerId)}/account` : '';
-
-html += `
-  <tr class="table-active debtor-group-toggle align-middle"
-      data-target="${groupId}"
-      aria-expanded="false"
-      data-debtor-name="${escapeHtml(debtorName)}"
-      style="cursor:pointer;">
-    <td colspan="2">
-      <span class="me-2 debtor-toggle-icon"><i class="bi bi-chevron-right"></i></span>
-      <strong>${escapeHtml(debtorName)}</strong>
-      <span class="text-muted ms-2">(${items.length} orders)</span>
-    </td>
-    <td><span class="text-muted">-</span></td>
-    <td class="text-end">GH₵ ${totalDue.toFixed(2)}</td>
-    <td class="text-end">GH₵ ${totalPaid.toFixed(2)}</td>
-    <td class="text-end fw-semibold">GH₵ ${totalOutstanding.toFixed(2)}</td>
-    <td class="text-center">
+const groupActionsHtml = group.isWalkIn
+  ? '<span class="text-muted">Expand</span>'
+  : `
       <div class="dropup d-inline-block">
         <button class="btn btn-sm btn-outline-light-custom debtor-actions-menu"
           type="button"
@@ -2322,6 +2344,25 @@ html += `
           ${accountUrl ? `<li><a class="dropdown-item debtor-account-link" href="${accountUrl}" data-ajax="true">Account</a></li>` : ''}
         </ul>
       </div>
+    `;
+
+html += `
+  <tr class="table-active debtor-group-toggle align-middle"
+      data-target="${groupId}"
+      aria-expanded="false"
+      data-debtor-name="${escapeHtml(debtorName)}"
+      style="cursor:pointer;">
+    <td colspan="2">
+      <span class="me-2 debtor-toggle-icon"><i class="bi bi-chevron-right"></i></span>
+      <strong>${escapeHtml(debtorName)}</strong>
+      <span class="text-muted ms-2">(${items.length} orders)</span>
+    </td>
+    <td><span class="text-muted">-</span></td>
+    <td class="text-end">GH₵ ${totalDue.toFixed(2)}</td>
+    <td class="text-end">GH₵ ${totalPaid.toFixed(2)}</td>
+    <td class="text-end fw-semibold">GH₵ ${totalOutstanding.toFixed(2)}</td>
+    <td class="text-center">
+      ${groupActionsHtml}
     </td>
   </tr>
 `;
@@ -2329,10 +2370,11 @@ html += `
   items.forEach(d => {
     const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
     const rowNote = String(d.jobNote || '').trim();
+    const rowDebtorName = group.isWalkIn ? (d.debtorName || 'Walk-in') : debtorName;
     html += `
       <tr class="debtor-group-row ${groupId}" style="display:none;">
         <td><span class="badge bg-secondary" style="color:#fff !important;">${escapeHtml(d.orderId || '')}</span></td>
-        <td>${escapeHtml(debtorName)}</td>
+        <td>${escapeHtml(rowDebtorName)}</td>
         <td>${rowNote ? escapeHtml(rowNote) : '<span class="text-muted">-</span>'}</td>
         <td class="text-end">GH₵ ${Number(d.amountDue || 0).toFixed(2)}</td>
         <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>

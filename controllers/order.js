@@ -840,7 +840,15 @@ exports.payPage = async (req, res) => {
 exports.apiSaveCartInvoice = async (req, res) => {
   try {
     const body = req.body || {};
-    const cart = Array.isArray(body.cart) ? body.cart.slice(0, 100) : [];
+    const rawCart = Array.isArray(body.cart) ? body.cart.slice(0, 100) : [];
+    const cart = rawCart.map(line => {
+      if (!line || typeof line !== 'object' || Array.isArray(line)) return line;
+      const clean = Object.assign({}, line);
+      const invoiceLabelOverride = String(clean.invoiceLabelOverride || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+      if (invoiceLabelOverride) clean.invoiceLabelOverride = invoiceLabelOverride;
+      else delete clean.invoiceLabelOverride;
+      return clean;
+    });
     if (!cart.length) return res.status(400).json({ error: 'Invoice cart is empty' });
 
     const invoiceId = String(body.invoiceId || '').trim();

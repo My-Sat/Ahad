@@ -272,7 +272,7 @@
   // ---------- internal state ----------
   let prices = []; // loaded price rules for selected service or book preview
   let cart = [];   // cart lines: either normal item or book line
-                   // normal: { isBook:false, serviceId, serviceName, priceRuleId, selectionLabel, unitPrice, pages, pagesOriginal, subtotal, fb, printerId, spoiled, outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount, outsourcedTotal }
+                   // normal: { isBook:false, serviceId, serviceName, priceRuleId, selectionLabel, invoiceLabelOverride, unitPrice, pages, pagesOriginal, subtotal, fb, printerId, spoiled, outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount, outsourcedTotal }
                    // book  : { isBook:true, bookId, bookName, unitPrice, qty, subtotal, bookItems: [ { serviceId, priceRuleId, pagesOriginal, fb, printerId, spoiled, unitPrice, subtotal, selectionLabel } ] }
   let serviceRequiresPrinter = false;
   let printers = []; // list of printers for the currently loaded service
@@ -1124,6 +1124,15 @@ async function loadServicesForCategory(catId) {
     return subs.join(', ');
   }
 
+  function cleanInvoiceLabelOverride(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+  }
+
+  function cartDisplaySelectionLabel(item) {
+    const override = cleanInvoiceLabelOverride(item && item.invoiceLabelOverride);
+    return override || String((item && item.selectionLabel) || '').trim();
+  }
+
   // Alerts modal (lazy) - dark-surface friendly
   function showAlertModal(message, title = 'Notice') {
     let modalEl = document.getElementById('genericAlertModal');
@@ -1431,7 +1440,8 @@ function renderPrices(bookMode = false) {
 
     // left: label (only subunits)
     const left = document.createElement('div');
-    left.className = 'flex-grow-1 text-truncate';
+    left.className = 'flex-grow-1 min-width-0';
+    left.style.minWidth = '220px';
     const subOnly = subUnitsOnlyFromLabel(p.selectionLabel || '');
     const label = document.createElement('div');
     label.innerHTML = `<strong class="d-inline-block text-truncate ${toneClass}" style="max-width:420px;">${escapeHtml(subOnly)}</strong>`;
@@ -1456,6 +1466,16 @@ function renderPrices(bookMode = false) {
     // inside price rule render block (printing service only)
 
 
+    if (window._isAdmin) {
+      const invoiceNoteInput = document.createElement('input');
+      invoiceNoteInput.type = 'text';
+      invoiceNoteInput.maxLength = 120;
+      invoiceNoteInput.className = 'form-control form-control-sm form-control-dark invoice-label-override-input';
+      invoiceNoteInput.placeholder = 'Invoice note';
+      invoiceNoteInput.title = 'Admin-only invoice label. Used in cart and invoices only; orders keep the original price rule name.';
+      invoiceNoteInput.style.width = '130px';
+      mid.appendChild(invoiceNoteInput);
+    }
 
     const input = document.createElement('input');
     input.type = 'number';
@@ -1799,6 +1819,7 @@ function addToCart({
   serviceName,
   priceRuleId,
   label,
+  invoiceLabelOverride,
   unitPrice,
   pages,
   factor,          // NEW (optional)
@@ -1839,6 +1860,7 @@ function addToCart({
     serviceName,
     priceRuleId,
     selectionLabel: label,
+    invoiceLabelOverride: cleanInvoiceLabelOverride(invoiceLabelOverride),
     unitPrice: Number(unitPrice),
 
     // what we show in cart
@@ -1938,7 +1960,7 @@ function addToCart({
         const outsourcedMeta = (Number(it.outsourcedTotal || 0) > 0)
           ? `<br/><small class="text-info">Out-Sourced: ${escapeHtml(it.outsourcedArtistName || 'Artist')} | QTY ${escapeHtml(String(it.outsourcedQty || 0))} | GH₵ ${escapeHtml(formatMoney(it.outsourcedAmount || 0))} = GH₵ ${escapeHtml(formatMoney(it.outsourcedTotal || 0))}</small>`
           : '';
-        displayLabel = `<div class="${toneClass}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.selectionLabel || '')}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
+        displayLabel = `<div class="${toneClass}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(cartDisplaySelectionLabel(it) || '')}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
       }
 
       let qtyCell = '';
@@ -2068,7 +2090,7 @@ function addToCart({
     }
 
     return {
-      description: (it && it.selectionLabel) || '',
+      description: cartDisplaySelectionLabel(it) || '',
       service: (it && it.serviceName) || '',
       pages: hasPrinter ? String((it && it.pagesOriginal) || '') : '',
       qty: hasPrinter ? String(f) : String((it && it.pages) || ''),
@@ -2923,6 +2945,10 @@ function addToCart({
     const row = btn.closest('.list-group-item');
     const pagesInput = row ? row.querySelector('.pages-input') : null;
     const pages = pagesInput && pagesInput.value ? Number(pagesInput.value) : 1;
+    const invoiceLabelOverrideInput = row ? row.querySelector('.invoice-label-override-input') : null;
+    const invoiceLabelOverride = window._isAdmin && invoiceLabelOverrideInput
+      ? cleanInvoiceLabelOverride(invoiceLabelOverrideInput.value)
+      : '';
 
     let factor = 1;
     if (serviceRequiresPrinter) {
@@ -3076,6 +3102,7 @@ function addToCart({
         serviceName: '', // not always available in preview; the server will reconcile names for display
         priceRuleId: priceObj.__bookItem.priceRuleId,
         label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''),
+        invoiceLabelOverride,
         unitPrice: Number(priceObj.unitPrice || 0),
         pages: pages,
         factor,
@@ -3097,7 +3124,7 @@ function addToCart({
         chosenPrice = Number(priceObj.price2);
       }
       const effectiveServiceId = priceObj.serviceId || serviceId;
-      addToCart({ serviceId: effectiveServiceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), unitPrice: chosenPrice, pages, factor, fb: fbChecked, printerId: selectedPrinterId, spoiled, tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || ''), outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount });
+      addToCart({ serviceId: effectiveServiceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), invoiceLabelOverride, unitPrice: chosenPrice, pages, factor, fb: fbChecked, printerId: selectedPrinterId, spoiled, tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || ''), outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount });
     }
 
     // clear inputs
@@ -3117,6 +3144,7 @@ function addToCart({
       if (outArtistLookup) outArtistLookup.value = '';
       if (outArtistId) outArtistId.value = '';
       if (outArtistName) outArtistName.value = '';
+      if (invoiceLabelOverrideInput) invoiceLabelOverrideInput.value = '';
     } catch (err) {
       console.warn('Failed to clear inputs after Apply', err);
     }
@@ -3259,7 +3287,8 @@ async function placeOrderFlow() {
         if (!savedInvoice) return;
       }
 
-    // Build payload items
+    // Build payload items from IDs/quantities only. Invoice label overrides stay
+    // client/invoice-only; the server rebuilds order labels from price rules.
     const items = [];
 
     cart.forEach(line => {
