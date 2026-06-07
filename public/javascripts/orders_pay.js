@@ -721,14 +721,74 @@ function discountAppliedLabel(order) {
 
     let itemsHtml = '';
     if (order.items && order.items.length) {
-      itemsHtml += '<div class="list-group mb-2">';
+      const safeOrderKey = String(order.orderId || 'order').replace(/[^a-zA-Z0-9_-]/g, '');
+      itemsHtml += `
+        <style>
+          #orderInfo .order-service-card {
+            overflow: hidden;
+            border: 1px solid var(--border-2, rgba(11,15,26,.12));
+            border-radius: 14px;
+            background: var(--surface-2, transparent);
+            margin-bottom: .75rem;
+            box-shadow: var(--shadow-sm, none);
+          }
+          #orderInfo .order-service-heading {
+            background: transparent !important;
+            border: 0 !important;
+          }
+          #orderInfo .order-service-toggle { background: transparent; }
+          #orderInfo .order-service-toggle:hover,
+          #orderInfo .order-service-toggle[aria-expanded="true"] { background: var(--accent-soft, rgba(43,123,187,.16)); }
+          #orderInfo .order-service-title { color: var(--text, #0b0f1a) !important; }
+          #orderInfo .order-service-chevron {
+            color: var(--accent, #2B7BBB);
+            background: var(--surface, rgba(255,249,238,.86));
+            border: 1px solid var(--border, rgba(11,15,26,.16));
+            border-radius: 999px;
+            width: 24px;
+            height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform .18s ease;
+          }
+          #orderInfo .order-service-toggle[aria-expanded="true"] .order-service-chevron { transform: rotate(90deg); }
+          #orderInfo .order-service-details .list-group-item {
+            border-left: 0;
+            border-right: 0;
+          }
+          #orderInfo .order-service-subtotal {
+            background: transparent !important;
+            border: 0 !important;
+            border-top: 1px solid var(--border-2, rgba(11,15,26,.12)) !important;
+          }
+          #orderInfo .order-service-subtotal-text { color: var(--text, #0b0f1a) !important; }
+        </style>
+        <div class="list-group mb-2 order-service-collapse-list">
+      `;
       const groups = groupReceiptRows(order.items.map(it => receiptItemData(it || {})));
-      groups.forEach(group => {
+      groups.forEach((group, groupIndex) => {
+        const collapseId = `pay-order-service-${safeOrderKey || 'order'}-${groupIndex}`;
+        const itemCount = Array.isArray(group.items) ? group.items.length : 0;
         itemsHtml += `
-          <div class="list-group-item" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:0.55rem 0.75rem;">
-            <strong class="text-white">${escapeHtml(group.title)}</strong>
+          <div class="order-service-card">
+          <div class="list-group-item p-0 overflow-hidden order-service-heading">
+            <button class="btn w-100 text-start d-flex align-items-center justify-content-between gap-2 px-3 py-2 order-service-toggle"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#${escapeHtml(collapseId)}"
+                    aria-expanded="false"
+                    aria-controls="${escapeHtml(collapseId)}"
+                    style="border:0;color:#fff;">
+              <span class="d-flex align-items-center gap-2 min-width-0">
+                <i class="bi bi-chevron-right order-service-chevron"></i>
+                <strong class="order-service-title text-truncate">${escapeHtml(group.title)}</strong>
+                <span class="badge bg-info text-dark">${itemCount} item${itemCount === 1 ? '' : 's'}</span>
+              </span>
+            </button>
           </div>
         `;
+        itemsHtml += `<div class="collapse order-service-details" id="${escapeHtml(collapseId)}">`;
         group.items.forEach(row => {
           const qtyText = row.pages
             ? `${row.qtyLabel}: ${row.qty} / Pages: ${row.pages}`
@@ -749,9 +809,11 @@ function discountAppliedLabel(order) {
             </div>
           `;
         });
+        itemsHtml += '</div>';
         itemsHtml += `
-          <div class="list-group-item d-flex justify-content-end" style="background:rgba(255,255,255,.04);border-bottom:2px solid rgba(255,255,255,.16);padding:0.45rem 0.75rem;">
-            <strong class="text-white">${escapeHtml(group.title)} subtotal: ${formatCedi(group.subtotal)}</strong>
+          <div class="list-group-item d-flex justify-content-end order-service-subtotal" style="padding:0.45rem 0.75rem;">
+            <strong class="order-service-subtotal-text">${escapeHtml(group.title)} subtotal: ${formatCedi(group.subtotal)}</strong>
+          </div>
           </div>
         `;
       });
