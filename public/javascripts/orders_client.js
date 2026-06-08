@@ -76,6 +76,7 @@
     let activeSubmission = null;
     let activeInvoice = null;
     let cartInvoiceSearchTimer = null;
+    const invoiceManagerSignatureSrc = '/images/manager_signature.png';
 
     function getCurrentCustomerId() {
     const customerEl = document.getElementById('orderCustomerId');
@@ -2229,13 +2230,19 @@ function addToCart({
     .totals { margin-left: auto; width: 310px; margin-top: 16px; }
     .totals div { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; }
     .totals .grand { font-weight: 700; font-size: 15px; border-bottom: 2px solid #111; }
+    .signatures { display: flex; justify-content: space-between; gap: 56px; margin-top: 64px; page-break-inside: avoid; clear: both; }
+    .signature-box { width: 42%; text-align: center; }
+    .signature-line { border-bottom: 1.5px solid #111; min-height: 58px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 2px; }
+    .manager-signature-img { max-width: 190px; max-height: 52px; object-fit: contain; }
+    .signature-fallback { display: none; font-style: italic; font-size: 20px; color: #111; }
+    .signature-label { margin-top: 8px; font-weight: 700; letter-spacing: .03em; }
     .notice { margin-top: 18px; padding: 10px; background: #fff8e1; border: 1px solid #f0d46a; border-radius: 8px; }
   </style>
 </head>
 <body>
   <div class="header">
     <div class="brand">
-      <img class="logo" src="/public/images/AHAD LOGO3.jpeg" alt="AHAD">
+      <img class="logo" src="/images/AHAD LOGO3.jpeg" alt="AHAD">
       <div class="company-block">
         <div class="company-name">AHADPRINT</div>
         <div class="muted">Invoice</div>
@@ -2285,8 +2292,52 @@ function addToCart({
     ${totals.outsourcedCostTotal > 0 ? `<div><span>Out-Sourced Cost Total</span><strong>${formatCediPlain(totals.outsourcedCostTotal)}</strong></div>` : ''}
     <div class="grand"><span>Total</span><strong>${formatCediPlain(totals.finalTotal)}</strong></div>
   </div>
+  <div class="signatures">
+    <div class="signature-box">
+      <div class="signature-line"></div>
+      <div class="signature-label">Customer Signature</div>
+    </div>
+    <div class="signature-box">
+      <div class="signature-line">
+        <img class="manager-signature-img" src="${escapeHtml(invoiceManagerSignatureSrc)}" alt="Manager signature" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+        <span class="signature-fallback">Manager</span>
+      </div>
+      <div class="signature-label">Manager Signature</div>
+    </div>
+  </div>
 </body>
 </html>`;
+  }
+
+  function waitForPrintImages(win, timeoutMs) {
+    return new Promise(resolve => {
+      try {
+        const images = Array.from(win.document.images || []);
+        const pending = images.filter(img => img && !img.complete);
+        if (!pending.length) return resolve();
+        let remaining = pending.length;
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          remaining -= 1;
+          if (remaining <= 0) {
+            done = true;
+            resolve();
+          }
+        };
+        pending.forEach(img => {
+          img.onload = finish;
+          img.onerror = finish;
+        });
+        setTimeout(() => {
+          if (done) return;
+          done = true;
+          resolve();
+        }, timeoutMs || 1600);
+      } catch (e) {
+        resolve();
+      }
+    });
   }
 
   async function printCartInvoice() {
@@ -2299,9 +2350,10 @@ function addToCart({
     w.document.write(buildCartInvoiceHtml());
     w.document.close();
     w.focus();
+    await waitForPrintImages(w, 1800);
     setTimeout(() => {
       try { w.print(); } catch (e) { showAlertModal('Print failed.'); }
-    }, 450);
+    }, 150);
   }
 
   function sanitizePdfText(text) {
@@ -2383,12 +2435,54 @@ function addToCart({
     }
   }
 
+  function dataUrlToBytes(dataUrl) {
+    const raw = String(dataUrl || '');
+    const base64 = raw.includes(',') ? raw.split(',').pop() : raw;
+    if (!base64) return null;
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  function loadImageElement(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = src;
+    });
+  }
+
+  async function loadManagerSignatureForPdf() {
+    try {
+      if (!document.createElement || typeof atob !== 'function') return null;
+      const img = await loadImageElement(invoiceManagerSignatureSrc);
+      const width = Math.max(1, img.naturalWidth || img.width || 520);
+      const height = Math.max(1, img.naturalHeight || img.height || 180);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      const bytes = dataUrlToBytes(canvas.toDataURL('image/jpeg', 0.92));
+      if (!bytes || !bytes.length) return null;
+      return { bytes, width, height, components: 3 };
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function buildCartInvoicePdfBlob() {
     const customer = selectedCustomerSnapshot();
     const totals = cartTotalsSnapshot();
     const rows = (cart || []).map(cartLineSnapshot);
     const groups = groupInvoiceLines(rows);
     const logo = await loadInvoiceLogoForPdf();
+    const managerSignature = await loadManagerSignatureForPdf();
     const lines = [];
     const pad = (text, width) => sanitizePdfText(text).slice(0, width).padEnd(width, ' ');
     const money = n => `GHS ${formatMoney(n)}`;
@@ -2458,7 +2552,7 @@ function addToCart({
       }
     });
 
-    const pageSize = logo ? 44 : 48;
+    const pageSize = logo ? 38 : 42;
     const pages = [];
     for (let i = 0; i < wrapped.length; i += pageSize) pages.push(wrapped.slice(i, i + pageSize));
     if (!pages.length) pages.push(['Invoice']);
@@ -2474,6 +2568,8 @@ function addToCart({
     const fontId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>');
     const fontBoldId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold >>');
     let imageId = null;
+    let managerSignatureId = null;
+    let managerSignatureDims = null;
     let logoDrawCommand = '';
     if (logo) {
       const imgWidth = 72;
@@ -2484,6 +2580,13 @@ function addToCart({
       const imageStream = `${bytesToHex(logo.bytes)}>`;
       imageId = addObj(`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace ${colorSpace} /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${imageStream.length} >>\nstream\n${imageStream}\nendstream`);
       logoDrawCommand = `q\n${imgWidth} 0 0 ${imgHeight} ${imgX} ${imgY} cm\n/Im1 Do\nQ`;
+    }
+    if (managerSignature) {
+      const sigWidth = 126;
+      const sigHeight = Math.min(44, Math.max(24, Number((sigWidth * (managerSignature.height / managerSignature.width)).toFixed(2))));
+      const sigStream = `${bytesToHex(managerSignature.bytes)}>`;
+      managerSignatureId = addObj(`<< /Type /XObject /Subtype /Image /Width ${managerSignature.width} /Height ${managerSignature.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${sigStream.length} >>\nstream\n${sigStream}\nendstream`);
+      managerSignatureDims = { width: sigWidth, height: sigHeight };
     }
     const buildPdfHeaderCommands = () => {
       const commands = [];
@@ -2521,9 +2624,35 @@ function addToCart({
       addHeaderLabelValue(infoX, 763, 'WhatsApp:', '0558590262', 52);
       return commands;
     };
+    const buildPdfSignatureCommands = (lineY) => {
+      const commands = [];
+      const y = Math.max(92, Math.min(670, Number(lineY || 132)));
+      const labelY = y - 17;
+      commands.push('q', '0.35 G', '1 w', `58 ${y} m 236 ${y} l S`, `360 ${y} m 538 ${y} l S`, 'Q');
+      if (managerSignatureId && managerSignatureDims) {
+        const sigX = 388;
+        const sigY = y + 4;
+        commands.push(`q\n${managerSignatureDims.width} 0 0 ${managerSignatureDims.height} ${sigX} ${sigY} cm\n/Im2 Do\nQ`);
+      } else {
+        commands.push('BT', '/F2 18 Tf', `407 ${y + 10} Td`, `(${pdfEscape('Manager')}) Tj`, 'ET');
+      }
+      commands.push(
+        'BT',
+        '/F2 9 Tf',
+        `92 ${labelY} Td`,
+        `(${pdfEscape('Customer Signature')}) Tj`,
+        'ET',
+        'BT',
+        '/F2 9 Tf',
+        `394 ${labelY} Td`,
+        `(${pdfEscape('Manager Signature')}) Tj`,
+        'ET'
+      );
+      return commands;
+    };
     const pageIds = [];
 
-    pages.forEach(pageLines => {
+    pages.forEach((pageLines, pageIndex) => {
       const commands = buildPdfHeaderCommands();
       commands.push('BT', '/F1 10 Tf', '50 724 Td');
       pageLines.forEach((line, idx) => {
@@ -2531,9 +2660,17 @@ function addToCart({
         commands.push(`(${pdfEscape(line)}) Tj`);
       });
       commands.push('ET');
+      if (pageIndex === pages.length - 1) {
+        const lastTextY = 724 - (Math.max(0, pageLines.length - 1) * 14);
+        const signatureLineY = lastTextY - 54;
+        buildPdfSignatureCommands(signatureLineY).forEach(cmd => commands.push(cmd));
+      }
       const stream = commands.join('\n');
       const contentId = addObj(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
-      const xObjectResource = imageId ? `/XObject << /Im1 ${imageId} 0 R >> ` : '';
+      const xObjects = [];
+      if (imageId) xObjects.push(`/Im1 ${imageId} 0 R`);
+      if (managerSignatureId) xObjects.push(`/Im2 ${managerSignatureId} 0 R`);
+      const xObjectResource = xObjects.length ? `/XObject << ${xObjects.join(' ')} >> ` : '';
       const pageId = addObj(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R /F2 ${fontBoldId} 0 R >> ${xObjectResource}>> /Contents ${contentId} 0 R >>`);
       pageIds.push(pageId);
     });
