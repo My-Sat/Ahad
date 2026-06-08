@@ -73,6 +73,7 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
   // cache last fetched debtors so we can filter locally too
   let _debtorsCache = [];
   let _debtorsLastQuery = '';
+  let _debtorDebtPayloads = new Map();
   let _creditorsCache = [];
   let _creditorsLastQuery = '';
 
@@ -472,6 +473,430 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
     return String(s).replace(/[&<>"'`=\/]/g, function (c) {
       return '&#' + c.charCodeAt(0) + ';';
     });
+  }
+
+  function normalizeDebtorDebtItems(items) {
+    return (Array.isArray(items) ? items : [])
+      .filter(Boolean)
+      .map(item => {
+        const amountDue = Number(item.amountDue || item.total || 0);
+        const paidSoFar = Number(item.paidSoFar || 0);
+        const outstandingRaw = typeof item.outstanding !== 'undefined'
+          ? Number(item.outstanding || 0)
+          : Number(amountDue - paidSoFar);
+        return Object.assign({}, item, {
+          amountDue: Number((isNaN(amountDue) ? 0 : amountDue).toFixed(2)),
+          paidSoFar: Number((isNaN(paidSoFar) ? 0 : paidSoFar).toFixed(2)),
+          outstanding: Number(Math.max(0, isNaN(outstandingRaw) ? 0 : outstandingRaw).toFixed(2)),
+          payments: (Array.isArray(item.payments) ? item.payments : []).map(p => ({
+            amount: Number((Number(p && p.amount ? p.amount : 0)).toFixed(2)),
+            method: String((p && p.method) || ''),
+            cashBookName: String((p && p.cashBookName) || ''),
+            cashBookKind: String((p && p.cashBookKind) || ''),
+            note: String((p && p.note) || ''),
+            recordedByName: String((p && p.recordedByName) || ''),
+            createdAt: p && p.createdAt ? p.createdAt : null
+          }))
+        });
+      });
+  }
+
+  function registerDebtorDebtPayload(debtorName, items) {
+    const key = `debt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${_debtorDebtPayloads.size}`;
+    _debtorDebtPayloads.set(key, {
+      debtorName: String(debtorName || 'Debtor').trim() || 'Debtor',
+      items: normalizeDebtorDebtItems(items)
+    });
+    return key;
+  }
+
+  function debtorPaymentMethodLabel(payment) {
+    const cashBook = String(payment && payment.cashBookName ? payment.cashBookName : '').trim();
+    const kind = String(payment && (payment.cashBookKind || payment.method) ? (payment.cashBookKind || payment.method) : '').trim();
+    if (cashBook && kind) return `${cashBook} (${kind})`;
+    if (cashBook) return cashBook;
+    if (kind) return kind.toUpperCase();
+    return '-';
+  }
+
+  function debtorDebtTotals(items) {
+    const rows = normalizeDebtorDebtItems(items);
+    return rows.reduce((acc, row) => {
+      acc.amountDue += Number(row.amountDue || 0);
+      acc.paidSoFar += Number(row.paidSoFar || 0);
+      acc.outstanding += Number(row.outstanding || 0);
+      return acc;
+    }, { amountDue: 0, paidSoFar: 0, outstanding: 0 });
+  }
+
+  function buildDebtorDebtHtml(payload) {
+    const debtorName = String(payload && payload.debtorName ? payload.debtorName : 'Debtor').trim() || 'Debtor';
+    const items = normalizeDebtorDebtItems(payload && payload.items);
+    const totals = debtorDebtTotals(items);
+    const generatedAt = new Date();
+    const phoneRow = items.find(i => i.customerPhone || i.phone) || {};
+    const phone = String(phoneRow.customerPhone || phoneRow.phone || '').trim();
+    const multiple = items.length > 1;
+
+    const orderSections = items.map((order, idx) => {
+      const payments = Array.isArray(order.payments) ? order.payments : [];
+      const paymentRows = payments.length
+        ? payments.map(payment => `
+            <tr>
+              <td>${escapeHtml(payment.createdAt ? formatDateTime(payment.createdAt) : '-')}</td>
+              <td>${escapeHtml(debtorPaymentMethodLabel(payment))}</td>
+              <td class="right">${formatCedi(payment.amount || 0)}</td>
+              <td>${escapeHtml(payment.recordedByName || '')}</td>
+              <td>${escapeHtml(payment.note || '')}</td>
+            </tr>
+          `).join('')
+        : '<tr><td colspan="5" class="muted">No payments recorded for this order.</td></tr>';
+
+      return `
+        <section class="debt-order">
+          <div class="order-heading">
+            <div>
+              <h2>Order ${escapeHtml(order.orderId || `#${idx + 1}`)}</h2>
+              ${order.jobNote ? `<div class="muted">${escapeHtml(order.jobNote)}</div>` : ''}
+            </div>
+            <div class="order-balance">
+              <span>${multiple ? 'Sub-balance Due' : 'Balance Due'}</span>
+              <strong>${formatCedi(order.outstanding || 0)}</strong>
+            </div>
+          </div>
+          <table class="meta-table">
+            <tbody>
+              <tr><th>Order Date</th><td>${escapeHtml(order.createdAt ? formatDateTime(order.createdAt) : '-')}</td><th>Status</th><td>${escapeHtml(order.status || 'pending')}</td></tr>
+              <tr><th>Amount Due</th><td>${formatCedi(order.amountDue || 0)}</td><th>Paid So Far</th><td>${formatCedi(order.paidSoFar || 0)}</td></tr>
+            </tbody>
+          </table>
+          <h3>Payment History</h3>
+          <table class="payments-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Method / Cash Book</th>
+                <th class="right">Amount</th>
+                <th>Recorded By</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>${paymentRows}</tbody>
+          </table>
+        </section>
+      `;
+    }).join('');
+
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Debt Breakdown - ${escapeHtml(debtorName)}</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111827; margin: 0; font-size: 12px; }
+    .debt-card { max-width: 860px; margin: 0 auto; }
+    .brand { display: flex; align-items: flex-start; gap: 22px; border-bottom: 2px solid #111827; padding-bottom: 12px; margin-bottom: 16px; }
+    .logo { width: 82px; height: 82px; object-fit: contain; }
+    .company-block { min-width: 180px; flex: 0 0 180px; }
+    .company { font-size: 24px; font-weight: 800; letter-spacing: .08em; }
+    .title { color: #4b5563; font-size: 14px; text-transform: uppercase; letter-spacing: .08em; }
+    .business-info { border-left: 1px solid #ddd; padding-left: 18px; }
+    .business-line { color: #333; font-size: 11px; line-height: 1.35; max-width: 560px; }
+    h1 { font-size: 22px; margin: 0 0 10px; }
+    h2 { font-size: 15px; margin: 0; }
+    h3 { font-size: 12px; margin: 12px 0 6px; text-transform: uppercase; letter-spacing: .06em; color: #334155; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+    th, td { border-bottom: 1px solid #e5e7eb; padding: 7px 8px; vertical-align: top; }
+    th { background: #f8fafc; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    .right { text-align: right; white-space: nowrap; }
+    .muted { color: #6b7280; font-size: 11px; }
+    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0 16px; }
+    .summary-box { border: 1px solid #dbeafe; background: #f8fbff; border-radius: 9px; padding: 10px; }
+    .summary-box span { display: block; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+    .summary-box strong { display: block; font-size: 15px; margin-top: 3px; }
+    .debt-order { page-break-inside: avoid; border: 1px solid #dbeafe; border-radius: 10px; padding: 11px; margin: 0 0 12px; }
+    .order-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 9px; }
+    .order-balance { text-align: right; border: 1px solid #bae6fd; background: #f0f9ff; border-radius: 8px; padding: 8px 10px; min-width: 170px; }
+    .order-balance span { display: block; color: #0369a1; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+    .order-balance strong { font-size: 15px; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; margin-bottom: 12px; }
+    .meta strong { display: block; color: #64748b; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+    .total-balance { border-top: 2px solid #111827 !important; font-weight: 800; }
+  </style>
+</head>
+<body>
+  <div class="debt-card">
+    <div class="brand">
+      <img class="logo" src="/images/AHAD%20LOGO3.jpeg" alt="AHADPRINT logo">
+      <div class="company-block">
+        <div class="company">AHADPRINT</div>
+        <div class="title">Debt Breakdown</div>
+      </div>
+      <div class="business-info">
+        <div class="business-line"><strong>Services:</strong> Digital Printing, Sales of Home Use Computers, Stationery and general merchandise.</div>
+        <div class="business-line"><strong>Location:</strong> Tamale Technical University.</div>
+        <div class="business-line"><strong>Tel:</strong> 0244104350.</div>
+        <div class="business-line"><strong>WhatsApp:</strong> 0558590262</div>
+      </div>
+    </div>
+    <h1>Debt Breakdown</h1>
+    <div class="meta">
+      <div><strong>Customer</strong>${escapeHtml(debtorName)}</div>
+      <div><strong>Phone</strong>${phone ? escapeHtml(phone) : '-'}</div>
+      <div><strong>Printed</strong>${escapeHtml(formatDateTime(generatedAt))}</div>
+    </div>
+    <div class="summary">
+      <div class="summary-box"><span>Total Amount Due</span><strong>${formatCedi(totals.amountDue)}</strong></div>
+      <div class="summary-box"><span>Total Paid</span><strong>${formatCedi(totals.paidSoFar)}</strong></div>
+      <div class="summary-box"><span>${multiple ? 'Total Balance Due' : 'Remaining Balance Due'}</span><strong>${formatCedi(totals.outstanding)}</strong></div>
+    </div>
+    ${orderSections || '<p class="muted">No debts listed.</p>'}
+  </div>
+</body>
+</html>`;
+  }
+
+  async function printDebtorDebt(payload) {
+    const items = normalizeDebtorDebtItems(payload && payload.items);
+    if (!items.length) return showAlertModal('No debt records available to print.', 'Debt breakdown');
+    const w = window.open('', '_blank', 'toolbar=0,location=0,menubar=0');
+    if (!w) return showAlertModal('Unable to open print window. Please allow pop-ups.', 'Print blocked');
+    w.document.open();
+    w.document.write(buildDebtorDebtHtml(payload));
+    w.document.close();
+    w.focus();
+    const runPrint = () => {
+      try { w.print(); } catch (e) { showAlertModal('Debt print failed.', 'Print error'); }
+    };
+    const logo = w.document.querySelector('.logo');
+    if (logo && !logo.complete) {
+      let done = false;
+      const go = () => { if (done) return; done = true; setTimeout(runPrint, 120); };
+      logo.onload = go;
+      logo.onerror = go;
+      setTimeout(go, 1400);
+    } else {
+      setTimeout(runPrint, 120);
+    }
+  }
+
+  function sanitizeDebtPdfText(text) {
+    return String(text || '')
+      .replace(/GH\u20B5/g, 'GHS')
+      .replace(/[\u2013\u2014]/g, '-')
+      .replace(/[^\x20-\x7E]/g, '');
+  }
+
+  function debtPdfEscape(text) {
+    return sanitizeDebtPdfText(text).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  }
+
+  function wrapDebtPdfLine(text, maxLen) {
+    const words = sanitizeDebtPdfText(text).split(/\s+/);
+    const lines = [];
+    let current = '';
+    words.forEach(word => {
+      if (!word) return;
+      if ((current + ' ' + word).trim().length > maxLen) {
+        if (current) lines.push(current);
+        current = word;
+      } else {
+        current = (current ? current + ' ' : '') + word;
+      }
+    });
+    if (current) lines.push(current);
+    return lines.length ? lines : [''];
+  }
+
+  function debtBytesToHex(bytes) {
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 1) out += bytes[i].toString(16).padStart(2, '0').toUpperCase();
+    return out;
+  }
+
+  function getDebtJpegDimensions(bytes) {
+    if (!bytes || bytes.length < 4 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) return null;
+    let offset = 2;
+    const sofMarkers = new Set([0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF]);
+    while (offset < bytes.length) {
+      if (bytes[offset] !== 0xFF) { offset += 1; continue; }
+      while (bytes[offset] === 0xFF) offset += 1;
+      const marker = bytes[offset];
+      offset += 1;
+      if (marker === 0xD9 || marker === 0xDA) break;
+      if (offset + 1 >= bytes.length) break;
+      const length = (bytes[offset] << 8) + bytes[offset + 1];
+      if (!length || offset + length > bytes.length) break;
+      if (sofMarkers.has(marker) && length >= 7) {
+        return {
+          height: (bytes[offset + 3] << 8) + bytes[offset + 4],
+          width: (bytes[offset + 5] << 8) + bytes[offset + 6],
+          components: bytes[offset + 7] || 3
+        };
+      }
+      offset += length;
+    }
+    return null;
+  }
+
+  async function loadDebtLogoForPdf() {
+    try {
+      const res = await fetch('/images/AHAD LOGO3.jpeg', { cache: 'force-cache' });
+      if (!res.ok) return null;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const dims = getDebtJpegDimensions(bytes);
+      if (!dims) return null;
+      return { bytes, width: dims.width, height: dims.height, components: dims.components || 3 };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function debtorDebtPdfFileName(payload) {
+    const raw = String(payload && payload.debtorName ? payload.debtorName : 'debtor').trim();
+    const safe = raw.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_').replace(/^_+|_+$/g, '').slice(0, 70);
+    return `${safe || 'debtor'}_debt_breakdown.pdf`;
+  }
+
+  async function buildDebtorDebtPdfBlob(payload) {
+    const logo = await loadDebtLogoForPdf();
+    const debtorName = String(payload && payload.debtorName ? payload.debtorName : 'Debtor').trim() || 'Debtor';
+    const items = normalizeDebtorDebtItems(payload && payload.items);
+    const totals = debtorDebtTotals(items);
+    const phoneRow = items.find(i => i.customerPhone || i.phone) || {};
+    const phone = String(phoneRow.customerPhone || phoneRow.phone || '').trim();
+    const money = n => `GHS ${fmt(n || 0)}`;
+    const lines = [];
+
+    lines.push(`Generated: ${formatDateTime(new Date())}`);
+    lines.push(`Customer: ${debtorName}`);
+    if (phone) lines.push(`Phone: ${phone}`);
+    lines.push('');
+    lines.push('DEBT BREAKDOWN');
+    lines.push(`Total Amount Due: ${money(totals.amountDue)}`);
+    lines.push(`Total Paid: ${money(totals.paidSoFar)}`);
+    lines.push(`${items.length > 1 ? 'Total Balance Due' : 'Remaining Balance Due'}: ${money(totals.outstanding)}`);
+
+    items.forEach((order, idx) => {
+      lines.push('');
+      lines.push(`ORDER ${order.orderId || `#${idx + 1}`}`);
+      if (order.jobNote) lines.push(`Note: ${order.jobNote}`);
+      lines.push(`Order Date: ${order.createdAt ? formatDateTime(order.createdAt) : '-'}`);
+      lines.push(`Status: ${order.status || 'pending'}`);
+      lines.push(`Amount Due: ${money(order.amountDue)} | Paid So Far: ${money(order.paidSoFar)} | Balance Due: ${money(order.outstanding)}`);
+      lines.push('Payment History:');
+      if (order.payments && order.payments.length) {
+        order.payments.forEach(payment => {
+          const method = debtorPaymentMethodLabel(payment);
+          const note = payment.note ? ` | Note: ${payment.note}` : '';
+          const by = payment.recordedByName ? ` | By: ${payment.recordedByName}` : '';
+          lines.push(`- ${payment.createdAt ? formatDateTime(payment.createdAt) : '-'} | ${method} | ${money(payment.amount)}${by}${note}`);
+        });
+      } else {
+        lines.push('- No payments recorded.');
+      }
+    });
+
+    const wrapped = [];
+    lines.forEach(line => wrapDebtPdfLine(line, 88).forEach(w => wrapped.push(w)));
+    const pageSize = logo ? 43 : 47;
+    const pages = [];
+    for (let i = 0; i < wrapped.length; i += pageSize) pages.push(wrapped.slice(i, i + pageSize));
+    if (!pages.length) pages.push(['DEBT BREAKDOWN']);
+
+    const objects = [];
+    const addObj = body => { objects.push(body); return objects.length; };
+    const catalogId = addObj('');
+    const pagesId = addObj('');
+    const fontId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>');
+    const fontBoldId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold >>');
+    let imageId = null;
+    let logoCommand = '';
+    if (logo) {
+      const imgWidth = 72;
+      const imgHeight = Math.min(58, Math.max(30, Number((imgWidth * (logo.height / logo.width)).toFixed(2))));
+      const imgX = 50;
+      const imgY = 765;
+      const colorSpace = logo.components === 1 ? '/DeviceGray' : (logo.components === 4 ? '/DeviceCMYK' : '/DeviceRGB');
+      const imageStream = `${debtBytesToHex(logo.bytes)}>`;
+      imageId = addObj(`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace ${colorSpace} /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${imageStream.length} >>\nstream\n${imageStream}\nendstream`);
+      logoCommand = `q\n${imgWidth} 0 0 ${imgHeight} ${imgX} ${imgY} cm\n/Im1 Do\nQ`;
+    }
+
+    const headerCommands = () => {
+      const commands = [];
+      if (logoCommand) commands.push(logoCommand);
+      const companyX = logoCommand ? 136 : 50;
+      const infoX = logoCommand ? 278 : 198;
+      const addLabelValue = (x, y, label, value, dx) => {
+        commands.push('BT', '/F2 8 Tf', `${x} ${y} Td`, `(${debtPdfEscape(label)}) Tj`, 'ET', 'BT', '/F1 8 Tf', `${x + dx} ${y} Td`, `(${debtPdfEscape(value)}) Tj`, 'ET');
+      };
+      commands.push('BT', '/F2 18 Tf', `${companyX} 803 Td`, `(${debtPdfEscape('AHADPRINT')}) Tj`, '/F1 9 Tf', '0 -16 Td', `(${debtPdfEscape('DEBT BREAKDOWN')}) Tj`, 'ET');
+      addLabelValue(infoX, 807, 'Services:', 'Digital Printing, Sales of Home Use Computers,', 46);
+      commands.push('BT', '/F1 8 Tf', `${infoX} 796 Td`, `(${debtPdfEscape('Stationery and general merchandise.')}) Tj`, 'ET');
+      addLabelValue(infoX, 785, 'Location:', 'Tamale Technical University.', 48);
+      addLabelValue(infoX, 774, 'Tel:', '0244104350.', 22);
+      addLabelValue(infoX, 763, 'WhatsApp:', '0558590262', 52);
+      return commands;
+    };
+
+    const pageIds = [];
+    pages.forEach(pageLines => {
+      const commands = headerCommands();
+      commands.push('BT', '/F1 10 Tf', '50 724 Td');
+      pageLines.forEach((line, idx) => {
+        if (idx > 0) commands.push('0 -14 Td');
+        commands.push(`(${debtPdfEscape(line)}) Tj`);
+      });
+      commands.push('ET');
+      const stream = commands.join('\n');
+      const contentId = addObj(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+      const xObjectResource = imageId ? `/XObject << /Im1 ${imageId} 0 R >> ` : '';
+      const pageId = addObj(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R /F2 ${fontBoldId} 0 R >> ${xObjectResource}>> /Contents ${contentId} 0 R >>`);
+      pageIds.push(pageId);
+    });
+
+    objects[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
+    objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+    objects.forEach((body, idx) => {
+      offsets.push(pdf.length);
+      pdf += `${idx + 1} 0 obj\n${body}\nendobj\n`;
+    });
+    const xref = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    for (let i = 1; i < offsets.length; i += 1) pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    return new Blob([pdf], { type: 'application/pdf' });
+  }
+
+  async function shareDebtorDebt(payload) {
+    const items = normalizeDebtorDebtItems(payload && payload.items);
+    if (!items.length) return showAlertModal('No debt records available to share.', 'Debt breakdown');
+    try {
+      const blob = await buildDebtorDebtPdfBlob(payload);
+      const filename = debtorDebtPdfFileName(payload);
+      const file = (typeof File !== 'undefined') ? new File([blob], filename, { type: 'application/pdf' }) : null;
+      if (file && navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+        await navigator.share({ title: 'Debt Breakdown', text: 'Debt breakdown from AHADPRINT', files: [file] });
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showAlertModal('PDF downloaded. You can attach and send it to the customer.', 'Debt PDF');
+    } catch (err) {
+      console.error('share debtor debt failed', err);
+      showAlertModal('Failed to prepare debt PDF.', 'Debt PDF');
+    }
   }
 
   function titleCaseFromKey(s) {
@@ -2283,6 +2708,7 @@ setDebtorsSummary(
   Number(summaryTotalPaid.toFixed(2)),
   Number(summaryTotalOutstanding.toFixed(2))
 );
+_debtorDebtPayloads = new Map();
 // -------- Group registered customers by customer/name; group walk-ins by order date --------
 function isWalkInDebtorRow(row) {
   const customerId = String(row && row.customerId ? row.customerId : '').trim();
@@ -2337,6 +2763,7 @@ Object.values(grouped).forEach(group => {
     const out = Number(d.outstanding || (d.amountDue - d.paidSoFar || 0)).toFixed(2);
     const rowNote = String(d.jobNote || '').trim();
     const accountUrl = d.customerId ? `/customers/${encodeURIComponent(d.customerId)}/account` : '';
+    const debtKey = registerDebtorDebtPayload(debtorName, [d]);
     html += `
       <tr data-order-id="${escapeHtml(d.orderId || '')}">
         <td><span class="badge bg-secondary" style="color:#fff !important;">${escapeHtml(d.orderId || '')}</span></td>
@@ -2363,6 +2790,8 @@ Object.values(grouped).forEach(group => {
                 </button>
               </li>
               ${accountUrl ? `<li><a class="dropdown-item debtor-account-link" href="${accountUrl}" data-ajax="true">Account</a></li>` : ''}
+              <li><button class="dropdown-item print-debtor-debt" type="button" data-debt-key="${escapeHtml(debtKey)}">Print Debt</button></li>
+              <li><button class="dropdown-item share-debtor-debt" type="button" data-debt-key="${escapeHtml(debtKey)}">Share Debt</button></li>
             </ul>
           </div>
         </td>
@@ -2382,8 +2811,23 @@ const totalOutstanding = items.reduce(
 );
 const accountCustomerId = (items.find(i => i.customerId) || {}).customerId || '';
 const accountUrl = accountCustomerId ? `/customers/${encodeURIComponent(accountCustomerId)}/account` : '';
+const debtKey = registerDebtorDebtPayload(debtorName, items);
 const groupActionsHtml = group.isWalkIn
-  ? '<span class="text-muted">Expand</span>'
+  ? `
+      <div class="dropup d-inline-block">
+        <button class="btn btn-sm btn-outline-light-custom debtor-actions-menu"
+          type="button"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+          title="Actions">
+          <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><button class="dropdown-item print-debtor-debt" type="button" data-debt-key="${escapeHtml(debtKey)}">Print Debt</button></li>
+          <li><button class="dropdown-item share-debtor-debt" type="button" data-debt-key="${escapeHtml(debtKey)}">Share Debt</button></li>
+        </ul>
+      </div>
+    `
   : `
       <div class="dropup d-inline-block">
         <button class="btn btn-sm btn-outline-light-custom debtor-actions-menu"
@@ -2404,6 +2848,8 @@ const groupActionsHtml = group.isWalkIn
             </button>
           </li>
           ${accountUrl ? `<li><a class="dropdown-item debtor-account-link" href="${accountUrl}" data-ajax="true">Account</a></li>` : ''}
+          <li><button class="dropdown-item print-debtor-debt" type="button" data-debt-key="${escapeHtml(debtKey)}">Print Debt</button></li>
+          <li><button class="dropdown-item share-debtor-debt" type="button" data-debt-key="${escapeHtml(debtKey)}">Share Debt</button></li>
         </ul>
       </div>
     `;
@@ -2533,6 +2979,24 @@ if (debtorsTable) {
     const menuBtn = ev.target.closest('.debtor-actions-menu');
     if (menuBtn) {
       ev.stopPropagation();
+      return;
+    }
+
+    const printDebtBtn = ev.target.closest('.print-debtor-debt');
+    if (printDebtBtn) {
+      ev.stopPropagation();
+      const payload = _debtorDebtPayloads.get(String(printDebtBtn.dataset.debtKey || ''));
+      if (!payload) return showAlertModal('Debt breakdown could not be found. Refresh debtors and try again.', 'Debt breakdown');
+      printDebtorDebt(payload);
+      return;
+    }
+
+    const shareDebtBtn = ev.target.closest('.share-debtor-debt');
+    if (shareDebtBtn) {
+      ev.stopPropagation();
+      const payload = _debtorDebtPayloads.get(String(shareDebtBtn.dataset.debtKey || ''));
+      if (!payload) return showAlertModal('Debt breakdown could not be found. Refresh debtors and try again.', 'Debt breakdown');
+      shareDebtorDebt(payload);
       return;
     }
 

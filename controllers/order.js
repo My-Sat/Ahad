@@ -2868,6 +2868,7 @@ exports.apiGetDebtors = async (req, res) => {
             total: 1,
             paidSoFar: 1,
             outstanding: 1,
+            payments: 1,
             debtorName: 1,
           customerPhone: 1,   // <-- add this
           createdAt: 1,
@@ -2890,6 +2891,15 @@ exports.apiGetDebtors = async (req, res) => {
       amountDue: Number((r.total || 0).toFixed(2)),
       paidSoFar: Number((r.paidSoFar || 0).toFixed(2)),
       outstanding: Number((r.outstanding || 0).toFixed(2)),
+      payments: (Array.isArray(r.payments) ? r.payments : []).map(p => ({
+        amount: Number((Number(p.amount || 0)).toFixed(2)),
+        method: p.method || '',
+        cashBookName: p.cashBookName || '',
+        cashBookKind: p.cashBookKind || '',
+        note: p.note || '',
+        recordedByName: p.recordedByName || '',
+        createdAt: p.createdAt || null
+      })),
       createdAt: r.createdAt,
       status: r.status
     }));
