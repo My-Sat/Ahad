@@ -1,0 +1,87 @@
+extends ../layout
+
+block content
+  .container#enquiriesPage(data-is-admin=(isAdmin ? 'true' : 'false'))
+    .d-none(data-main-width='wide')
+    .row.justify-content-center
+      .col-12.col-md-12
+        .card.shadow-sm.dark-surface
+          .card-body.dark-card-body
+            .d-flex.justify-content-between.align-items-center.mb-3
+              div
+                h4.mb-0.text-white Our Services
+                small.text-muted-light Print or share our services and keep a record of the enquiry.
+              .d-flex.gap-2
+                button.btn.btn-outline-info.btn-sm#openEnquiriesListBtn(type='button')
+                  i.bi.bi-list-ul.me-1
+                  | Enquiries List
+                a.btn.btn-outline-light-custom.btn-sm(href='/registrations', data-ajax='true')
+                  i.bi.bi-arrow-left.me-1
+                  | Registerations
+
+            .card.mb-3.dark-surface(style='border:1px solid rgba(255,255,255,.08);')
+              .card-body.dark-card-body
+                h6.text-white.mb-2 Customer Details Before Printing / Sharing
+                .row.g-2.align-items-end
+                  .col-12.col-md-4
+                    label.form-label.text-muted-light(for='enquiryFirstName') First name (optional)
+                    input.form-control.form-control-dark#enquiryFirstName(type='text', maxlength='80', placeholder='Customer first name')
+                  .col-12.col-md-4
+                    label.form-label.text-muted-light(for='enquiryPhone') Phone number
+                    input.form-control.form-control-dark#enquiryPhone(type='text', placeholder='Customer phone number')
+                  .col-12.col-md-4.d-flex.gap-2
+                    button.btn.btn-primary#enquiryPrintBtn(type='button')
+                      i.bi.bi-printer.me-1
+                      | Print
+                    button.btn.btn-outline-light-custom#enquiryShareBtn(type='button')
+                      i.bi.bi-share.me-1
+                      | Share PDF
+
+            .row.g-3
+              div(class=(isAdmin ? 'col-12 col-lg-7' : 'col-12'))
+                .card.dark-surface.h-100
+                  .card-body.dark-card-body
+                    .d-flex.justify-content-between.align-items-center.mb-2
+                      h6.mb-0.text-white Our Services
+                      button.btn.btn-outline-light-custom.btn-sm#enquiryReloadCatalogBtn(type='button') Refresh
+                    #enquiryCatalogList
+                      p.text-muted-light Loading services...
+              if isAdmin
+                .col-12.col-lg-5
+                  .card.dark-surface.mb-3
+                    .card-body.dark-card-body
+                      h6.text-white.mb-2 Manage Our Services
+                      .input-group.input-group-sm.mb-3
+                        input.form-control.form-control-dark#enquiryCategoryName(type='text', placeholder='New category name')
+                        button.btn.btn-primary#enquiryAddCategoryBtn(type='button') Add Category
+                      .small.text-muted-light.mb-2 Select a category below to add services under it.
+                      select.form-select.form-select-sm.form-select-dark.mb-2#enquiryManageCategorySelect
+                        option(value='') -- Select category --
+                      .input-group.input-group-sm
+                        input.form-control.form-control-dark#enquiryServiceName(type='text', placeholder='Service name under selected category')
+                        button.btn.btn-outline-light-custom#enquiryAddServiceBtn(type='button') Add Service
+
+    .modal.fade#enquiriesListModal(tabindex='-1', aria-labelledby='enquiriesListModalLabel', aria-hidden='true')
+      .modal-dialog.modal-lg.modal-dialog-centered.modal-dialog-scrollable
+        .modal-content.dark-surface
+          .modal-header
+            div
+              h5.modal-title.text-white#enquiriesListModalLabel Enquiries List
+              small.text-muted-light#enquiriesListCount 0 shown
+            button.btn-close.btn-close-white(type='button', data-bs-dismiss='modal', aria-label='Close')
+          .modal-body.dark-card-body
+            .table-responsive
+              table.table.table-sm.table-hover#enquiriesTable
+                thead
+                  tr
+                    th Name
+                    th Phone
+                    th Date
+                tbody
+                  tr
+                    td.text-muted-light(colspan='3') Loading enquiries...
+          .modal-footer
+            button.btn.btn-outline-light-custom.btn-sm#enquiriesMoreBtn(type='button', style='display:none;') More
+            button.btn.btn-secondary.btn-sm(type='button', data-bs-dismiss='modal') Close
+
+  script(defer src='/javascripts/enquiries_page.js')

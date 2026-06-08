@@ -9,9 +9,13 @@ block content
           .card-body.dark-card-body
             .d-flex.justify-content-between.align-items-center.mb-3
               h4.mb-0.text-white Registerations
-              button.btn.btn-outline-light-custom.btn-sm#refreshRegistrationsBtn(type='button')
-                i.bi.bi-arrow-clockwise.me-1
-                | Refresh
+              .d-flex.gap-2
+                a.btn.btn-outline-info.btn-sm(href='/registrations/enquiries', data-ajax='true')
+                  i.bi.bi-question-circle.me-1
+                  | Enquiries
+                button.btn.btn-outline-light-custom.btn-sm#refreshRegistrationsBtn(type='button')
+                  i.bi.bi-arrow-clockwise.me-1
+                  | Refresh
 
             .card.mb-3.dark-surface(style='border:1px solid rgba(255,255,255,.08);')
               .card-body.dark-card-body.py-2
