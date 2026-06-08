@@ -901,28 +901,39 @@ block content
                 #cashBooksPage
                   .row.g-3.ledger-stacked-section
                     .col-lg-12.ledger-form-panel
-                      h6.text-white.mb-2#cashBookFormTitle New Cash Book
-                      form#cashBookForm(data-disable-spinner='true')
-                        input#cashBookId(type='hidden')
-                        .mb-2
-                          label.form-label.text-muted-light(for='cashBookName') Name
-                          input.form-control.form-control-dark#cashBookName(type='text', placeholder='e.g. Main Cash, Bank A/C, MTN MoMo', required)
-                        .mb-2
-                          label.form-label.text-muted-light(for='cashBookKind') Type
-                          select.form-select.form-select-dark#cashBookKind
-                            option(value='cash' selected) Normal cash book
-                            option(value='bank') Bank
-                            option(value='momo') MoMo
-                        .mb-2#openingBalanceWrap
-                          label.form-label.text-muted-light(for='cashBookOpeningBalance') Opening balance
-                          input.form-control.form-control-dark#cashBookOpeningBalance(type='number', min='0', step='0.01', value='0')
-                        .form-check.mb-2
-                          input.form-check-input#cashBookActive(type='checkbox', checked)
-                          label.form-check-label(for='cashBookActive') Active
-                        .d-flex.gap-2
-                          button.btn.btn-primary#saveCashBookBtn(type='submit') Create
-                          button.btn.btn-outline-light-custom#resetCashBookBtn(type='button') Reset
-                        p.small.mt-2.mb-0#cashBookStatus
+                      .card.mb-3.dark-surface(style='border:1px solid rgba(33,188,255,.22);box-shadow:0 12px 30px rgba(0,0,0,.10);')
+                        .card-header.bg-transparent.border-0.p-2
+                          button.btn.btn-sm.btn-outline-light-custom.w-100.d-flex.align-items-center.justify-content-between(type='button', data-bs-toggle='collapse', data-bs-target='#cashBookFormCollapse', aria-expanded='false', aria-controls='cashBookFormCollapse')
+                            span.d-flex.align-items-center.gap-2
+                              i.bi.bi-wallet2
+                              span.fw-semibold Create Cash Book
+                              span.badge.rounded-pill.bg-info.text-dark Manage
+                            span.small.text-muted-light Add or edit cash books
+                        .collapse#cashBookFormCollapse
+                          .card-body.dark-card-body.pt-0
+                            .rounded-3.p-3(style='background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);')
+                              h6.text-white.mb-2#cashBookFormTitle New Cash Book
+                              form#cashBookForm(data-disable-spinner='true')
+                                input#cashBookId(type='hidden')
+                                .mb-2
+                                  label.form-label.text-muted-light(for='cashBookName') Name
+                                  input.form-control.form-control-dark#cashBookName(type='text', placeholder='e.g. Main Cash, Bank A/C, MTN MoMo', required)
+                                .mb-2
+                                  label.form-label.text-muted-light(for='cashBookKind') Type
+                                  select.form-select.form-select-dark#cashBookKind
+                                    option(value='cash' selected) Normal cash book
+                                    option(value='bank') Bank
+                                    option(value='momo') MoMo
+                                .mb-2#openingBalanceWrap
+                                  label.form-label.text-muted-light(for='cashBookOpeningBalance') Opening balance
+                                  input.form-control.form-control-dark#cashBookOpeningBalance(type='number', min='0', step='0.01', value='0')
+                                .form-check.mb-2
+                                  input.form-check-input#cashBookActive(type='checkbox', checked)
+                                  label.form-check-label(for='cashBookActive') Active
+                                .d-flex.gap-2
+                                  button.btn.btn-primary#saveCashBookBtn(type='submit') Create
+                                  button.btn.btn-outline-light-custom#resetCashBookBtn(type='button') Reset
+                                p.small.mt-2.mb-0#cashBookStatus
 
                     .col-lg-12.ledger-entries-panel
                       .d-flex.justify-content-between.align-items-center.mb-3

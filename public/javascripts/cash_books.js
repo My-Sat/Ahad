@@ -7,6 +7,7 @@ function initCashBooksPage() {
   root.dataset.cashBooksInit = '1';
 
   const form = document.getElementById('cashBookForm');
+  const formCollapseEl = document.getElementById('cashBookFormCollapse');
   const idEl = document.getElementById('cashBookId');
   const nameEl = document.getElementById('cashBookName');
   const kindEl = document.getElementById('cashBookKind');
@@ -52,6 +53,15 @@ function initCashBooksPage() {
     statusEl.textContent = msg || '';
     statusEl.classList.toggle('text-danger', !!isError);
     statusEl.classList.toggle('text-success', !!msg && !isError);
+  }
+
+  function showCashBookForm() {
+    if (!formCollapseEl || !window.bootstrap || !window.bootstrap.Collapse) return;
+    try {
+      const inst = window.bootstrap.Collapse.getInstance(formCollapseEl)
+        || new window.bootstrap.Collapse(formCollapseEl, { toggle: false });
+      inst.show();
+    } catch (e) {}
   }
 
   function restoreSaveButton(label) {
@@ -310,6 +320,7 @@ function initCashBooksPage() {
       if (titleEl) titleEl.textContent = 'Edit Cash Book';
       restoreSaveButton('Save');
       setStatus('');
+      showCashBookForm();
       try { nameEl && nameEl.focus(); } catch (e) {}
     });
   }
