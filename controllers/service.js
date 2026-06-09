@@ -26,6 +26,22 @@ function normalizeCustomerCategory(v) {
   return 'customer';
 }
 
+function normalizePricingMode(v) {
+  return String(v || '').toLowerCase().trim() === 'large_format' ? 'large_format' : 'price_rules';
+}
+
+function parseLargeFormatRate(raw) {
+  if (raw === undefined || raw === null || String(raw).trim() === '') return null;
+  const v = Number(raw);
+  if (!isFinite(v) || v < 0) return null;
+  return Number(v.toFixed(2));
+}
+
+function parseCheckboxValue(raw) {
+  if (Array.isArray(raw)) return raw.some(v => parseCheckboxValue(v));
+  return raw === 'on' || raw === 'true' || raw === '1' || raw === true;
+}
+
 function pickEffectivePriceForCategory(priceDoc, customerCategory) {
   const cat = normalizeCustomerCategory(customerCategory);
   const basePrice = Number(priceDoc && priceDoc.price != null ? priceDoc.price : 0);
@@ -93,7 +109,23 @@ exports.apiGetPricesForService = async (req, res) => {
 
     // Determine if service requires a printer
     const serviceDoc = await Service.findById(serviceId).lean();
-    const serviceRequiresPrinter = !!(serviceDoc && serviceDoc.requiresPrinter);
+    const pricingMode = normalizePricingMode(serviceDoc && serviceDoc.pricingMode);
+    const serviceRequiresPrinter = pricingMode === 'large_format' || !!(serviceDoc && serviceDoc.requiresPrinter);
+    if (pricingMode === 'large_format') {
+      const printers = serviceRequiresPrinter
+        ? await Printer.find().select('_id name').sort('name').lean()
+        : [];
+      return res.json({
+        ok: true,
+        prices: [],
+        pricingMode,
+        largeFormat: {
+          amountPerSquareFeet: Number(serviceDoc && serviceDoc.largeFormatRate || 0)
+        },
+        serviceRequiresPrinter,
+        printers
+      });
+    }
 
     const prices = await ServicePrice.find({ service: serviceId })
       .populate('selections.unit selections.subUnit')
@@ -137,7 +169,7 @@ exports.apiGetPricesForService = async (req, res) => {
       });
     });
 
-        return res.json({ ok: true, prices: out, serviceRequiresPrinter, printers });
+        return res.json({ ok: true, prices: out, pricingMode: 'price_rules', serviceRequiresPrinter, printers });
       } catch (err) {
         console.error('apiGetPricesForService error', err);
         return res.status(500).json({ error: 'Error fetching prices' });
@@ -200,8 +232,7 @@ exports.create = async (req, res) => {
     // Accept optional requiresPrinter flag on create (checkboxs/forms may send 'on'/'true')
     let requiresPrinter = false;
     if (typeof req.body.requiresPrinter !== 'undefined') {
-      const v = req.body.requiresPrinter;
-      requiresPrinter = (v === 'on' || v === 'true' || v === '1' || v === true);
+      requiresPrinter = parseCheckboxValue(req.body.requiresPrinter);
     }
 
     // NEW: optional categoryId
@@ -302,10 +333,24 @@ exports.update = async (req, res) => {
     const newName = req.body.name ? String(req.body.name).trim() : null;
     if (newName) service.name = newName;
 
-    // NEW: handle requiresPrinter checkbox (comes from form as 'on' or 'true')
-    if (typeof req.body.requiresPrinter !== 'undefined') {
-      const val = req.body.requiresPrinter;
-      service.requiresPrinter = (val === 'on' || val === 'true' || val === '1' || val === true);
+    if (typeof req.body.pricingMode !== 'undefined') {
+      service.pricingMode = normalizePricingMode(req.body.pricingMode);
+      service.requiresPrinter = service.pricingMode === 'large_format'
+        ? true
+        : parseCheckboxValue(req.body.requiresPrinter);
+      if (service.pricingMode === 'large_format') {
+        const rate = parseLargeFormatRate(req.body.largeFormatRate);
+        if (rate === null) return res.status(400).send('Invalid amount per square feet');
+        service.largeFormatRate = rate;
+      } else {
+        service.largeFormatRate = null;
+      }
+    } else if (typeof req.body.requiresPrinter !== 'undefined') {
+      service.requiresPrinter = parseCheckboxValue(req.body.requiresPrinter);
+    } else if (typeof req.body.largeFormatRate !== 'undefined' && normalizePricingMode(service.pricingMode) === 'large_format') {
+      const rate = parseLargeFormatRate(req.body.largeFormatRate);
+      if (rate === null) return res.status(400).send('Invalid amount per square feet');
+      service.largeFormatRate = rate;
     }
 
     // NEW: handle categoryId if provided (allow empty to unset)
@@ -331,7 +376,7 @@ exports.update = async (req, res) => {
 
     // If AJAX request, return JSON so client can update DOM without reload
     if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
-      return res.json({ ok: true, service: { _id: service._id, name: service.name, requiresPrinter: !!service.requiresPrinter, category: service.category } });
+      return res.json({ ok: true, service: { _id: service._id, name: service.name, requiresPrinter: !!service.requiresPrinter, category: service.category, pricingMode: service.pricingMode || 'price_rules', largeFormatRate: service.largeFormatRate } });
     }
 
     // fallback: redirect (existing behavior)

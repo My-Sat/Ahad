@@ -93,7 +93,12 @@ block content
             // price rules list (populated via AJAX or when a book is selected)
             .card.mt-3.dark-surface
               .card-body.dark-card-body
-                h6.mb-2.text-white Price rules for selected service / book
+                .d-flex.justify-content-between.align-items-center.flex-wrap.gap-2.mb-2
+                  h6.mb-0.text-white Price rules for selected service / book
+                  if currentUser && currentUser.role && String(currentUser.role).toLowerCase() === 'admin'
+                    .form-check.form-switch.mb-0
+                      input.form-check-input#outsourcedModeToggle(type='checkbox', role='switch')
+                      label.form-check-label.small.text-muted-light(for='outsourcedModeToggle') Out-Sourced
                 p.text-muted-light.small Select a rule and enter number of pages/qty (if applicable) then click Apply to add to cart.
                 #pricesList
                   p.text-muted-light Select a service to load price rules.

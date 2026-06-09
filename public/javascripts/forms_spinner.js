@@ -65,6 +65,12 @@
     if (!form) return null;
     const marked = form.querySelector(`[${LAST_CLICK_ATTR}="1"]`);
     if (marked) return marked;
+    if (form.id) {
+      const allMarked = document.querySelectorAll(`[${LAST_CLICK_ATTR}="1"]`);
+      for (const btn of allMarked) {
+        if (btn && btn.getAttribute && btn.getAttribute('form') === form.id) return btn;
+      }
+    }
     const first = form.querySelector('button[type="submit"], input[type="submit"]');
     if (first) return first;
     return null;

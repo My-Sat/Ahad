@@ -38,10 +38,6 @@ const {
   roundUnitCost
 } = require('../utilities/accounting');
 
-function isOutSourcedCategoryName(name) {
-  return /out[\s-]*sourced/i.test(String(name || '').trim());
-}
-
 function positiveCountFactor(value, fallback = 1) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : fallback;
@@ -548,6 +544,7 @@ function buildMaterialRequirements(builtItems, opStocks) {
 
   for (let idx = 0; idx < (builtItems || []).length; idx++) {
     const it = builtItems[idx];
+    if (it && Number(it.outsourcedTotal || 0) > 0) continue;
     const itemSelections = it.selections || [];
 
     const pages = Number(it.pages) || 1;
@@ -1007,14 +1004,28 @@ if (it.factor !== undefined && it.factor !== null && String(it.factor).trim() !=
   factor = (isNaN(f) || f < 1) ? 1 : Math.floor(f);
 }
 
+const pricingMode = String(it.pricingMode || it.itemType || '').toLowerCase().trim();
+const largeFormatLength = Number(it.largeFormatLength || it.length || 0);
+const largeFormatBreadth = Number(it.largeFormatBreadth || it.breadth || 0);
+const largeFormatUnit = String(it.largeFormatUnit || it.measurementUnit || 'feet').toLowerCase().trim() === 'inches'
+  ? 'inches'
+  : 'feet';
+const largeFormatQty = Math.max(1, Math.floor(Number(it.largeFormatQty || it.quantity || factor || 1)));
+
 return {
   serviceId: it.serviceId,
-  priceRuleId: it.priceRuleId,
+  priceRuleId: it.priceRuleId || null,
+  pricingMode,
+  largeFormatLength,
+  largeFormatBreadth,
+  largeFormatUnit,
+  largeFormatQty,
   pages,
   factor,              // NEW
   fb,
   printerId: it.printerId || null,
   spoiled,
+  outsourced: it.outsourced === true || it.outsourced === 'true' || it.outsourced === 1 || it.outsourced === '1',
   outsourcedArtistId: it.outsourcedArtistId || null,
   outsourcedArtistName: it.outsourcedArtistName || '',
   outsourcedQty: it.outsourcedQty,
@@ -1069,13 +1080,16 @@ return {
       .map(id => new mongoose.Types.ObjectId(id));
 
     for (const it of items) {
-      if (!mongoose.Types.ObjectId.isValid(it.serviceId) || !mongoose.Types.ObjectId.isValid(it.priceRuleId)) {
+      const isLargeFormatLine = String(it.pricingMode || '').toLowerCase() === 'large_format';
+      if (!mongoose.Types.ObjectId.isValid(it.serviceId) || (!isLargeFormatLine && !mongoose.Types.ObjectId.isValid(it.priceRuleId))) {
         return res.status(400).json({ error: 'Invalid IDs in items' });
       }
     }
 
     const itemServiceIdStrings = Array.from(new Set(items.map(it => String(it.serviceId))));
-    const itemPriceRuleIdStrings = Array.from(new Set(items.map(it => String(it.priceRuleId))));
+    const itemPriceRuleIdStrings = Array.from(new Set(items
+      .map(it => String(it.priceRuleId || '').trim())
+      .filter(id => mongoose.Types.ObjectId.isValid(id))));
     const itemPrinterIdStrings = Array.from(new Set(
       items
         .map(it => String(it.printerId || '').trim())
@@ -1106,7 +1120,9 @@ return {
         ? Book.find({
           category: { $in: allowedCategoryObjectIds },
           'items.service': { $in: itemServiceIdStrings.map(id => new mongoose.Types.ObjectId(id)) },
-          'items.priceRule': { $in: itemPriceRuleIdStrings.map(id => new mongoose.Types.ObjectId(id)) }
+          ...(itemPriceRuleIdStrings.length
+            ? { 'items.priceRule': { $in: itemPriceRuleIdStrings.map(id => new mongoose.Types.ObjectId(id)) } }
+            : {})
         }).select('items.service items.priceRule').lean()
         : Promise.resolve([])
     ]);
@@ -1126,11 +1142,9 @@ return {
 
     const builtItems = [];
     let total = 0;
+    const canMarkOutsourced = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
 
     for (const it of items) {
-      const pr = priceRuleMap.get(String(it.priceRuleId));
-      if (!pr) return res.status(404).json({ error: `Price rule ${it.priceRuleId} not found` });
-
       const svc = serviceMap.get(String(it.serviceId));
       if (!svc) {
         return res.status(404).json({ error: `Service ${it.serviceId} not found` });
@@ -1148,59 +1162,131 @@ return {
       // when a book is placed, its underlying services may belong to other categories.
       // In that case, allow the item if it belongs to a Book that is in an allowed category.
       if (!isAuthorizedByCategory && allowedCategoryObjectIds.length) {
-        isAuthorizedByCategory = compoundAllowedPairs.has(`${String(it.serviceId)}:${String(it.priceRuleId)}`);
+        isAuthorizedByCategory = it.priceRuleId
+          ? compoundAllowedPairs.has(`${String(it.serviceId)}:${String(it.priceRuleId)}`)
+          : false;
       }
 
       if (!isAuthorizedByCategory) {
         return res.status(400).json({ error: 'One or more selected services are outside secretary-assigned categories.' });
       }
 
-      const svcRequiresPrinter = !!(svc && svc.requiresPrinter);
-      const outsourcedCategory = svc && svc.category ? (svc.category.nameNormalized || svc.category.name || '') : '';
-      const isOutSourcedCategory = isOutSourcedCategoryName(outsourcedCategory);
+      const isLargeFormatService = String(svc.pricingMode || '').toLowerCase() === 'large_format';
+      const svcRequiresPrinter = isLargeFormatService || !!(svc && svc.requiresPrinter);
 
       let outsourcedArtist = null;
       let outsourcedArtistName = '';
       let outsourcedQty = 0;
       let outsourcedAmount = 0;
       let outsourcedTotal = 0;
-      if (isOutSourcedCategory) {
-        const rawQty = Number(it.outsourcedQty);
-        const rawAmount = Number(it.outsourcedAmount);
-        const customerRequestedQty = Math.max(
-          1,
-          Math.floor(Number(svcRequiresPrinter ? it.factor : it.pages) || 1)
-        );
-        const hasOutsourcedInput =
-          (it.outsourcedArtistId && String(it.outsourcedArtistId).trim()) ||
-          (it.outsourcedArtistName && String(it.outsourcedArtistName).trim()) ||
-          (!isNaN(rawQty) && rawQty > 0) ||
-          (!isNaN(rawAmount) && rawAmount > 0);
+      const rawQty = Number(it.outsourcedQty);
+      const rawAmount = Number(it.outsourcedAmount);
+      let customerRequestedQty = Math.max(
+        1,
+        Math.floor(Number(svcRequiresPrinter ? it.factor : it.pages) || 1)
+      );
+      if (isLargeFormatService) customerRequestedQty = Math.max(1, Math.floor(Number(it.largeFormatQty || 1)));
+      const hasOutsourcedInput =
+        (it.outsourcedArtistId && String(it.outsourcedArtistId).trim()) ||
+        (it.outsourcedArtistName && String(it.outsourcedArtistName).trim()) ||
+        (!isNaN(rawQty) && rawQty > 0) ||
+        (!isNaN(rawAmount) && rawAmount > 0);
+      const isOutSourcedLine = !!it.outsourced || !!hasOutsourcedInput;
+      const requiresOwnPrinter = svcRequiresPrinter && !isOutSourcedLine;
 
-        if (hasOutsourcedInput) {
-          if (!it.outsourcedArtistId || !mongoose.Types.ObjectId.isValid(it.outsourcedArtistId)) {
-            return res.status(400).json({ error: 'Select a valid artist for outsourced service.' });
-          }
-
-          const artist = outsourcedArtistMap.get(String(it.outsourcedArtistId));
-          if (!artist || String(artist.category || '').toLowerCase() !== 'artist') {
-            return res.status(400).json({ error: 'Selected outsourced handler must be an Artist customer.' });
-          }
-
-          outsourcedArtist = artist._id;
-          outsourcedArtistName = String(
-            artist.businessName || artist.firstName || artist.phone || it.outsourcedArtistName || ''
-          ).trim();
-          outsourcedQty = customerRequestedQty;
-          outsourcedAmount = Math.max(0, Number(rawAmount || 0));
-
-          if (outsourcedQty <= 0 || outsourcedAmount <= 0) {
-            return res.status(400).json({ error: 'Enter valid outsourced Amount for outsourced service.' });
-          }
-
-          outsourcedTotal = Number((outsourcedQty * outsourcedAmount).toFixed(2));
+      if (isOutSourcedLine) {
+        if (!canMarkOutsourced) {
+          return res.status(403).json({ error: 'Only Admin can mark services as out-sourced.' });
         }
+
+        if (!it.outsourcedArtistId || !mongoose.Types.ObjectId.isValid(it.outsourcedArtistId)) {
+          return res.status(400).json({ error: 'Select a valid artist for outsourced service.' });
+        }
+
+        const artist = outsourcedArtistMap.get(String(it.outsourcedArtistId));
+        if (!artist || String(artist.category || '').toLowerCase() !== 'artist') {
+          return res.status(400).json({ error: 'Selected outsourced handler must be an Artist customer.' });
+        }
+
+        outsourcedArtist = artist._id;
+        outsourcedArtistName = String(
+          artist.businessName || artist.firstName || artist.phone || it.outsourcedArtistName || ''
+        ).trim();
+        outsourcedQty = customerRequestedQty;
+        outsourcedAmount = Math.max(0, Number(rawAmount || 0));
+
+        if (outsourcedQty <= 0 || outsourcedAmount <= 0) {
+          return res.status(400).json({ error: 'Enter valid outsourced Amount for outsourced service.' });
+        }
+
+        outsourcedTotal = Number((outsourcedQty * outsourcedAmount).toFixed(2));
       }
+
+      if (isLargeFormatService) {
+        const length = Number(it.largeFormatLength);
+        const breadth = Number(it.largeFormatBreadth);
+        const quantity = Math.max(1, Math.floor(Number(it.largeFormatQty || it.factor || 1)));
+        const unit = String(it.largeFormatUnit || 'feet').toLowerCase() === 'inches' ? 'inches' : 'feet';
+        const amountPerSquareFeet = Number(svc.largeFormatRate || 0);
+        if (!isFinite(length) || length <= 0 || !isFinite(breadth) || breadth <= 0) {
+          return res.status(400).json({ error: `Enter valid length and breadth for ${svc.name || 'Large Format service'}` });
+        }
+        if (!isFinite(quantity) || quantity <= 0) {
+          return res.status(400).json({ error: `Enter valid QTY for ${svc.name || 'Large Format service'}` });
+        }
+        if (!isFinite(amountPerSquareFeet) || amountPerSquareFeet <= 0) {
+          return res.status(400).json({ error: `Large Format amount is not configured for ${svc.name || 'service'}` });
+        }
+        let printerId = null;
+        if (requiresOwnPrinter) {
+          if (!it.printerId || !mongoose.Types.ObjectId.isValid(it.printerId)) {
+            return res.status(400).json({ error: 'Printer required for one or more Large Format items' });
+          }
+          const prDoc = printerMap.get(String(it.printerId));
+          if (!prDoc) return res.status(400).json({ error: `Printer ${it.printerId} not found` });
+          printerId = new mongoose.Types.ObjectId(it.printerId);
+        } else if (!isOutSourcedLine && it.printerId && mongoose.Types.ObjectId.isValid(it.printerId) && printerMap.has(String(it.printerId))) {
+          printerId = new mongoose.Types.ObjectId(it.printerId);
+        }
+        const squareFeetEach = unit === 'inches'
+          ? Number(((length * breadth) / 144).toFixed(4))
+          : Number((length * breadth).toFixed(4));
+        const squareFeetTotal = Number((squareFeetEach * quantity).toFixed(4));
+        const subtotal = Number((squareFeetTotal * amountPerSquareFeet).toFixed(2));
+        const selectionLabel = `${svc.name || 'Large Format'} - ${length} x ${breadth} ${unit === 'inches' ? 'inches' : 'feet'} (${squareFeetEach.toFixed(2)} sq ft each) x ${quantity}`;
+
+        builtItems.push({
+          service: it.serviceId,
+          printer: printerId,
+          selections: [],
+          pricingMode: 'large_format',
+          largeFormatLength: length,
+          largeFormatBreadth: breadth,
+          largeFormatUnit: unit,
+          largeFormatQty: quantity,
+          largeFormatSquareFeet: squareFeetTotal,
+          selectionLabel,
+          unitPrice: amountPerSquareFeet,
+          pages: squareFeetEach,
+          effectiveQty: squareFeetTotal,
+          factor: quantity,
+          subtotal,
+          spoiled: 0,
+          fb: false,
+          printerType: null,
+          printFactor: quantity,
+          outsourcedArtist,
+          outsourcedArtistName,
+          outsourcedQty,
+          outsourcedAmount,
+          outsourcedTotal
+        });
+        total += subtotal;
+        continue;
+      }
+
+      const pr = priceRuleMap.get(String(it.priceRuleId));
+      if (!pr) return res.status(404).json({ error: `Price rule ${it.priceRuleId} not found` });
 
       // normalize factor (pricing factor comes from client)
       let pricingFactor = 1;
@@ -1256,7 +1342,7 @@ return {
 
       // validate printer if required
       let printerId = null;
-      if (svcRequiresPrinter) {
+      if (requiresOwnPrinter) {
         if (!it.printerId || !mongoose.Types.ObjectId.isValid(it.printerId)) {
           return res.status(400).json({ error: 'Printer required for one or more items' });
         }
@@ -1265,7 +1351,7 @@ return {
         printerId = new mongoose.Types.ObjectId(it.printerId);
       } else {
         // if provided but invalid, ignore or validate format
-        if (it.printerId && mongoose.Types.ObjectId.isValid(it.printerId) && printerMap.has(String(it.printerId))) {
+        if (!isOutSourcedLine && it.printerId && mongoose.Types.ObjectId.isValid(it.printerId) && printerMap.has(String(it.printerId))) {
           // allow storing if client provided printer for non-required service (optional)
           printerId = new mongoose.Types.ObjectId(it.printerId);
         }
@@ -1299,7 +1385,7 @@ return {
         effectiveQty: effectiveQtyForPrice, // server-authoritative quantity used for pricing (e.g. ceil(pages/2) when F/B)
         factor: pricingFactor,             // NEW: quantity multiplier for printer-required services
         subtotal,            // computed using effectiveQty (server authoritative)
-        spoiled: Number(it.spoiled) || 0,
+        spoiled: isOutSourcedLine ? 0 : (Number(it.spoiled) || 0),
         fb: !!(it.fb || usedFB),  // store original intent (client flag) OR our usedFB calc
         printerType, // NEW: 'monochrome' | 'colour' | null
         printFactor, // NEW: multiplier for printer counts (default 1)
@@ -1349,14 +1435,17 @@ return {
 let stockContext = { opStore: null, opStocks: [] };
 let materialRequirements = [];
 try {
-  stockContext = await loadOperationalStockContext();
-  if (!stockContext.opStore) {
-    return res.status(409).json({
-      error: 'No operational store configured. Ask Admin to set an operational store in Stock dashboard.'
-    });
-  }
+  const hasInHouseItems = (builtItems || []).some(it => Number(it && it.outsourcedTotal ? it.outsourcedTotal : 0) <= 0);
+  if (hasInHouseItems) {
+    stockContext = await loadOperationalStockContext();
+    if (!stockContext.opStore) {
+      return res.status(409).json({
+        error: 'No operational store configured. Ask Admin to set an operational store in Stock dashboard.'
+      });
+    }
 
-  materialRequirements = buildMaterialRequirements(builtItems, stockContext.opStocks);
+    materialRequirements = buildMaterialRequirements(builtItems, stockContext.opStocks);
+  }
   if (materialRequirements.length) {
     const requiredByMaterial = new Map(); // materialId -> needed
 
@@ -1751,11 +1840,15 @@ try {
   // for each order item, if printer exists, increment that printer by pages (QTY)
 for (let idx = 0; idx < builtItems.length; idx++) {
   const it = builtItems[idx];
+  if (Number(it && it.outsourcedTotal ? it.outsourcedTotal : 0) > 0) continue;
   if (!it.printer) continue;
   // pages (raw) default is 1 already
   const pages = Number(it.pages) || 1;
-  // base count is floor(pages) (we intentionally don't include 'spoiled' for printer usage)
-  const baseCount = Math.max(0, Math.floor(pages));
+  // Large Format printer usage is tracked by square feet; normal jobs keep the existing whole-page count.
+  const isLargeFormatUsage = String(it.pricingMode || '').toLowerCase() === 'large_format';
+  const baseCount = isLargeFormatUsage
+    ? Math.max(0, roundCount(pages))
+    : Math.max(0, Math.floor(pages));
   const factor = positiveCountFactor(it.printFactor, 1);
   // final usage count applied to printer = baseCount * configured service factor
   const usageCount = Math.max(0, roundCount(baseCount * factor));

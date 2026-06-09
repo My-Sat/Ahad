@@ -30,6 +30,7 @@
   const cartTotalEl = document.getElementById('cartTotal');
   const outsourcedCartTotalEl = document.getElementById('outsourcedCartTotal');
   const outsourcedCartWrapEl = document.getElementById('outsourcedCartWrap');
+  const outsourcedModeToggle = document.getElementById('outsourcedModeToggle');
   const orderNowBtn = document.getElementById('orderNowBtn');
   const saveDraftBtn = document.getElementById('saveDraftBtn');
   const saveCartInvoiceBtn = document.getElementById('saveCartInvoiceBtn');
@@ -273,19 +274,21 @@
   // ---------- internal state ----------
   let prices = []; // loaded price rules for selected service or book preview
   let cart = [];   // cart lines: either normal item or book line
-                   // normal: { isBook:false, serviceId, serviceName, priceRuleId, selectionLabel, invoiceLabelOverride, unitPrice, pages, pagesOriginal, subtotal, fb, printerId, spoiled, outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount, outsourcedTotal }
+                   // normal: { isBook:false, serviceId, serviceName, priceRuleId, selectionLabel, invoiceLabelOverride, unitPrice, pages, pagesOriginal, subtotal, fb, printerId, spoiled, outsourced, outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount, outsourcedTotal }
+                   // large : { isBook:false, isLargeFormat:true, serviceId, serviceName, largeFormatLength, largeFormatBreadth, largeFormatUnit, largeFormatQty, largeFormatSquareFeet, unitPrice, subtotal, printerId }
                    // book  : { isBook:true, bookId, bookName, unitPrice, qty, subtotal, bookItems: [ { serviceId, priceRuleId, pagesOriginal, fb, printerId, spoiled, unitPrice, subtotal, selectionLabel } ] }
   let serviceRequiresPrinter = false;
   let printers = []; // list of printers for the currently loaded service
   let books = [];    // list of available books (basic metadata)
   let serviceToneIndex = Object.create(null);
+  let selectedServicePricingMode = 'price_rules';
+  let selectedLargeFormat = null;
 
     // ---- materials stock cache (for Apply-time validation) ----
 let materials = [];          // [{ _id, name, stocked, used, remaining, selections:[{unit,subUnit},...] }, ...]
 let materialsLoaded = false;
 let materialsFetchedAt = 0;  // ms timestamp when materials were last fetched
 let selectedServiceCategoryName = '';
-let selectedServiceCategoryIsOutsourced = false;
 let ordersExplorerMode = 'normal';
 let lastOrdersList = [];
 let outsourcedOrderDetailsByKey = Object.create(null);
@@ -323,8 +326,22 @@ let outsourcedOrderDetailsByKey = Object.create(null);
     return s || String(name || '').trim();
   }
 
-  function isOutSourcedCategoryName(name) {
-    return /out[\s-]*sourced/i.test(String(name || '').trim());
+  function isOutsourcedModeEnabled() {
+    return !!(window._isAdmin && outsourcedModeToggle && outsourcedModeToggle.checked);
+  }
+
+  function resetOutsourcedMode() {
+    if (outsourcedModeToggle) outsourcedModeToggle.checked = false;
+    hideOutsourcedArtistSuggestions();
+  }
+
+  function rerenderCurrentPriceInputs() {
+    if (selectedServicePricingMode === 'large_format' && selectedLargeFormat) {
+      const currentServiceId = serviceSelect ? (serviceSelect.value || '') : '';
+      renderLargeFormatInputs(currentServiceId, selectedLargeFormat);
+      return;
+    }
+    renderPrices();
   }
 
   function isClassBasedCategoryName(name) {
@@ -406,7 +423,7 @@ function setSelectedCustomerFromSubmission(sub, opts) {
     activeInvoice = null;
     if (orderInvoiceIdEl) orderInvoiceIdEl.value = '';
     selectedServiceCategoryName = '';
-    selectedServiceCategoryIsOutsourced = false;
+    resetOutsourcedMode();
     loadServiceCategories();
     updateSaveDraftBtn();
     return;
@@ -421,7 +438,7 @@ function setSelectedCustomerFromSubmission(sub, opts) {
   }
   if (card) card.style.display = '';
   selectedServiceCategoryName = '';
-  selectedServiceCategoryIsOutsourced = false;
+  resetOutsourcedMode();
   loadServiceCategories();
   updateSaveDraftBtn();
 }
@@ -633,6 +650,8 @@ async function loadServicesForCategory(catId) {
 
   serviceSelect.innerHTML = '<option value="">-- Select a service --</option>';
   prices = [];
+  selectedServicePricingMode = 'price_rules';
+  selectedLargeFormat = null;
   renderPrices();
 
   if (!catId) return;
@@ -659,7 +678,8 @@ async function loadServicesForCategory(catId) {
 
     byBase.forEach((group, base) => {
       const tones = new Set(group.map(g => serviceToneFromText(g.name)));
-      const mergeAsSingle = group.length > 1 && tones.has('color') && tones.has('bw');
+      const groupUsesPriceRules = group.every(g => String(g.pricingMode || 'price_rules') !== 'large_format');
+      const mergeAsSingle = group.length > 1 && groupUsesPriceRules && tones.has('color') && tones.has('bw');
 
       if (mergeAsSingle) {
         const opt = document.createElement('option');
@@ -676,6 +696,7 @@ async function loadServicesForCategory(catId) {
         opt.value = s._id;
         opt.textContent = s.name;
         opt.dataset.type = 'service';
+        opt.dataset.pricingMode = String(s.pricingMode || 'price_rules');
         serviceSelect.appendChild(opt);
       });
     });
@@ -719,9 +740,15 @@ async function loadServicesForCategory(catId) {
       const cid = this.value || '';
       const opt = this.options && this.selectedIndex >= 0 ? this.options[this.selectedIndex] : null;
       selectedServiceCategoryName = opt ? String(opt.dataset.name || opt.textContent || '') : '';
-      selectedServiceCategoryIsOutsourced = isOutSourcedCategoryName(selectedServiceCategoryName);
+      resetOutsourcedMode();
       // clear book preview when changing category
       loadServicesForCategory(cid);
+    });
+  }
+
+  if (outsourcedModeToggle) {
+    outsourcedModeToggle.addEventListener('change', function () {
+      rerenderCurrentPriceInputs();
     });
   }
 
@@ -985,6 +1012,11 @@ async function loadServicesForCategory(catId) {
 
   // ---------- helpers ----------
   function formatMoney(n) { return (Number(n) || 0).toFixed(2); }
+  function formatCompactNumber(n) {
+    const v = Number(n);
+    if (!isFinite(v)) return '0';
+    return String(Number(v.toFixed(4))).replace(/\.0+$/, '');
+  }
 
   function escapeHtml(s) {
     if (!s && s !== 0) return '';
@@ -1347,6 +1379,8 @@ function renderPrices(bookMode = false) {
   container.className = 'list-group';
   const wrapper = document.createElement('div');
   const allowSharedRuleInputs = isClassBasedCategoryName(selectedServiceCategoryName);
+  const outsourcedMode = isOutsourcedModeEnabled();
+  const shouldUseOwnPrinter = serviceRequiresPrinter && !outsourcedMode;
   let sharedControls = null;
   if (allowSharedRuleInputs) {
     sharedControls = document.createElement('div');
@@ -1365,7 +1399,7 @@ function renderPrices(bookMode = false) {
         <input class="form-check-input same-qty-toggle" type="checkbox">
         <span class="form-check-label">Use Same QTY</span>
       </label>
-      ${serviceRequiresPrinter ? `
+      ${shouldUseOwnPrinter ? `
         <label class="form-check form-check-inline small mb-0">
           <input class="form-check-input same-printer-toggle" type="checkbox">
           <span class="form-check-label">Use Same Printer</span>
@@ -1420,7 +1454,7 @@ function renderPrices(bookMode = false) {
   container.addEventListener('change', function (e) {
     const target = e.target;
     if (!target) return;
-    if (target.classList.contains('printer-select') && sharedToggleChecked('.same-printer-toggle')) {
+    if (shouldUseOwnPrinter && target.classList.contains('printer-select') && sharedToggleChecked('.same-printer-toggle')) {
       syncRuleInputs('.printer-select', target.value, target);
     }
     if (serviceRequiresPrinter && target.classList.contains('pages-input') && sharedToggleChecked('.same-pages-toggle')) {
@@ -1520,8 +1554,8 @@ function renderPrices(bookMode = false) {
       mid.appendChild(fbWrap);
     }
 
-    // printer select (if serviceRequiresPrinter)
-    if (serviceRequiresPrinter) {
+    // Our printer/spoil fields are skipped for outsourced work because the job is done outside.
+    if (shouldUseOwnPrinter) {
       const printerWrap = document.createElement('div');
       printerWrap.className = 'd-flex align-items-center';
       const sel = document.createElement('select');
@@ -1566,7 +1600,7 @@ function renderPrices(bookMode = false) {
       mid.appendChild(spoiledWrap);
     }
 
-    if (selectedServiceCategoryIsOutsourced) {
+    if (isOutsourcedModeEnabled()) {
       const outAmt = document.createElement('input');
       outAmt.type = 'number';
       outAmt.min = '0.01';
@@ -1614,10 +1648,162 @@ function renderPrices(bookMode = false) {
   pricesList.appendChild(wrapper);
 }
 
+function selectedServiceName() {
+  if (!serviceSelect || serviceSelect.selectedIndex < 0) return 'Large Format';
+  const opt = serviceSelect.options[serviceSelect.selectedIndex];
+  return opt ? String(opt.text || opt.textContent || 'Large Format').trim() : 'Large Format';
+}
+
+function updateLargeFormatUnitChecks(scope) {
+  const root = scope || document;
+  root.querySelectorAll('.large-format-unit-label').forEach(label => {
+    let input = null;
+    if (label.htmlFor) {
+      input = root.querySelector ? root.querySelector('#' + label.htmlFor) : null;
+      if (!input) input = document.getElementById(label.htmlFor);
+    }
+    const checked = !!(input && input.checked);
+    label.classList.toggle('btn-primary', checked);
+    label.classList.toggle('btn-outline-light-custom', !checked);
+    label.classList.toggle('active', checked);
+    label.setAttribute('aria-pressed', checked ? 'true' : 'false');
+    const check = label.querySelector('.large-format-unit-check');
+    if (check) check.style.visibility = checked ? 'visible' : 'hidden';
+  });
+}
+
+function renderLargeFormatInputs(serviceId, largeFormat) {
+  const outsourcedMode = isOutsourcedModeEnabled();
+  const amountPerSquareFeet = Number(
+    largeFormat && (
+      largeFormat.amountPerSquareFeet !== undefined
+        ? largeFormat.amountPerSquareFeet
+        : largeFormat.rate
+    )
+  ) || 0;
+  const serviceName = selectedServiceName();
+  const row = document.createElement('div');
+  row.className = 'list-group-item d-flex align-items-center gap-3 flex-wrap';
+  row.dataset.serviceId = serviceId || '';
+  row.dataset.rate = String(amountPerSquareFeet);
+
+  const left = document.createElement('div');
+  left.className = 'flex-grow-1 min-width-0';
+  left.style.minWidth = '210px';
+  left.innerHTML = `
+    <div><strong>${escapeHtml(serviceName)}</strong></div>
+    <div class="small text-muted-light">Amount: <strong class="text-white">GH\u20b5 ${formatMoney(amountPerSquareFeet)}</strong> per square feet</div>
+  `;
+
+  const mid = document.createElement('div');
+  mid.className = 'd-flex align-items-center gap-2 flex-wrap';
+  const unitIdSuffix = String(serviceId || 'x').replace(/[^a-zA-Z0-9_-]/g, '');
+  mid.innerHTML = `
+    <input type="number" min="0.01" step="0.01" class="form-control form-control-sm large-format-length-input" placeholder="L" style="width:82px;">
+    <input type="number" min="0.01" step="0.01" class="form-control form-control-sm large-format-breadth-input" placeholder="B" style="width:82px;">
+    <input type="number" min="1" step="1" class="form-control form-control-sm large-format-qty-input" placeholder="QTY" title="Quantity" aria-label="Quantity" style="width:76px;">
+    <div class="btn-group btn-group-sm" role="group" aria-label="Large format unit">
+      <input type="radio" class="btn-check large-format-unit-input" name="largeFormatUnit-${unitIdSuffix}" id="largeFormatFeet-${unitIdSuffix}" value="feet" checked>
+      <label class="btn btn-outline-light-custom large-format-unit-label" for="largeFormatFeet-${unitIdSuffix}">
+        <i class="bi bi-check2 me-1 large-format-unit-check" aria-hidden="true"></i>Feet
+      </label>
+      <input type="radio" class="btn-check large-format-unit-input" name="largeFormatUnit-${unitIdSuffix}" id="largeFormatInches-${unitIdSuffix}" value="inches">
+      <label class="btn btn-outline-light-custom large-format-unit-label" for="largeFormatInches-${unitIdSuffix}">
+        <i class="bi bi-check2 me-1 large-format-unit-check" aria-hidden="true"></i>Inches
+      </label>
+    </div>
+  `;
+  mid.addEventListener('change', function (e) {
+    if (e.target && e.target.classList.contains('large-format-unit-input')) {
+      updateLargeFormatUnitChecks(mid);
+    }
+  });
+  updateLargeFormatUnitChecks(mid);
+
+  if (serviceRequiresPrinter && !outsourcedMode) {
+    const printerWrap = document.createElement('div');
+    printerWrap.className = 'd-flex align-items-center';
+    const sel = document.createElement('select');
+    sel.className = 'form-select form-select-sm printer-select';
+    sel.style.width = '145px';
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = '-- Select printer --';
+    sel.appendChild(defaultOpt);
+
+    if (printers && printers.length) {
+      printers.forEach(pr => {
+        const o = document.createElement('option');
+        o.value = pr._id;
+        o.textContent = pr.name || pr._id;
+        sel.appendChild(o);
+      });
+    } else {
+      const o = document.createElement('option');
+      o.value = '';
+      o.textContent = 'No printers available';
+      sel.appendChild(o);
+      sel.disabled = true;
+    }
+    printerWrap.appendChild(sel);
+    mid.appendChild(printerWrap);
+  }
+
+  if (isOutsourcedModeEnabled()) {
+    const outAmt = document.createElement('input');
+    outAmt.type = 'number';
+    outAmt.min = '0.01';
+    outAmt.step = '0.01';
+    outAmt.placeholder = 'Artist Amount';
+    outAmt.className = 'form-control form-control-sm outsourced-amount-input';
+    outAmt.style.width = '112px';
+    mid.appendChild(outAmt);
+
+    const artistLookup = document.createElement('input');
+    artistLookup.type = 'text';
+    artistLookup.placeholder = 'Artist phone/name';
+    artistLookup.className = 'form-control form-control-sm outsourced-artist-lookup';
+    artistLookup.style.width = '140px';
+    mid.appendChild(artistLookup);
+
+    const artistMeta = document.createElement('input');
+    artistMeta.type = 'hidden';
+    artistMeta.className = 'outsourced-artist-id';
+    mid.appendChild(artistMeta);
+
+    const artistMetaName = document.createElement('input');
+    artistMetaName.type = 'hidden';
+    artistMetaName.className = 'outsourced-artist-name';
+    mid.appendChild(artistMetaName);
+  }
+
+  const right = document.createElement('div');
+  right.className = 'ms-auto';
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-sm btn-primary apply-large-format-btn';
+  btn.type = 'button';
+  btn.dataset.serviceId = serviceId || '';
+  btn.dataset.rate = String(amountPerSquareFeet);
+  btn.textContent = 'Apply';
+  right.appendChild(btn);
+
+  row.appendChild(left);
+  row.appendChild(mid);
+  row.appendChild(right);
+
+  pricesList.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'list-group';
+  wrap.appendChild(row);
+  pricesList.appendChild(wrap);
+}
+
   // ---------- Load price rules for service ----------
   async function loadPricesForService(serviceId) {
     if (!serviceId) {
       prices = [];
+      selectedServicePricingMode = 'price_rules';
+      selectedLargeFormat = null;
       serviceRequiresPrinter = false;
       printers = [];
       renderPrices();
@@ -1636,6 +1822,15 @@ function renderPrices(bookMode = false) {
       }
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || 'No data returned');
+      selectedServicePricingMode = String(j.pricingMode || 'price_rules');
+      selectedLargeFormat = j.largeFormat || null;
+      if (selectedServicePricingMode === 'large_format') {
+        prices = [];
+        serviceRequiresPrinter = true;
+        printers = (j.printers || []).map(p => ({ _id: p._id, name: p.name }));
+        renderLargeFormatInputs(serviceId, selectedLargeFormat);
+        return;
+      }
       prices = (j.prices || []).map(x => ({
         _id: x._id,
         key: x.key || null,
@@ -1663,6 +1858,8 @@ function renderPrices(bookMode = false) {
       .filter(Boolean);
     if (!ids.length) {
       prices = [];
+      selectedServicePricingMode = 'price_rules';
+      selectedLargeFormat = null;
       serviceRequiresPrinter = false;
       printers = [];
       renderPrices();
@@ -1671,6 +1868,8 @@ function renderPrices(bookMode = false) {
 
     pricesList.innerHTML = '<div class="text-muted">Loading price rules…</div>';
     try {
+      selectedServicePricingMode = 'price_rules';
+      selectedLargeFormat = null;
       const all = await Promise.all(ids.map(async (sid) => {
         const cat = getActiveCustomerCategory();
         const url = `/admin/services/${encodeURIComponent(sid)}/prices${cat ? `?customerCategory=${encodeURIComponent(cat)}` : ''}`;
@@ -1733,6 +1932,8 @@ function renderPrices(bookMode = false) {
     if (!bookId) {
       // clear preview -> revert to service prices load or blank
       prices = [];
+      selectedServicePricingMode = 'price_rules';
+      selectedLargeFormat = null;
       serviceRequiresPrinter = false;
       printers = [];
       renderPrices();
@@ -1745,6 +1946,8 @@ function renderPrices(bookMode = false) {
       if (!j || !j.book) throw new Error('Invalid book data');
       const book = j.book;
       // map book items to a synthetic prices array for preview/add
+      selectedServicePricingMode = 'price_rules';
+      selectedLargeFormat = null;
       prices = (book.items || []).map((bi, idx) => ({
         _id: `${book._id}::${idx}`,
         selectionLabel: bi.selectionLabel || '',
@@ -1767,6 +1970,8 @@ function renderPrices(bookMode = false) {
     } catch (err) {
       console.error('loadBookPreview err', err);
       prices = [];
+      selectedServicePricingMode = 'price_rules';
+      selectedLargeFormat = null;
       renderPrices();
     }
   }
@@ -1848,7 +2053,7 @@ function addToCart({
     (
       Number(unitPrice) *
       effectiveQty *
-      (printerId ? factorVal : 1)
+      (serviceRequiresPrinter ? factorVal : 1)
     ).toFixed(2)
   );
   const outQty = Math.max(0, Math.floor(Number(outsourcedQty || 0)));
@@ -1871,7 +2076,8 @@ function addToCart({
     pagesOriginal: origPages,
 
     // NEW: factor only meaningful for printing services
-    factor: printerId ? factorVal : null,
+    factor: serviceRequiresPrinter ? factorVal : null,
+    usesFactorPricing: !!serviceRequiresPrinter,
 
     subtotal,
     fb: !!fb,
@@ -1882,7 +2088,69 @@ function addToCart({
     outsourcedArtistName: outsourcedArtistName ? String(outsourcedArtistName) : '',
     outsourcedQty: outQty,
     outsourcedAmount: outAmount,
-    outsourcedTotal
+    outsourcedTotal,
+    outsourced: outsourcedTotal > 0
+  });
+
+  renderCart();
+}
+
+function addLargeFormatToCart({
+  serviceId,
+  serviceName,
+  length,
+  breadth,
+  unit,
+  quantity,
+  amountPerSquareFeet,
+  printerId,
+  outsourcedArtistId,
+  outsourcedArtistName,
+  outsourcedQty,
+  outsourcedAmount
+}) {
+  const len = Number(length);
+  const br = Number(breadth);
+  const measureUnit = String(unit || 'feet').toLowerCase() === 'inches' ? 'inches' : 'feet';
+  const qty = Math.max(1, Math.floor(Number(quantity || 1)));
+  const rate = Number(amountPerSquareFeet || 0);
+  const squareFeetEach = measureUnit === 'inches'
+    ? Number(((len * br) / 144).toFixed(4))
+    : Number((len * br).toFixed(4));
+  const squareFeetTotal = Number((squareFeetEach * qty).toFixed(4));
+  const subtotal = Number((squareFeetTotal * rate).toFixed(2));
+  const outQty = Math.max(0, Number(outsourcedQty || 0));
+  const outAmount = Math.max(0, Number(outsourcedAmount || 0));
+  const outsourcedTotal = Number((outQty > 0 && outAmount > 0 ? outQty * outAmount : 0).toFixed(2));
+
+  cart.push({
+    isBook: false,
+    isLargeFormat: true,
+    pricingMode: 'large_format',
+    serviceId,
+    serviceName,
+    priceRuleId: null,
+    selectionLabel: `${formatCompactNumber(len)} x ${formatCompactNumber(br)} ${measureUnit} (${formatCompactNumber(squareFeetEach)} sq ft each) x ${qty}`,
+    unitPrice: rate,
+    pages: squareFeetEach,
+    pagesOriginal: squareFeetEach,
+    factor: qty,
+    subtotal,
+    fb: false,
+    printerId: printerId || null,
+    spoiled: 0,
+    tone: 'other',
+    largeFormatLength: len,
+    largeFormatBreadth: br,
+    largeFormatUnit: measureUnit,
+    largeFormatQty: qty,
+    largeFormatSquareFeet: squareFeetTotal,
+    outsourcedArtistId: outsourcedArtistId ? String(outsourcedArtistId) : '',
+    outsourcedArtistName: outsourcedArtistName ? String(outsourcedArtistName) : '',
+    outsourcedQty: outQty,
+    outsourcedAmount: outAmount,
+    outsourcedTotal,
+    outsourced: outsourcedTotal > 0
   });
 
   renderCart();
@@ -1972,7 +2240,11 @@ function addToCart({
         qtyCell = String(it.qty);
         factorCell = '';
         pagesCell = '';
-      } else if (it.printerId) {
+      } else if (it.isLargeFormat) {
+        qtyCell = String(it.largeFormatQty || it.factor || 1);
+        factorCell = `${formatCompactNumber(it.largeFormatSquareFeet || 0)} sq ft`;
+        pagesCell = `${formatCompactNumber(it.largeFormatLength || 0)} x ${formatCompactNumber(it.largeFormatBreadth || 0)} ${it.largeFormatUnit || 'feet'}`;
+      } else if (it.usesFactorPricing || it.printerId) {
   // printer service:
   // - QTY column shows factor (copies)
   // - Sheets column should be effective sheets = effectiveQty * factor
@@ -2079,10 +2351,28 @@ function addToCart({
       };
     }
 
-    const hasPrinter = !!(it && it.printerId);
-    const f = hasPrinter ? (Number(it.factor || 1) || 1) : 1;
+    if (it && it.isLargeFormat) {
+      const outsourcedTotal = Number((it && it.outsourcedTotal) || 0);
+      const noteParts = [];
+      if (outsourcedTotal > 0) {
+        noteParts.push(`Out-Sourced: ${it.outsourcedArtistName || 'Artist'} | QTY ${formatCompactNumber(it.outsourcedQty || 0)} | ${formatCediPlain(it.outsourcedAmount || 0)} = ${formatCediPlain(outsourcedTotal)}`);
+      }
+      return {
+        description: cartDisplaySelectionLabel(it) || '',
+        service: (it && it.serviceName) || '',
+        pages: `${formatCompactNumber(it.largeFormatLength || 0)} x ${formatCompactNumber(it.largeFormatBreadth || 0)} ${it.largeFormatUnit || 'feet'}`,
+        qty: String(it.largeFormatQty || it.factor || 1),
+        sheets: `${formatCompactNumber(it.largeFormatSquareFeet || 0)} sq ft`,
+        unitPrice: Number((it && it.unitPrice) || 0),
+        subtotal: Number((it && it.subtotal) || 0),
+        note: noteParts.join(' | ')
+      };
+    }
+
+    const usesFactorPricing = !!(it && (it.usesFactorPricing || it.printerId));
+    const f = usesFactorPricing ? (Number(it.factor || 1) || 1) : 1;
     const effectiveQty = Number((it && it.pages) || 0) || 0;
-    const sheets = hasPrinter ? Math.max(0, Math.floor(effectiveQty * f)) : '';
+    const sheets = usesFactorPricing ? Math.max(0, Math.floor(effectiveQty * f)) : '';
     const outsourcedTotal = Number((it && it.outsourcedTotal) || 0);
     const noteParts = [];
     if (it && it.spoiled && Number(it.spoiled) > 0) noteParts.push(`Spoiled: ${Number(it.spoiled)}`);
@@ -2093,8 +2383,8 @@ function addToCart({
     return {
       description: cartDisplaySelectionLabel(it) || '',
       service: (it && it.serviceName) || '',
-      pages: hasPrinter ? String((it && it.pagesOriginal) || '') : '',
-      qty: hasPrinter ? String(f) : String((it && it.pages) || ''),
+      pages: usesFactorPricing ? String((it && it.pagesOriginal) || '') : '',
+      qty: usesFactorPricing ? String(f) : String((it && it.pages) || ''),
       sheets: sheets === '' ? '' : String(sheets),
       unitPrice: Number((it && it.unitPrice) || 0),
       subtotal: Number((it && it.subtotal) || 0),
@@ -2890,6 +3180,19 @@ function addToCart({
       rows.forEach(addArtist);
     } catch (e) {}
 
+    // Admin fallback: the customer list endpoint has broader matching and keeps
+    // the Artist lookup working if the lightweight search route is restricted.
+    if (!byId.size && window._isAdmin) {
+      try {
+        const res = await fetch(`/customers/api/list?q=${encodeURIComponent(q)}&limit=10&page=1`, {
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const j = await res.json().catch(() => null);
+        const rows = (res.ok && j && Array.isArray(j.customers)) ? j.customers : [];
+        rows.forEach(addArtist);
+      } catch (e) {}
+    }
+
     return Array.from(byId.values()).slice(0, 8);
   }
 
@@ -2900,8 +3203,9 @@ function addToCart({
   function createOutsourcedArtistSuggestionsBox() {
     if (outsourcedArtistSuggestionsBox) return outsourcedArtistSuggestionsBox;
     outsourcedArtistSuggestionsBox = document.createElement('div');
-    outsourcedArtistSuggestionsBox.className = 'list-group position-absolute shadow-sm';
-    outsourcedArtistSuggestionsBox.style.zIndex = 1065;
+    outsourcedArtistSuggestionsBox.className = 'list-group shadow-sm';
+    outsourcedArtistSuggestionsBox.style.position = 'fixed';
+    outsourcedArtistSuggestionsBox.style.zIndex = 5000;
     outsourcedArtistSuggestionsBox.style.maxHeight = '260px';
     outsourcedArtistSuggestionsBox.style.overflow = 'auto';
     outsourcedArtistSuggestionsBox.style.minWidth = '280px';
@@ -2914,8 +3218,11 @@ function addToCart({
     const target = input || activeOutsourcedArtistInput;
     if (!outsourcedArtistSuggestionsBox || !target) return;
     const rect = target.getBoundingClientRect();
-    outsourcedArtistSuggestionsBox.style.left = (rect.left + window.scrollX) + 'px';
-    outsourcedArtistSuggestionsBox.style.top = (rect.bottom + window.scrollY + 6) + 'px';
+    const height = outsourcedArtistSuggestionsBox.offsetHeight || 220;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const shouldOpenUp = spaceBelow < Math.min(height, 220) && rect.top > spaceBelow;
+    outsourcedArtistSuggestionsBox.style.left = rect.left + 'px';
+    outsourcedArtistSuggestionsBox.style.top = (shouldOpenUp ? Math.max(8, rect.top - height - 6) : rect.bottom + 6) + 'px';
     outsourcedArtistSuggestionsBox.style.width = Math.max(rect.width, 280) + 'px';
   }
 
@@ -2955,7 +3262,8 @@ function addToCart({
     if (!outsourcedArtistSuggestionsBox) return;
 
     if (!rows || !rows.length) {
-      outsourcedArtistSuggestionsBox.style.display = 'none';
+      outsourcedArtistSuggestionsBox.innerHTML = '<div class="list-group-item small text-muted">No Artist found</div>';
+      outsourcedArtistSuggestionsBox.style.display = '';
       return;
     }
 
@@ -3013,9 +3321,9 @@ function addToCart({
 
 
   // ---------- Event delegation: Apply / Add buttons ----------
-  pricesList.addEventListener('input', function (e) {
+  document.addEventListener('input', function (e) {
     const input = e.target.closest('.outsourced-artist-lookup');
-    if (!input) return;
+    if (!input || !root.contains(input)) return;
 
     activeOutsourcedArtistInput = input;
     clearOutsourcedArtistSelection(input);
@@ -3032,9 +3340,9 @@ function addToCart({
     }, 220);
   });
 
-  pricesList.addEventListener('focusin', function (e) {
+  document.addEventListener('focusin', function (e) {
     const input = e.target.closest('.outsourced-artist-lookup');
-    if (!input) return;
+    if (!input || !root.contains(input)) return;
     activeOutsourcedArtistInput = input;
     createOutsourcedArtistSuggestionsBox();
     positionOutsourcedArtistSuggestionsBox(input);
@@ -3046,9 +3354,9 @@ function addToCart({
     }
   });
 
-  pricesList.addEventListener('keydown', function (e) {
+  document.addEventListener('keydown', function (e) {
     const input = e.target.closest('.outsourced-artist-lookup');
-    if (!input) return;
+    if (!input || !root.contains(input)) return;
     if (e.key === 'Escape') hideOutsourcedArtistSuggestions();
   });
 
@@ -3068,6 +3376,131 @@ function addToCart({
   }, true);
 
   pricesList.addEventListener('click', async function (e) {
+    const largeBtn = e.target.closest('.apply-large-format-btn');
+    if (largeBtn) {
+      const originalText = largeBtn.textContent;
+      largeBtn.disabled = true;
+      largeBtn.textContent = 'Adding...';
+      try {
+        const row = largeBtn.closest('.list-group-item');
+        const serviceId = largeBtn.dataset.serviceId || (serviceSelect ? serviceSelect.value : '');
+        const serviceName = selectedServiceName();
+        const rate = Number(largeBtn.dataset.rate || (selectedLargeFormat && selectedLargeFormat.amountPerSquareFeet) || 0);
+        const lengthInput = row ? row.querySelector('.large-format-length-input') : null;
+        const breadthInput = row ? row.querySelector('.large-format-breadth-input') : null;
+        const qtyInput = row ? row.querySelector('.large-format-qty-input') : null;
+        const unitInput = row ? row.querySelector('.large-format-unit-input:checked') : null;
+        const length = Number(lengthInput && lengthInput.value ? lengthInput.value : 0);
+        const breadth = Number(breadthInput && breadthInput.value ? breadthInput.value : 0);
+        const quantity = Math.max(1, Math.floor(Number(qtyInput && qtyInput.value ? qtyInput.value : 1)));
+        const unit = unitInput ? unitInput.value : 'feet';
+
+        if (!isFinite(rate) || rate <= 0) {
+          showAlertModal('Amount per square feet is not configured for this Large Format service.', 'Large Format');
+          return;
+        }
+        if (!isFinite(length) || length <= 0 || !isFinite(breadth) || breadth <= 0) {
+          showAlertModal('Enter valid Length and Breadth before adding to cart.', 'Large Format');
+          return;
+        }
+        if (!isFinite(quantity) || quantity <= 0) {
+          showAlertModal('Enter valid QTY before adding to cart.', 'Large Format');
+          return;
+        }
+        const outsourcedMode = isOutsourcedModeEnabled();
+
+        let selectedPrinterId = null;
+        if (serviceRequiresPrinter && !outsourcedMode) {
+          const printerSelect = row ? row.querySelector('.printer-select') : null;
+          selectedPrinterId = printerSelect ? (printerSelect.value || null) : null;
+          if (!selectedPrinterId) {
+            showAlertModal('This Large Format service requires a printer. Please choose a printer before adding to cart.', 'Printer required');
+            return;
+          }
+        }
+
+        const squareFeet = unit === 'inches'
+          ? Number(((length * breadth) / 144).toFixed(4))
+          : Number((length * breadth).toFixed(4));
+
+        let outsourcedArtistId = '';
+        let outsourcedArtistName = '';
+        let outsourcedQty = 0;
+        let outsourcedAmount = 0;
+
+        if (outsourcedMode) {
+          const outAmtInput = row ? row.querySelector('.outsourced-amount-input') : null;
+          const outArtistLookup = row ? row.querySelector('.outsourced-artist-lookup') : null;
+          const outArtistId = row ? row.querySelector('.outsourced-artist-id') : null;
+          const outArtistName = row ? row.querySelector('.outsourced-artist-name') : null;
+
+          outsourcedQty = quantity;
+          outsourcedAmount = Math.max(0, Number(outAmtInput && outAmtInput.value ? outAmtInput.value : 0));
+          outsourcedArtistId = String(outArtistId && outArtistId.value ? outArtistId.value : '').trim();
+          outsourcedArtistName = String(outArtistName && outArtistName.value ? outArtistName.value : '').trim();
+
+          if (outsourcedAmount <= 0) {
+            showAlertModal('For Out-Sourced service, enter valid Artist Amount.', 'Out-Sourced');
+            return;
+          }
+
+          if (!outsourcedArtistId) {
+            const term = String((outArtistLookup && outArtistLookup.value) || '').trim();
+            if (!term) {
+              showAlertModal('Lookup/select an Artist for this out-sourced service.', 'Out-Sourced');
+              return;
+            }
+            const foundArtist = await lookupArtistByTerm(term);
+            let artist = foundArtist;
+            if (!artist) {
+              const shouldRegister = confirm('Artist not found. Register this artist now?');
+              if (!shouldRegister) return;
+              artist = await registerArtistQuick(term);
+            }
+            outsourcedArtistId = String(artist._id || '').trim();
+            outsourcedArtistName = String(artist.businessName || artist.firstName || artist.phone || term).trim();
+            if (outArtistId) outArtistId.value = outsourcedArtistId;
+            if (outArtistName) outArtistName.value = outsourcedArtistName;
+            if (outArtistLookup) outArtistLookup.value = outsourcedArtistName;
+          }
+        }
+
+        addLargeFormatToCart({
+          serviceId,
+          serviceName,
+          length,
+          breadth,
+          unit,
+          quantity,
+          amountPerSquareFeet: rate,
+          printerId: selectedPrinterId,
+          outsourcedArtistId,
+          outsourcedArtistName,
+          outsourcedQty,
+          outsourcedAmount
+        });
+
+        if (lengthInput) lengthInput.value = '';
+        if (breadthInput) breadthInput.value = '';
+        if (qtyInput) qtyInput.value = '';
+        const printerSelect = row ? row.querySelector('.printer-select') : null;
+        if (printerSelect) printerSelect.selectedIndex = 0;
+        const outAmtInput = row ? row.querySelector('.outsourced-amount-input') : null;
+        const outArtistLookup = row ? row.querySelector('.outsourced-artist-lookup') : null;
+        const outArtistId = row ? row.querySelector('.outsourced-artist-id') : null;
+        const outArtistName = row ? row.querySelector('.outsourced-artist-name') : null;
+        if (outAmtInput) outAmtInput.value = '';
+        if (outArtistLookup) outArtistLookup.value = '';
+        if (outArtistId) outArtistId.value = '';
+        if (outArtistName) outArtistName.value = '';
+        if (typeof showGlobalToast === 'function') showGlobalToast('Added to cart', 1600);
+      } finally {
+        largeBtn.disabled = false;
+        largeBtn.textContent = originalText;
+      }
+      return;
+    }
+
     const btn = e.target.closest('.apply-price-btn');
     if (!btn) return;
     const originalText = btn.textContent;
@@ -3080,6 +3513,7 @@ function addToCart({
     if (!priceObj) return showAlertModal('Price rule not found');
 
     const row = btn.closest('.list-group-item');
+    const outsourcedMode = isOutsourcedModeEnabled();
     const pagesInput = row ? row.querySelector('.pages-input') : null;
     const pages = pagesInput && pagesInput.value ? Number(pagesInput.value) : 1;
     const invoiceLabelOverrideInput = row ? row.querySelector('.invoice-label-override-input') : null;
@@ -3101,7 +3535,7 @@ function addToCart({
     const fbChecked = fbCheckbox ? fbCheckbox.checked : false;
 
     let selectedPrinterId = null;
-    if (serviceRequiresPrinter) {
+    if (serviceRequiresPrinter && !outsourcedMode) {
       const printerSelect = row ? row.querySelector('.printer-select') : null;
       selectedPrinterId = printerSelect ? (printerSelect.value || null) : null;
       if (!selectedPrinterId) {
@@ -3122,7 +3556,7 @@ function addToCart({
     let outsourcedQty = 0;
     let outsourcedAmount = 0;
 
-    if (selectedServiceCategoryIsOutsourced) {
+    if (outsourcedMode) {
       const outAmtInput = row ? row.querySelector('.outsourced-amount-input') : null;
       const outArtistLookup = row ? row.querySelector('.outsourced-artist-lookup') : null;
       const outArtistId = row ? row.querySelector('.outsourced-artist-id') : null;
@@ -3133,41 +3567,36 @@ function addToCart({
       outsourcedArtistId = String(outArtistId && outArtistId.value ? outArtistId.value : '').trim();
       outsourcedArtistName = String(outArtistName && outArtistName.value ? outArtistName.value : '').trim();
 
-      const hasOutData = outsourcedAmount > 0 || String((outArtistLookup && outArtistLookup.value) || '').trim();
-      if (hasOutData) {
-        if (outsourcedAmount <= 0) {
-          showAlertModal('For Out-Sourced service, enter valid Artist Amount.', 'Out-Sourced');
+      if (outsourcedAmount <= 0) {
+        showAlertModal('For Out-Sourced service, enter valid Artist Amount.', 'Out-Sourced');
+        return;
+      }
+
+      if (!outsourcedArtistId) {
+        const term = String((outArtistLookup && outArtistLookup.value) || '').trim();
+        if (!term) {
+          showAlertModal('Lookup/select an Artist for this out-sourced service.', 'Out-Sourced');
           return;
         }
-
-        if (!outsourcedArtistId) {
-          const term = String((outArtistLookup && outArtistLookup.value) || '').trim();
-          if (!term) {
-            showAlertModal('Lookup/select an Artist for this out-sourced service.', 'Out-Sourced');
-            return;
-          }
-          const foundArtist = await lookupArtistByTerm(term);
-          let artist = foundArtist;
-          if (!artist) {
-            const shouldRegister = confirm('Artist not found. Register this artist now?');
-            if (!shouldRegister) return;
-            artist = await registerArtistQuick(term);
-          }
-          outsourcedArtistId = String(artist._id || '').trim();
-          outsourcedArtistName = String(artist.businessName || artist.firstName || artist.phone || term).trim();
-          if (outArtistId) outArtistId.value = outsourcedArtistId;
-          if (outArtistName) outArtistName.value = outsourcedArtistName;
-          if (outArtistLookup) outArtistLookup.value = outsourcedArtistName;
+        const foundArtist = await lookupArtistByTerm(term);
+        let artist = foundArtist;
+        if (!artist) {
+          const shouldRegister = confirm('Artist not found. Register this artist now?');
+          if (!shouldRegister) return;
+          artist = await registerArtistQuick(term);
         }
-      } else {
-        outsourcedQty = 0;
+        outsourcedArtistId = String(artist._id || '').trim();
+        outsourcedArtistName = String(artist.businessName || artist.firstName || artist.phone || term).trim();
+        if (outArtistId) outArtistId.value = outsourcedArtistId;
+        if (outArtistName) outArtistName.value = outsourcedArtistName;
+        if (outArtistLookup) outArtistLookup.value = outsourcedArtistName;
       }
     }
 
         // ---------- MATERIAL STOCK CHECKS (Apply-time) ----------
     // Only for normal service price rules (not book preview synthetic rules)
     // because only normal rules have selections coming from /admin/services/:id/prices
-    if (!priceObj.__bookItem) {
+    if (!priceObj.__bookItem && !outsourcedMode) {
       // Always refresh material stock occasionally so we don't rely on stale remaining values
       await refreshMaterialsIfStale(false);
 
@@ -3244,8 +3673,8 @@ function addToCart({
         pages: pages,
         factor,
         fb: fbChecked,
-        printerId: selectedPrinterId || priceObj.__bookItem.printer,
-        spoiled,
+        printerId: outsourcedMode ? null : (selectedPrinterId || priceObj.__bookItem.printer),
+        spoiled: outsourcedMode ? 0 : spoiled,
         tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || ''),
         outsourcedArtistId,
         outsourcedArtistName,
@@ -3261,7 +3690,7 @@ function addToCart({
         chosenPrice = Number(priceObj.price2);
       }
       const effectiveServiceId = priceObj.serviceId || serviceId;
-      addToCart({ serviceId: effectiveServiceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), invoiceLabelOverride, unitPrice: chosenPrice, pages, factor, fb: fbChecked, printerId: selectedPrinterId, spoiled, tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || ''), outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount });
+      addToCart({ serviceId: effectiveServiceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), invoiceLabelOverride, unitPrice: chosenPrice, pages, factor, fb: fbChecked, printerId: selectedPrinterId, spoiled: outsourcedMode ? 0 : spoiled, tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || ''), outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount });
     }
 
     // clear inputs
@@ -3411,6 +3840,15 @@ function addToCart({
   }
 
 // ---------- Order placement ----------
+function cartLineHasOutsourcedData(line) {
+  return !!(line && (
+    line.outsourced ||
+    Number(line.outsourcedTotal || 0) > 0 ||
+    String(line.outsourcedArtistId || '').trim() ||
+    Number(line.outsourcedAmount || 0) > 0
+  ));
+}
+
 async function placeOrderFlow() {
   if (!cart || !cart.length) return;
 
@@ -3443,17 +3881,37 @@ async function placeOrderFlow() {
             serviceId: bi.serviceId,
             priceRuleId: bi.priceRuleId,
             pages: pagesToSend,
-            factor: bi.printerId ? (bi.factor || 1) : undefined,
+            factor: bi.factor || undefined,
             fb: !!bi.fb,
             printerId: bi.printerId || null,
             spoiled: bi.spoiled || 0,
             outsourcedArtistId: line.outsourcedArtistId || '',
             outsourcedArtistName: line.outsourcedArtistName || '',
             outsourcedQty: line.outsourcedQty || 0,
-            outsourcedAmount: line.outsourcedAmount || 0
+            outsourcedAmount: line.outsourcedAmount || 0,
+            outsourced: cartLineHasOutsourcedData(line)
           });
         });
       } else {
+        if (line.isLargeFormat) {
+          items.push({
+            serviceId: line.serviceId,
+            pricingMode: 'large_format',
+            largeFormatLength: line.largeFormatLength,
+            largeFormatBreadth: line.largeFormatBreadth,
+            largeFormatUnit: line.largeFormatUnit || 'feet',
+            largeFormatQty: line.largeFormatQty || line.factor || 1,
+            factor: line.largeFormatQty || line.factor || 1,
+            printerId: line.printerId || null,
+            outsourcedArtistId: line.outsourcedArtistId || '',
+            outsourcedArtistName: line.outsourcedArtistName || '',
+            outsourcedQty: line.outsourcedQty || 0,
+            outsourcedAmount: line.outsourcedAmount || 0,
+            outsourced: cartLineHasOutsourcedData(line)
+          });
+          return;
+        }
+
         const rawPages =
           (typeof line.pagesOriginal !== 'undefined')
             ? Number(line.pagesOriginal)
@@ -3463,14 +3921,15 @@ async function placeOrderFlow() {
           serviceId: line.serviceId,
           priceRuleId: line.priceRuleId,
           pages: rawPages,
-          factor: line.printerId ? (line.factor || 1) : undefined,
+          factor: line.factor || undefined,
           fb: !!line.fb,
           printerId: line.printerId || null,
           spoiled: line.spoiled || 0,
           outsourcedArtistId: line.outsourcedArtistId || '',
           outsourcedArtistName: line.outsourcedArtistName || '',
           outsourcedQty: line.outsourcedQty || 0,
-          outsourcedAmount: line.outsourcedAmount || 0
+          outsourcedAmount: line.outsourcedAmount || 0,
+          outsourced: cartLineHasOutsourcedData(line)
         });
       }
     });
@@ -4236,9 +4695,12 @@ if (serviceSelect) {
   serviceSelect.addEventListener('change', function () {
     const selectedOption = this.options[this.selectedIndex];
     const value = this.value;
+    resetOutsourcedMode();
 
     if (!value || !selectedOption) {
       prices = [];
+      selectedServicePricingMode = 'price_rules';
+      selectedLargeFormat = null;
       renderPrices();
       return;
     }
@@ -4249,6 +4711,8 @@ if (serviceSelect) {
     if (type === 'book') {
       // reset service pricing UI
       prices = [];
+      selectedServicePricingMode = 'price_rules';
+      selectedLargeFormat = null;
       renderPrices();
 
       // IMPORTANT: show quantity modal (previous behavior)

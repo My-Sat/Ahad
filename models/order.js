@@ -13,6 +13,12 @@ const OrderItemSchema = new mongoose.Schema({
   printer: { type: mongoose.Schema.Types.ObjectId, ref: 'Printer', default: null },
   // store selections as unit/subUnit pairs so we can match materials later
   selections: { type: [SelectionRef], default: [] },
+  pricingMode: { type: String, enum: ['price_rules', 'large_format'], default: 'price_rules' },
+  largeFormatLength: { type: Number, default: 0 },
+  largeFormatBreadth: { type: Number, default: 0 },
+  largeFormatUnit: { type: String, enum: ['feet', 'inches', null], default: null },
+  largeFormatQty: { type: Number, default: 0 },
+  largeFormatSquareFeet: { type: Number, default: 0 },
   // human-friendly label for the selected combination (e.g. "Paper Size: A4 + Paper Type: Standard")
   selectionLabel: { type: String, required: true },
   // price per unit (the unit price you assigned for that selection)

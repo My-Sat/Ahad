@@ -55,8 +55,11 @@ block content
             -   for (var oi = 0; oi < order.items.length; oi++) {
             -     var it = order.items[oi] || {}
             -     var rawLabel = it.selectionLabel || ''
+            -     var isLargeFormat = String(it.pricingMode || '').toLowerCase() === 'large_format'
             -     var subs = '(no label)'
-            -     if (rawLabel && rawLabel.length) {
+            -     if (isLargeFormat && rawLabel) {
+            -       subs = rawLabel
+            -     } else if (rawLabel && rawLabel.length) {
             -       var parts = String(rawLabel).split(' + ')
             -       var out = []
             -       for (var pi = 0; pi < parts.length; pi++) {
@@ -72,9 +75,20 @@ block content
             -     var qty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (it.fb ? Math.ceil(rawPages / 2) : rawPages)
             -     var factor = Number(it.factor || 1)
             -     if (isNaN(factor) || factor < 1) factor = 1
-            -     var sheets = it.printer ? (qty * factor) : qty
+            -     var usesFactorPricing = !!(it.printer || Number(it.outsourcedTotal || 0) > 0 || factor > 1)
+            -     var sheets = usesFactorPricing ? (qty * factor) : qty
             -     if (isNaN(sheets) || sheets < 0) sheets = 0
-            -     var qtyLabel = it.printer ? 'Sheets' : 'QTY'
+            -     var qtyLabel = usesFactorPricing ? 'Sheets' : 'QTY'
+            -     var largeSize = ''
+            -     var largeQty = 0
+            -     var largeSqft = 0
+            -     if (isLargeFormat) {
+            -       largeQty = Math.max(1, Math.floor(Number(it.largeFormatQty || it.factor || 1)))
+            -       largeSqft = Number(it.largeFormatSquareFeet || it.effectiveQty || 0)
+            -       largeSize = Number(it.largeFormatLength || 0) + ' x ' + Number(it.largeFormatBreadth || 0) + ' ' + (it.largeFormatUnit || 'feet')
+            -       qtyLabel = 'QTY'
+            -       sheets = largeQty
+            -     }
             -     var subtotal = Number(it.subtotal || 0)
             -     var serviceTitle = String(it.serviceName || 'Service').trim() || 'Service'
             -     var serviceKey = serviceTitle.toLowerCase()
@@ -82,7 +96,7 @@ block content
             -       orderItemGroupMap[serviceKey] = { title: serviceTitle, items: [], subtotal: 0 }
             -       orderItemGroups.push(orderItemGroupMap[serviceKey])
             -     }
-            -     orderItemGroupMap[serviceKey].items.push({ item: it, label: subs, qtyLabel: qtyLabel, sheets: sheets, rawPages: rawPages, factor: factor, subtotal: subtotal })
+            -     orderItemGroupMap[serviceKey].items.push({ item: it, label: subs, qtyLabel: qtyLabel, sheets: sheets, rawPages: rawPages, factor: factor, usesFactorPricing: usesFactorPricing, subtotal: subtotal, isLargeFormat: isLargeFormat, largeSize: largeSize, largeSqft: largeSqft })
             -     orderItemGroupMap[serviceKey].subtotal += subtotal
             -   }
             -   for (var gi = 0; gi < orderItemGroups.length; gi++) {
@@ -104,9 +118,12 @@ block content
                           span.text-danger.ms-2 Spoiled: #{it.spoiled}
                       .text-end(style='min-width:200px;')
                         div #{row.qtyLabel}: #{row.sheets}
-                        if it.printer
+                        if row.isLargeFormat
+                          div Size: #{row.largeSize}
+                          div Sq ft: #{Number(row.largeSqft || 0).toFixed(2)}
+                        else if row.usesFactorPricing
                           div Pages: #{row.rawPages}
-                        if it.printer && row.factor > 1
+                        if !row.isLargeFormat && row.usesFactorPricing && row.factor > 1
                           div QTY x#{row.factor}
                         div Unit: #{currencySymbol} #{Number(it.unitPrice || 0).toFixed(2)}
                         div Subtotal: #{currencySymbol} #{Number(row.subtotal || 0).toFixed(2)}

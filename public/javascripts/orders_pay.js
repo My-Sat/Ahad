@@ -1215,9 +1215,9 @@ function discountAppliedLabel(order) {
         `;
         itemsHtml += `<div class="collapse order-service-details" id="${escapeHtml(collapseId)}">`;
         group.items.forEach(row => {
-          const qtyText = row.pages
-            ? `${row.qtyLabel}: ${row.qty} / Pages: ${row.pages}`
-            : `${row.qtyLabel}: ${row.qty}`;
+      const qtyText = row.pages
+        ? `${row.qtyLabel}: ${row.qty} / ${row.pagesLabel || 'Pages'}: ${row.pages}`
+        : `${row.qtyLabel}: ${row.qty}`;
           itemsHtml += `
             <div class="list-group-item d-flex align-items-start justify-content-between" style="padding:0.5rem 0.75rem;">
               <div style="flex:1;min-width:0;">
@@ -1540,6 +1540,24 @@ function discountAppliedLabel(order) {
 
   function receiptItemData(it) {
     const rawLabel = it && it.selectionLabel ? String(it.selectionLabel) : '';
+    const isLargeFormat = String((it && it.pricingMode) || '').toLowerCase() === 'large_format';
+    if (isLargeFormat) {
+      const length = Number((it && it.largeFormatLength) || 0);
+      const breadth = Number((it && it.largeFormatBreadth) || 0);
+      const unitName = String((it && it.largeFormatUnit) || 'feet');
+      const qty = Math.max(1, Math.floor(Number((it && it.largeFormatQty) || (it && it.factor) || 1)));
+      const squareFeet = Number((it && it.largeFormatSquareFeet) || (it && it.effectiveQty) || 0);
+      return {
+        serviceName: (it && it.serviceName) || 'Large Format',
+        selectionLabel: rawLabel || `${length} x ${breadth} ${unitName}`,
+        qtyLabel: 'QTY',
+        qty,
+        pagesLabel: 'Size',
+        pages: `${length} x ${breadth} ${unitName} / ${Number(squareFeet || 0).toFixed(2)} sq ft`,
+        unit: Number((it && it.unitPrice) || 0),
+        subtotal: Number((it && it.subtotal) || 0)
+      };
+    }
     let selLabel = subUnitsOnlyFromLabel(rawLabel);
     if (!selLabel && it && Array.isArray(it.selections) && it.selections.length) {
       selLabel = it.selections.map(s => {
@@ -1556,9 +1574,9 @@ function discountAppliedLabel(order) {
       (it && typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null)
         ? Number(it.effectiveQty)
         : (isFb ? Math.ceil(rawPages / 2) : rawPages);
-    const requiresPrinter = !!(it && it.printer);
     const factor = Math.max(1, Math.floor(Number((it && it.factor) || 1)));
-    const displayQty = requiresPrinter ? (baseSheets * factor) : baseSheets;
+    const usesFactorPricing = !!(it && (it.printer || Number(it.outsourcedTotal || 0) > 0 || factor > 1));
+    const displayQty = usesFactorPricing ? (baseSheets * factor) : baseSheets;
     const unit = Number((it && it.unitPrice) || 0);
     const subtotal = Number(
       (it && (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))))
@@ -1569,9 +1587,9 @@ function discountAppliedLabel(order) {
     return {
       serviceName: (it && it.serviceName) || 'Service',
       selectionLabel: selLabel,
-      qtyLabel: requiresPrinter ? 'Sheets' : 'QTY',
+      qtyLabel: usesFactorPricing ? 'Sheets' : 'QTY',
       qty: displayQty,
-      pages: requiresPrinter ? rawPages : null,
+      pages: usesFactorPricing ? rawPages : null,
       unit,
       subtotal
     };
@@ -1647,9 +1665,9 @@ function discountAppliedLabel(order) {
     const itemRows = receiptGroups.map(group => {
       const rows = group.items.map(row => {
         itemNo += 1;
-        const qtyText = row.pages
-          ? `${row.qtyLabel}: ${row.qty} / Pages: ${row.pages}`
-          : `${row.qtyLabel}: ${row.qty}`;
+          const qtyText = row.pages
+            ? `${row.qtyLabel}: ${row.qty} / ${row.pagesLabel || 'Pages'}: ${row.pages}`
+            : `${row.qtyLabel}: ${row.qty}`;
         return `
           <tr>
             <td class="text-center">${itemNo}</td>

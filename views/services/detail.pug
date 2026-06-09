@@ -2,26 +2,49 @@ extends ../layout
 
 block content
   .d-none(data-main-width='wide')
+  - const pricingMode = service && service.pricingMode === 'large_format' ? 'large_format' : 'price_rules'
   // header row: title + back link + small inline requires-printer toggle form
   .d-flex.justify-content-between.align-items-center.mb-3
     .d-flex.align-items-center.g-3
       h2.mb-0= service.name
-      // small inline form to toggle "requires printer" for this service
-      form.d-flex.align-items-center.ms-3(method='post', action=`/admin/services/${service._id}?_method=PUT`)
-        // include checkbox and submit button — uses method-override to call the existing PUT /admin/services/:id
-        .form-check.me-2
-          - // checkbox will be checked when service.requiresPrinter is truthy
-          input.form-check-input(type='checkbox', id='requiresPrinter', name='requiresPrinter', checked=service && service.requiresPrinter)
+      // small inline form to configure this service pricing mode
+      form#serviceSettingsForm.d-flex.align-items-center.ms-3.gap-2.flex-wrap(method='post', action=`/admin/services/${service._id}?_method=PUT`)
+        label.form-label.small.mb-0(for='servicePricingMode') Select Service type
+        select.form-select.form-select-sm(name='pricingMode', id='servicePricingMode', style='width:150px;')
+          option(value='price_rules', selected=pricingMode === 'price_rules') Price Rules
+          option(value='large_format', selected=pricingMode === 'large_format') Large Format
+        .form-check.me-1
+          input.form-check-input(type='checkbox', id='requiresPrinter', name='requiresPrinter', checked=pricingMode === 'large_format' || (service && service.requiresPrinter), disabled=pricingMode === 'large_format')
           label.form-check-label(for='requiresPrinter') Requires printer
-        button.btn.btn-sm.btn.btn-secondary(type='submit') Save
+        button.btn.btn-sm.btn-secondary(type='submit') Save Settings
 
     a.btn.btn-secondary(href='/admin/services') Back
 
   hr
 
+  //- Large Format configuration. Hidden when this service uses normal price rules.
+  #largeFormatConfigPanel.content-card(style=pricingMode === 'large_format' ? null : 'display:none;')
+    .dark-card-body
+      .d-flex.justify-content-between.align-items-center.flex-wrap.gap-2.mb-3
+        div
+          h5.mb-1 Large Format Pricing
+          small.text-muted-light Large Format is always printer-required. Jobs use Length x Breadth x QTY.
+      .row.g-2.align-items-end
+        .col-md-4
+          label.form-label(for='largeFormatRateInput') Amount per Square Feet
+          .input-group
+            span.input-group-text GH₵ / sq ft
+            input.form-control(type='number', step='0.01', min='0', name='largeFormatRate', id='largeFormatRateInput', form='serviceSettingsForm', value=(service && service.largeFormatRate != null ? Number(service.largeFormatRate).toFixed(2) : ''), placeholder='0.00')
+        .col-auto
+          button#saveLargeFormatBtn.btn.btn-secondary(type='submit', form='serviceSettingsForm') Save Large Format
+        .col-md-5
+          .alert.alert-info.mb-0
+            strong Current:
+            |  GH₵ #{service && service.largeFormatRate != null ? Number(service.largeFormatRate).toFixed(2) : '0.00'} per square feet
+
   //- Units accordion (now inside a dark surface container)
   // wrapping the accordion in .content-card/.dark-card-body ensures our dark styles apply
-  .content-card
+  #priceRulesUnitsPanel.content-card(style=pricingMode === 'large_format' ? 'display:none;' : null)
     .dark-card-body
       #unitsAccordion.accordion.mb-4
         if !service.components || service.components.length === 0
@@ -65,7 +88,7 @@ block content
                           span.flex-grow-1= subName
 
   //- Price assignment (placed in a content-card so inputs/dropdowns follow dark styles)
-  .content-card.mt-3
+  #priceRulesAssignPanel.content-card.mt-3(style=pricingMode === 'large_format' ? 'display:none;' : null)
     .dark-card-body
       form#assign-price(method='post', action=`/admin/services/${service._id}/prices`, class='mb-4 needs-validation', novalidate, data-disable-spinner='true')
         input(type='hidden', name='selections', id='selectionsInput')
@@ -97,7 +120,7 @@ block content
   hr
 
   //- Prices section (also inside content-card to style the table/thead/tbody)
-  .content-card.mt-3
+  #priceRulesExistingPanel.content-card.mt-3(style=pricingMode === 'large_format' ? 'display:none;' : null)
     .dark-card-body
       #pricesSection
         h5.mb-2 Existing Price Rules
@@ -130,7 +153,7 @@ block content
                         - var subName = s.subUnit && s.subUnit.name ? s.subUnit.name : (s.subUnit ? String(s.subUnit) : '');
                         span.me-1(class=isColorRule ? 'text-danger fw-semibold' : '') #{unitName}: #{subName}
                         if i != len - 1
-                          |  + 
+                          |  +
                     else
                       | (no label)
                   td.text-end= (typeof p.price === 'number') ? p.price.toFixed(2) : p.price
@@ -163,5 +186,36 @@ block content
                           button.dropdown-item.open-delete-price(type='button', data-price-id=p._id)
                             i.bi.bi-trash.me-2
                             | Delete
+        else
+          .alert.alert-info.mb-0 No price rules created yet.
   // Keep Service Detail scripts inside #main-content so dashboard_nav AJAX loads them
   script(src='/javascripts/service_detail.js')
+  script.
+    (function () {
+      function syncLargeFormatMode() {
+        var mode = document.getElementById('servicePricingMode');
+        var rate = document.getElementById('largeFormatRateInput');
+        var printer = document.getElementById('requiresPrinter');
+        var largePanel = document.getElementById('largeFormatConfigPanel');
+        var pricePanels = [
+          document.getElementById('priceRulesUnitsPanel'),
+          document.getElementById('priceRulesAssignPanel'),
+          document.getElementById('priceRulesExistingPanel')
+        ];
+        var isLarge = !!(mode && mode.value === 'large_format');
+        if (rate) rate.disabled = !isLarge;
+        if (printer) {
+          printer.disabled = isLarge;
+          if (isLarge) printer.checked = true;
+        }
+        if (largePanel) largePanel.style.display = isLarge ? '' : 'none';
+        pricePanels.forEach(function (panel) {
+          if (panel) panel.style.display = isLarge ? 'none' : '';
+        });
+      }
+      document.addEventListener('change', function (e) {
+        if (e.target && e.target.id === 'servicePricingMode') syncLargeFormatMode();
+      });
+      document.addEventListener('ajax:page:loaded', syncLargeFormatMode);
+      syncLargeFormatMode();
+    })();

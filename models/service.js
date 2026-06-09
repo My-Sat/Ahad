@@ -11,6 +11,8 @@ const ServiceSchema = new mongoose.Schema({
   orderIndex: { type: Number, default: 0, index: true },
   // NEW: explicit flag indicating this service requires choosing a printer at order time
   requiresPrinter: { type: Boolean, default: false },
+  pricingMode: { type: String, enum: ['price_rules', 'large_format'], default: 'price_rules', index: true },
+  largeFormatRate: { type: Number, min: 0, default: null },
   // NEW: optional category reference
   category: { type: mongoose.Schema.Types.ObjectId, ref: 'ServiceCategory', default: null },
   components: [ServiceComponentSchema]
@@ -18,6 +20,7 @@ const ServiceSchema = new mongoose.Schema({
 
 ServiceSchema.pre('validate', function(next) {
   if (this.name) this.nameNormalized = this.name.trim().toLowerCase();
+  if (this.pricingMode === 'large_format') this.requiresPrinter = true;
   next();
 });
 
