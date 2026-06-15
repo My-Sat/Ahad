@@ -13,6 +13,9 @@ const ServiceSchema = new mongoose.Schema({
   requiresPrinter: { type: Boolean, default: false },
   pricingMode: { type: String, enum: ['price_rules', 'large_format'], default: 'price_rules', index: true },
   largeFormatRate: { type: Number, min: 0, default: null },
+  largeFormatMaterial: { type: mongoose.Schema.Types.ObjectId, ref: 'Material', default: null },
+  largeFormatWastePercent: { type: Number, min: 0, default: 0 },
+  largeFormatMinimumSquareFeet: { type: Number, min: 0, default: 0 },
   // NEW: optional category reference
   category: { type: mongoose.Schema.Types.ObjectId, ref: 'ServiceCategory', default: null },
   components: [ServiceComponentSchema]

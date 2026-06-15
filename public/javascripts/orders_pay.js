@@ -1780,7 +1780,19 @@ function discountAppliedLabel(order) {
     doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Receipt ${escapeHtml(orderId)}</title>
       <meta name="viewport" content="width=device-width,initial-scale=1">
       <style>
-        body { font-family: Arial, Helvetica, sans-serif; color: #111; padding: 24px; background: #fff; }
+        @page { size: 71mm 200mm; margin: 0; }
+        * { box-sizing: border-box; }
+        html, body { width: 71mm; margin: 0; padding: 0; background: #fff; }
+        body { font-family: Arial, Helvetica, sans-serif; color: #111; background: #fff; }
+        .receipt-roll-scale {
+          width: 210mm;
+          padding: 14mm;
+          zoom: 0.32;
+          transform-origin: top left;
+        }
+        @supports not (zoom: 1) {
+          .receipt-roll-scale { transform: scale(0.32); }
+        }
         .payment-receipt-card { max-width: 820px; margin: 0 auto; }
         .receipt-brand { display: flex; align-items: flex-start; gap: 22px; border-bottom: 2px solid #111827; padding-bottom: 12px; margin-bottom: 16px; }
         .receipt-logo { width: 82px; height: 82px; object-fit: contain; }
@@ -1799,9 +1811,8 @@ function discountAppliedLabel(order) {
         .receipt-service-subtotal td { background: #fafafa; border-bottom: 2px solid #d1d5db; font-weight: 800; }
         .receipt-summary-table { width: 360px; margin-left: auto; }
         .receipt-total-row th, .receipt-total-row td { border-top: 2px solid #111827; font-weight: 800; }
-        @media print { body { padding: 12px; } }
       </style>
-    </head><body>${receiptHtml}</body></html>`);
+    </head><body><div class="receipt-roll-scale">${receiptHtml}</div></body></html>`);
     doc.close();
     w.focus();
     const onLoadPrint = () => {

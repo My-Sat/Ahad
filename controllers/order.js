@@ -533,7 +533,7 @@ async function loadOperationalStockContext() {
   if (!opStore) return { opStore: null, opStocks: [] };
 
   const opStocks = await StoreStock.find({ store: opStore._id, active: true })
-    .populate('material', '_id name selections')
+    .populate('material', '_id name selections baseUnitName')
     .lean();
 
   return { opStore, opStocks };
@@ -545,6 +545,29 @@ function buildMaterialRequirements(builtItems, opStocks) {
   for (let idx = 0; idx < (builtItems || []).length; idx++) {
     const it = builtItems[idx];
     if (it && Number(it.outsourcedTotal || 0) > 0) continue;
+
+    const isLargeFormatItem = String(it && it.pricingMode || '').toLowerCase() === 'large_format';
+    if (isLargeFormatItem) {
+      const materialId = it && it.largeFormatMaterial ? String(it.largeFormatMaterial) : '';
+      const count = roundCount(Number(it && it.largeFormatConsumedSquareFeet || 0));
+      if (!materialId || count <= 0) continue;
+
+      const st = (opStocks || []).find(stock => {
+        const mid = stock && stock.material && stock.material._id ? String(stock.material._id) : String(stock && stock.material || '');
+        return mid === materialId;
+      });
+
+      requirements.push({
+        stock: st || null,
+        material: st && st.material ? st.material : { _id: materialId, name: it.largeFormatMaterialName || 'Large Format material' },
+        itemIndex: idx,
+        count,
+        source: 'large_format',
+        serviceName: it.serviceName || 'Large Format'
+      });
+      continue;
+    }
+
     const itemSelections = it.selections || [];
 
     const pages = Number(it.pages) || 1;
@@ -1107,6 +1130,7 @@ return {
         .lean(),
       Service.find({ _id: { $in: itemServiceIdStrings.map(id => new mongoose.Types.ObjectId(id)) } })
         .populate('category', '_id name nameNormalized')
+        .populate('largeFormatMaterial', '_id name baseUnitName')
         .lean(),
       itemPrinterIdStrings.length
         ? Printer.find({ _id: { $in: itemPrinterIdStrings.map(id => new mongoose.Types.ObjectId(id)) } }).lean()
@@ -1228,6 +1252,14 @@ return {
         const quantity = Math.max(1, Math.floor(Number(it.largeFormatQty || it.factor || 1)));
         const unit = String(it.largeFormatUnit || 'feet').toLowerCase() === 'inches' ? 'inches' : 'feet';
         const amountPerSquareFeet = Number(svc.largeFormatRate || 0);
+        const largeFormatMaterialDoc = svc.largeFormatMaterial && typeof svc.largeFormatMaterial === 'object'
+          ? svc.largeFormatMaterial
+          : null;
+        const largeFormatMaterialId = largeFormatMaterialDoc && largeFormatMaterialDoc._id
+          ? largeFormatMaterialDoc._id
+          : (svc.largeFormatMaterial || null);
+        const wastePercent = Math.max(0, Number(svc.largeFormatWastePercent || 0));
+        const minimumSquareFeet = Math.max(0, Number(svc.largeFormatMinimumSquareFeet || 0));
         if (!isFinite(length) || length <= 0 || !isFinite(breadth) || breadth <= 0) {
           return res.status(400).json({ error: `Enter valid length and breadth for ${svc.name || 'Large Format service'}` });
         }
@@ -1236,6 +1268,9 @@ return {
         }
         if (!isFinite(amountPerSquareFeet) || amountPerSquareFeet <= 0) {
           return res.status(400).json({ error: `Large Format amount is not configured for ${svc.name || 'service'}` });
+        }
+        if (!isOutSourcedLine && (!largeFormatMaterialId || !mongoose.Types.ObjectId.isValid(String(largeFormatMaterialId)))) {
+          return res.status(400).json({ error: `Large Format stock material is not configured for ${svc.name || 'service'}. Configure it under Service Details.` });
         }
         let printerId = null;
         if (requiresOwnPrinter) {
@@ -1252,6 +1287,9 @@ return {
           ? Number(((length * breadth) / 144).toFixed(4))
           : Number((length * breadth).toFixed(4));
         const squareFeetTotal = Number((squareFeetEach * quantity).toFixed(4));
+        const consumedSquareFeet = isOutSourcedLine
+          ? 0
+          : roundCount(Math.max(minimumSquareFeet, squareFeetTotal * (1 + (wastePercent / 100))));
         const subtotal = Number((squareFeetTotal * amountPerSquareFeet).toFixed(2));
         const selectionLabel = `${svc.name || 'Large Format'} - ${length} x ${breadth} ${unit === 'inches' ? 'inches' : 'feet'} (${squareFeetEach.toFixed(2)} sq ft each) x ${quantity}`;
 
@@ -1265,6 +1303,10 @@ return {
           largeFormatUnit: unit,
           largeFormatQty: quantity,
           largeFormatSquareFeet: squareFeetTotal,
+          largeFormatMaterial: isOutSourcedLine ? null : largeFormatMaterialId,
+          largeFormatMaterialName: largeFormatMaterialDoc ? String(largeFormatMaterialDoc.name || '') : '',
+          largeFormatWastePercent: isOutSourcedLine ? 0 : wastePercent,
+          largeFormatConsumedSquareFeet: consumedSquareFeet,
           selectionLabel,
           unitPrice: amountPerSquareFeet,
           pages: squareFeetEach,
@@ -1459,7 +1501,11 @@ try {
 
     for (const reqLine of materialRequirements) {
       const mid = String(reqLine.material._id);
-      requiredByMaterial.set(mid, (requiredByMaterial.get(mid) || 0) + Number(reqLine.count || 0));
+      const existing = requiredByMaterial.get(mid) || { need: 0, name: '' };
+      requiredByMaterial.set(mid, {
+        need: Number(existing.need || 0) + Number(reqLine.count || 0),
+        name: existing.name || String(reqLine.material.name || 'Material')
+      });
     }
 
     if (requiredByMaterial.size) {
@@ -1470,13 +1516,14 @@ try {
       aggDocs.forEach(a => { aggMap[String(a.material)] = Number(a.total || 0); });
 
       const blocks = [];
-      for (const [mid, need] of requiredByMaterial.entries()) {
+      for (const [mid, reqInfo] of requiredByMaterial.entries()) {
+        const need = Number(reqInfo && reqInfo.need ? reqInfo.need : 0);
         const info = stockInfo.get(mid);
         const stocked = info ? Number(info.stocked || 0) : 0;
         const used = aggMap[mid] || 0;
         const remaining = Math.max(0, stocked - used);
 
-        const name = info ? info.name : 'Material';
+        const name = info ? info.name : (reqInfo && reqInfo.name ? reqInfo.name : 'Material');
         if (remaining <= 0) blocks.push(`"${name}" is out of stock in operational store (Remaining: 0).`);
         else if (need > remaining) blocks.push(`"${name}" insufficient in operational store (Needed: ${need}, Remaining: ${remaining}).`);
       }

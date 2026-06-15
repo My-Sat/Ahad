@@ -224,7 +224,7 @@ function initCataloguePage() {
     tr.innerHTML = `
       <td>
         <strong class="text-white">${escapeHtml(mat.name)}</strong>
-        ${labels ? `<br/><small class="text-muted-light">${escapeHtml(labels)}</small>` : ''}
+        <br/><small class="text-muted-light">${labels ? escapeHtml(labels) : 'Standalone material'}</small>
       </td>
       <td>
         <small class="text-muted-light catalogue-unit-summary">${escapeHtml(unitSummary(baseUnit, units))}</small>
@@ -252,7 +252,6 @@ function initCataloguePage() {
       if (!name) return alert('Provide a name for the catalogue item.');
 
       const selections = gatherSelections();
-      if (!selections.length) return alert('Select one sub-unit per unit.');
 
       createBtn.disabled = true;
       if (createSpinner) createSpinner.style.display = 'inline-block';

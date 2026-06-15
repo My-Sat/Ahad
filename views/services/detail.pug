@@ -3,6 +3,7 @@ extends ../layout
 block content
   .d-none(data-main-width='wide')
   - const pricingMode = service && service.pricingMode === 'large_format' ? 'large_format' : 'price_rules'
+  - const largeMaterialId = service && service.largeFormatMaterial ? String(service.largeFormatMaterial._id || service.largeFormatMaterial) : ''
   // header row: title + back link + small inline requires-printer toggle form
   .d-flex.justify-content-between.align-items-center.mb-3
     .d-flex.align-items-center.g-3
@@ -35,12 +36,31 @@ block content
           .input-group
             span.input-group-text GH₵ / sq ft
             input.form-control(type='number', step='0.01', min='0', name='largeFormatRate', id='largeFormatRateInput', form='serviceSettingsForm', value=(service && service.largeFormatRate != null ? Number(service.largeFormatRate).toFixed(2) : ''), placeholder='0.00')
-        .col-auto
-          button#saveLargeFormatBtn.btn.btn-secondary(type='submit', form='serviceSettingsForm') Save Large Format
+        .col-md-4
+          label.form-label(for='largeFormatMaterialInput') Stock material consumed
+          select.form-select(name='largeFormatMaterialId', id='largeFormatMaterialInput', form='serviceSettingsForm')
+            option(value='') -- Select material --
+            if materials && materials.length
+              each m in materials
+                option(value=m._id, selected=largeMaterialId === String(m._id)) #{m.name} (#{m.baseUnitName || 'base unit'})
+          small.text-muted-light Only standalone catalogue materials are listed here.
+        .col-md-2
+          label.form-label(for='largeFormatWasteInput') Waste %
+          input.form-control(type='number', step='0.01', min='0', max='100', name='largeFormatWastePercent', id='largeFormatWasteInput', form='serviceSettingsForm', value=(service && service.largeFormatWastePercent != null ? Number(service.largeFormatWastePercent).toFixed(2) : '0.00'), placeholder='0')
+        .col-md-2
+          label.form-label(for='largeFormatMinimumInput') Min sq ft
+          input.form-control(type='number', step='0.0001', min='0', name='largeFormatMinimumSquareFeet', id='largeFormatMinimumInput', form='serviceSettingsForm', value=(service && service.largeFormatMinimumSquareFeet != null ? Number(service.largeFormatMinimumSquareFeet).toFixed(4).replace(/\.?0+$/, '') : '0'), placeholder='0')
         .col-md-5
           .alert.alert-info.mb-0
             strong Current:
             |  GH₵ #{service && service.largeFormatRate != null ? Number(service.largeFormatRate).toFixed(2) : '0.00'} per square feet
+            if service && service.largeFormatMaterial
+              br
+              span Material: #{service.largeFormatMaterial.name || 'Configured material'}
+            br
+            span Stock consumed: calculated sq ft + waste %, rounded to 4 decimals.
+        .col-auto
+          button#saveLargeFormatBtn.btn.btn-secondary(type='submit', form='serviceSettingsForm') Save Large Format
 
   //- Units accordion (now inside a dark surface container)
   // wrapping the accordion in .content-card/.dark-card-body ensures our dark styles apply
@@ -195,6 +215,9 @@ block content
       function syncLargeFormatMode() {
         var mode = document.getElementById('servicePricingMode');
         var rate = document.getElementById('largeFormatRateInput');
+        var material = document.getElementById('largeFormatMaterialInput');
+        var waste = document.getElementById('largeFormatWasteInput');
+        var minimum = document.getElementById('largeFormatMinimumInput');
         var printer = document.getElementById('requiresPrinter');
         var largePanel = document.getElementById('largeFormatConfigPanel');
         var pricePanels = [
@@ -204,6 +227,9 @@ block content
         ];
         var isLarge = !!(mode && mode.value === 'large_format');
         if (rate) rate.disabled = !isLarge;
+        if (material) material.disabled = !isLarge;
+        if (waste) waste.disabled = !isLarge;
+        if (minimum) minimum.disabled = !isLarge;
         if (printer) {
           printer.disabled = isLarge;
           if (isLarge) printer.checked = true;

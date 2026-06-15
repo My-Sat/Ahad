@@ -52,6 +52,14 @@ function parseStockUnits(rawUnits, baseUnitName) {
   return normalizeStockUnits(Array.isArray(units) ? units : [], baseUnitName);
 }
 
+function standaloneMaterialKey(name) {
+  const nameKey = String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  return `standalone:${nameKey}`;
+}
+
 async function getOperationalStoreLean() {
   return await Store.findOne({ isOperational: true }).lean();
 }
@@ -102,13 +110,11 @@ exports.createCatalogue = async (req, res) => {
     const baseUnitName = String(req.body.baseUnitName || 'piece').trim() || 'piece';
     const stockUnits = parseStockUnits(req.body.stockUnits, baseUnitName);
 
-    selections = parseSelections(selections);
-    if (!Array.isArray(selections) || selections.length === 0) {
-      return res.status(400).json({ error: 'Selections must be a non-empty array' });
-    }
     if (!name || !String(name).trim()) {
       return res.status(400).json({ error: 'Name required' });
     }
+    selections = parseSelections(selections);
+    if (!Array.isArray(selections)) selections = [];
 
     // validate and normalize selections
     const normalized = [];
@@ -141,7 +147,7 @@ exports.createCatalogue = async (req, res) => {
     const parts = normalized
       .map(s => `${s.unit.toString()}:${s.subUnit.toString()}`)
       .sort();
-    const key = parts.join('|');
+    const key = parts.length ? parts.join('|') : standaloneMaterialKey(name);
 
     const filter = { key };
     const insertDoc = {
@@ -184,13 +190,15 @@ exports.createCatalogue = async (req, res) => {
       .lean();
 
     return res.status(409).json({
-      error: 'A catalogue with this exact selection already exists',
+      error: parts.length
+        ? 'A catalogue with this exact selection already exists'
+        : 'A catalogue material with this name already exists',
       existing
     });
   } catch (err) {
     console.error('materials.createCatalogue error', err);
     if (err && err.code === 11000) {
-      return res.status(409).json({ error: 'A catalogue with this exact selection already exists' });
+      return res.status(409).json({ error: 'A matching catalogue material already exists' });
     }
     return res.status(500).json({ error: err.message || 'Error creating catalogue' });
   }

@@ -2352,11 +2352,6 @@ function addLargeFormatToCart({
     }
 
     if (it && it.isLargeFormat) {
-      const outsourcedTotal = Number((it && it.outsourcedTotal) || 0);
-      const noteParts = [];
-      if (outsourcedTotal > 0) {
-        noteParts.push(`Out-Sourced: ${it.outsourcedArtistName || 'Artist'} | QTY ${formatCompactNumber(it.outsourcedQty || 0)} | ${formatCediPlain(it.outsourcedAmount || 0)} = ${formatCediPlain(outsourcedTotal)}`);
-      }
       return {
         description: cartDisplaySelectionLabel(it) || '',
         service: (it && it.serviceName) || '',
@@ -2365,7 +2360,7 @@ function addLargeFormatToCart({
         sheets: `${formatCompactNumber(it.largeFormatSquareFeet || 0)} sq ft`,
         unitPrice: Number((it && it.unitPrice) || 0),
         subtotal: Number((it && it.subtotal) || 0),
-        note: noteParts.join(' | ')
+        note: ''
       };
     }
 
@@ -2373,12 +2368,8 @@ function addLargeFormatToCart({
     const f = usesFactorPricing ? (Number(it.factor || 1) || 1) : 1;
     const effectiveQty = Number((it && it.pages) || 0) || 0;
     const sheets = usesFactorPricing ? Math.max(0, Math.floor(effectiveQty * f)) : '';
-    const outsourcedTotal = Number((it && it.outsourcedTotal) || 0);
     const noteParts = [];
     if (it && it.spoiled && Number(it.spoiled) > 0) noteParts.push(`Spoiled: ${Number(it.spoiled)}`);
-    if (outsourcedTotal > 0) {
-      noteParts.push(`Out-Sourced: ${it.outsourcedArtistName || 'Artist'} | QTY ${it.outsourcedQty || 0} | ${formatCediPlain(it.outsourcedAmount || 0)} = ${formatCediPlain(outsourcedTotal)}`);
-    }
 
     return {
       description: cartDisplaySelectionLabel(it) || '',
@@ -2496,9 +2487,19 @@ function addLargeFormatToCart({
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Invoice ${escapeHtml(invNo)}</title>
   <style>
-    @page { size: A4; margin: 16mm; }
+    @page { size: 71mm 200mm; margin: 0; }
     * { box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; font-size: 12px; }
+    html, body { width: 71mm; margin: 0; padding: 0; background: #fff; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 12px; }
+    .roll-scale-sheet {
+      width: 210mm;
+      padding: 16mm;
+      zoom: 0.32;
+      transform-origin: top left;
+    }
+    @supports not (zoom: 1) {
+      .roll-scale-sheet { transform: scale(0.32); }
+    }
     .header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; border-bottom: 2px solid #111; padding-bottom: 14px; margin-bottom: 16px; }
     .brand { display: flex; align-items: flex-start; gap: 12px; max-width: 620px; }
     .logo { max-height: 62px; max-width: 160px; object-fit: contain; }
@@ -2526,10 +2527,10 @@ function addLargeFormatToCart({
     .manager-signature-img { max-width: 190px; max-height: 52px; object-fit: contain; }
     .signature-fallback { display: none; font-style: italic; font-size: 20px; color: #111; }
     .signature-label { margin-top: 8px; font-weight: 700; letter-spacing: .03em; }
-    .notice { margin-top: 18px; padding: 10px; background: #fff8e1; border: 1px solid #f0d46a; border-radius: 8px; }
   </style>
 </head>
 <body>
+<div class="roll-scale-sheet">
   <div class="header">
     <div class="brand">
       <img class="logo" src="/images/AHAD LOGO3.jpeg" alt="AHAD">
@@ -2579,7 +2580,6 @@ function addLargeFormatToCart({
   <div class="totals">
     ${totals.adjustmentAmount > 0 ? `<div><span>${adjustmentLabel}</span><strong>${adjustmentSign} ${formatCediPlain(totals.adjustmentAmount)}</strong></div>` : ''}
     ${totals.taxAmount > 0 ? `<div><span>VATable amount</span><strong>${formatCediPlain(totals.taxableTotal)}</strong></div><div><span>${taxLabel}</span><strong>+ ${formatCediPlain(totals.taxAmount)}</strong></div>` : ''}
-    ${totals.outsourcedCostTotal > 0 ? `<div><span>Out-Sourced Cost Total</span><strong>${formatCediPlain(totals.outsourcedCostTotal)}</strong></div>` : ''}
     <div class="grand"><span>Total</span><strong>${formatCediPlain(totals.finalTotal)}</strong></div>
   </div>
   <div class="signatures">
@@ -2595,6 +2595,7 @@ function addLargeFormatToCart({
       <div class="signature-label">Manager Signature</div>
     </div>
   </div>
+</div>
 </body>
 </html>`;
   }
@@ -2827,7 +2828,6 @@ function addLargeFormatToCart({
       totalLine('VATable amount', totals.taxableTotal);
       totalLine(taxLabel, totals.taxAmount, '+');
     }
-    if (totals.outsourcedCostTotal > 0) totalLine('Out-Sourced Cost Total', totals.outsourcedCostTotal);
     totalLine('TOTAL', totals.finalTotal);
 
     const wrapped = [];

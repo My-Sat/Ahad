@@ -19,6 +19,9 @@ const OrderItemSchema = new mongoose.Schema({
   largeFormatUnit: { type: String, enum: ['feet', 'inches', null], default: null },
   largeFormatQty: { type: Number, default: 0 },
   largeFormatSquareFeet: { type: Number, default: 0 },
+  largeFormatMaterial: { type: mongoose.Schema.Types.ObjectId, ref: 'Material', default: null },
+  largeFormatWastePercent: { type: Number, default: 0 },
+  largeFormatConsumedSquareFeet: { type: Number, default: 0 },
   // human-friendly label for the selected combination (e.g. "Paper Size: A4 + Paper Type: Standard")
   selectionLabel: { type: String, required: true },
   // price per unit (the unit price you assigned for that selection)

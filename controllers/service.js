@@ -4,6 +4,7 @@ const ServiceCostUnit = require('../models/service_cost_unit');
 const ServiceCostSubUnit = require('../models/service_cost_subunit');
 const ServicePrice = require('../models/service_price');
 const Printer = require('../models/printer');
+const Material = require('../models/material');
 
 function detectRuleTone(text) {
   const s = String(text || '').toLowerCase();
@@ -37,9 +38,26 @@ function parseLargeFormatRate(raw) {
   return Number(v.toFixed(2));
 }
 
+function parseNonNegativeNumber(raw, fallback = 0, decimals = 4) {
+  if (raw === undefined || raw === null || String(raw).trim() === '') return fallback;
+  const v = Number(raw);
+  if (!isFinite(v) || v < 0) return null;
+  return Number(v.toFixed(decimals));
+}
+
 function parseCheckboxValue(raw) {
   if (Array.isArray(raw)) return raw.some(v => parseCheckboxValue(v));
   return raw === 'on' || raw === 'true' || raw === '1' || raw === true;
+}
+
+function standaloneMaterialFilter(extra = {}) {
+  return {
+    ...extra,
+    $or: [
+      { selections: { $exists: false } },
+      { selections: { $size: 0 } }
+    ]
+  };
 }
 
 function pickEffectivePriceForCategory(priceDoc, customerCategory) {
@@ -120,7 +138,10 @@ exports.apiGetPricesForService = async (req, res) => {
         prices: [],
         pricingMode,
         largeFormat: {
-          amountPerSquareFeet: Number(serviceDoc && serviceDoc.largeFormatRate || 0)
+          amountPerSquareFeet: Number(serviceDoc && serviceDoc.largeFormatRate || 0),
+          materialId: serviceDoc && serviceDoc.largeFormatMaterial ? String(serviceDoc.largeFormatMaterial) : '',
+          wastePercent: Number(serviceDoc && serviceDoc.largeFormatWastePercent || 0),
+          minimumSquareFeet: Number(serviceDoc && serviceDoc.largeFormatMinimumSquareFeet || 0)
         },
         serviceRequiresPrinter,
         printers
@@ -186,7 +207,7 @@ exports.get = async (req, res) => {
     }
 
     // Load base service info
-    const service = await Service.findById(id).lean();
+    const service = await Service.findById(id).populate('largeFormatMaterial', '_id name baseUnitName').lean();
     if (!service) return res.status(404).send('Service not found');
 
     // Load all units and subunits
@@ -215,8 +236,13 @@ exports.get = async (req, res) => {
       }).join(' + ');
     });
 
+    const materials = await Material.find(standaloneMaterialFilter())
+      .select('_id name baseUnitName stockUnits')
+      .sort({ name: 1 })
+      .lean();
+
     // Note: service may include `requiresPrinter` flag; the view uses it (checkbox)
-    res.render('services/detail', { service, units, subunits, prices });
+    res.render('services/detail', { service, units, subunits, prices, materials });
   } catch (err) {
     console.error(err);
     res.status(500).send('Error fetching service detail');
@@ -342,8 +368,26 @@ exports.update = async (req, res) => {
         const rate = parseLargeFormatRate(req.body.largeFormatRate);
         if (rate === null) return res.status(400).send('Invalid amount per square feet');
         service.largeFormatRate = rate;
+        const materialId = String(req.body.largeFormatMaterialId || '').trim();
+        if (materialId) {
+          if (!mongoose.Types.ObjectId.isValid(materialId)) return res.status(400).send('Invalid Large Format material');
+          const exists = await Material.exists(standaloneMaterialFilter({ _id: materialId }));
+          if (!exists) return res.status(400).send('Selected Large Format material must be a standalone catalogue material');
+          service.largeFormatMaterial = new mongoose.Types.ObjectId(materialId);
+        } else {
+          service.largeFormatMaterial = null;
+        }
+        const waste = parseNonNegativeNumber(req.body.largeFormatWastePercent, 0, 2);
+        if (waste === null) return res.status(400).send('Invalid waste percentage');
+        service.largeFormatWastePercent = Math.min(100, waste);
+        const minimum = parseNonNegativeNumber(req.body.largeFormatMinimumSquareFeet, 0, 4);
+        if (minimum === null) return res.status(400).send('Invalid minimum square feet');
+        service.largeFormatMinimumSquareFeet = minimum;
       } else {
         service.largeFormatRate = null;
+        service.largeFormatMaterial = null;
+        service.largeFormatWastePercent = 0;
+        service.largeFormatMinimumSquareFeet = 0;
       }
     } else if (typeof req.body.requiresPrinter !== 'undefined') {
       service.requiresPrinter = parseCheckboxValue(req.body.requiresPrinter);
@@ -351,6 +395,21 @@ exports.update = async (req, res) => {
       const rate = parseLargeFormatRate(req.body.largeFormatRate);
       if (rate === null) return res.status(400).send('Invalid amount per square feet');
       service.largeFormatRate = rate;
+      const materialId = String(req.body.largeFormatMaterialId || '').trim();
+      if (materialId) {
+        if (!mongoose.Types.ObjectId.isValid(materialId)) return res.status(400).send('Invalid Large Format material');
+        const exists = await Material.exists(standaloneMaterialFilter({ _id: materialId }));
+        if (!exists) return res.status(400).send('Selected Large Format material must be a standalone catalogue material');
+        service.largeFormatMaterial = new mongoose.Types.ObjectId(materialId);
+      } else {
+        service.largeFormatMaterial = null;
+      }
+      const waste = parseNonNegativeNumber(req.body.largeFormatWastePercent, 0, 2);
+      if (waste === null) return res.status(400).send('Invalid waste percentage');
+      service.largeFormatWastePercent = Math.min(100, waste);
+      const minimum = parseNonNegativeNumber(req.body.largeFormatMinimumSquareFeet, 0, 4);
+      if (minimum === null) return res.status(400).send('Invalid minimum square feet');
+      service.largeFormatMinimumSquareFeet = minimum;
     }
 
     // NEW: handle categoryId if provided (allow empty to unset)
@@ -376,7 +435,20 @@ exports.update = async (req, res) => {
 
     // If AJAX request, return JSON so client can update DOM without reload
     if (req.xhr || req.get('X-Requested-With') === 'XMLHttpRequest') {
-      return res.json({ ok: true, service: { _id: service._id, name: service.name, requiresPrinter: !!service.requiresPrinter, category: service.category, pricingMode: service.pricingMode || 'price_rules', largeFormatRate: service.largeFormatRate } });
+      return res.json({
+        ok: true,
+        service: {
+          _id: service._id,
+          name: service.name,
+          requiresPrinter: !!service.requiresPrinter,
+          category: service.category,
+          pricingMode: service.pricingMode || 'price_rules',
+          largeFormatRate: service.largeFormatRate,
+          largeFormatMaterial: service.largeFormatMaterial,
+          largeFormatWastePercent: service.largeFormatWastePercent,
+          largeFormatMinimumSquareFeet: service.largeFormatMinimumSquareFeet
+        }
+      });
     }
 
     // fallback: redirect (existing behavior)

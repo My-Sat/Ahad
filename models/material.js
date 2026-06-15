@@ -10,7 +10,7 @@ const SelectionRef = new mongoose.Schema({
 const MaterialSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   // removed `service` field — materials are unique across all services
-  selections: { type: [SelectionRef], required: true },
+  selections: { type: [SelectionRef], default: [] },
   key: { type: String, required: true }, // indexed/unique via schema.index below
 
   // Initial stocked reference (admin-specified). This must NOT be decremented by usage.
@@ -33,9 +33,17 @@ const MaterialSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 MaterialSchema.methods.computeKey = function () {
-  const parts = (this.selections || []).map(s => `${s.unit.toString()}:${s.subUnit.toString()}`);
+  const parts = (this.selections || [])
+    .filter(s => s && s.unit && s.subUnit)
+    .map(s => `${s.unit.toString()}:${s.subUnit.toString()}`);
   parts.sort();
-  return parts.join('|');
+  if (parts.length) return parts.join('|');
+
+  const nameKey = String(this.name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  return `standalone:${nameKey}`;
 };
 
 MaterialSchema.pre('validate', function (next) {
