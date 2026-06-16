@@ -2487,19 +2487,9 @@ function addLargeFormatToCart({
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Invoice ${escapeHtml(invNo)}</title>
   <style>
-    @page { size: 71mm 200mm; margin: 0; }
+    @page { size: A4; margin: 16mm; }
     * { box-sizing: border-box; }
-    html, body { width: 71mm; margin: 0; padding: 0; background: #fff; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 12px; }
-    .roll-scale-sheet {
-      width: 210mm;
-      padding: 16mm;
-      zoom: 0.32;
-      transform-origin: top left;
-    }
-    @supports not (zoom: 1) {
-      .roll-scale-sheet { transform: scale(0.32); }
-    }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; font-size: 12px; }
     .header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; border-bottom: 2px solid #111; padding-bottom: 14px; margin-bottom: 16px; }
     .brand { display: flex; align-items: flex-start; gap: 12px; max-width: 620px; }
     .logo { max-height: 62px; max-width: 160px; object-fit: contain; }
@@ -2530,7 +2520,6 @@ function addLargeFormatToCart({
   </style>
 </head>
 <body>
-<div class="roll-scale-sheet">
   <div class="header">
     <div class="brand">
       <img class="logo" src="/images/AHAD LOGO3.jpeg" alt="AHAD">
@@ -2595,7 +2584,6 @@ function addLargeFormatToCart({
       <div class="signature-label">Manager Signature</div>
     </div>
   </div>
-</div>
 </body>
 </html>`;
   }

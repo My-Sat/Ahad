@@ -12,7 +12,7 @@ block content
       form#serviceSettingsForm.d-flex.align-items-center.ms-3.gap-2.flex-wrap(method='post', action=`/admin/services/${service._id}?_method=PUT`)
         label.form-label.small.mb-0(for='servicePricingMode') Select Service type
         select.form-select.form-select-sm(name='pricingMode', id='servicePricingMode', style='width:150px;')
-          option(value='price_rules', selected=pricingMode === 'price_rules') Price Rules
+          option(value='price_rules', selected=pricingMode === 'price_rules') Digital Printing
           option(value='large_format', selected=pricingMode === 'large_format') Large Format
         .form-check.me-1
           input.form-check-input(type='checkbox', id='requiresPrinter', name='requiresPrinter', checked=pricingMode === 'large_format' || (service && service.requiresPrinter), disabled=pricingMode === 'large_format')
@@ -66,46 +66,56 @@ block content
   // wrapping the accordion in .content-card/.dark-card-body ensures our dark styles apply
   #priceRulesUnitsPanel.content-card(style=pricingMode === 'large_format' ? 'display:none;' : null)
     .dark-card-body
-      #unitsAccordion.accordion.mb-4
-        if !service.components || service.components.length === 0
-          .alert.alert-info No components available. Add units and sub-units first.
-        else
-          each comp, idx in service.components
-            - const unit = comp.unit
-            - const panelId = `unitPanel-${idx}`
-            .accordion-item
-              h2.accordion-header(id=`heading-${panelId}`)
-                .d-flex.align-items-center
-                  button.accordion-button.collapsed.flex-grow-1(type='button', data-bs-toggle='collapse', data-bs-target=`#collapse-${panelId}`, aria-expanded='false', aria-controls=`collapse-${panelId}`)
-                    .d-flex.justify-content-between.w-100
-                      span.unit-name #{unit && unit.name ? unit.name : 'Unit'}
-                      small.text-muted.ms-2 #{ (comp.subUnits && comp.subUnits.length) ? comp.subUnits.length + ' sub-units' : '0 sub-units' }
-                  .btn-group.btn-group-sm.ms-2(role='group', aria-label='Arrange unit')
-                    button.btn.btn-outline-light-custom.move-unit-btn-detail(
-                      type='button',
-                      data-unit-id=unit._id,
-                      data-direction='up',
-                      title='Move unit up'
-                    )
-                      i.bi.bi-chevron-up
-                    button.btn.btn-outline-light-custom.move-unit-btn-detail(
-                      type='button',
-                      data-unit-id=unit._id,
-                      data-direction='down',
-                      title='Move unit down'
-                    )
-                      i.bi.bi-chevron-down
+      .card.dark-surface(style='border:1px solid rgba(33,188,255,.22);box-shadow:0 12px 30px rgba(0,0,0,.10);')
+        .card-header.bg-transparent.border-0.p-2
+          button.btn.btn-sm.btn-outline-light-custom.w-100.d-flex.align-items-center.justify-content-between(type='button', data-bs-toggle='collapse', data-bs-target='#serviceUnitsMasterCollapse', aria-expanded='false', aria-controls='serviceUnitsMasterCollapse')
+            span.d-flex.align-items-center.gap-2
+              i.bi.bi-layers
+              span.fw-semibold Price rule units
+              span.badge.rounded-pill.bg-info.text-dark Configure
+            span.small.text-muted-light Expand to select unit sub-options
+        .collapse#serviceUnitsMasterCollapse
+          .card-body.dark-card-body.pt-0
+            #unitsAccordion.accordion.mb-4
+              if !service.components || service.components.length === 0
+                .alert.alert-info No components available. Add units and sub-units first.
+              else
+                each comp, idx in service.components
+                  - const unit = comp.unit
+                  - const panelId = `unitPanel-${idx}`
+                  .accordion-item
+                    h2.accordion-header(id=`heading-${panelId}`)
+                      .d-flex.align-items-center
+                        button.accordion-button.collapsed.flex-grow-1(type='button', data-bs-toggle='collapse', data-bs-target=`#collapse-${panelId}`, aria-expanded='false', aria-controls=`collapse-${panelId}`)
+                          .d-flex.justify-content-between.w-100
+                            span.unit-name #{unit && unit.name ? unit.name : 'Unit'}
+                            small.text-muted.ms-2 #{ (comp.subUnits && comp.subUnits.length) ? comp.subUnits.length + ' sub-units' : '0 sub-units' }
+                        .btn-group.btn-group-sm.ms-2(role='group', aria-label='Arrange unit')
+                          button.btn.btn-outline-light-custom.move-unit-btn-detail(
+                            type='button',
+                            data-unit-id=unit._id,
+                            data-direction='up',
+                            title='Move unit up'
+                          )
+                            i.bi.bi-chevron-up
+                          button.btn.btn-outline-light-custom.move-unit-btn-detail(
+                            type='button',
+                            data-unit-id=unit._id,
+                            data-direction='down',
+                            title='Move unit down'
+                          )
+                            i.bi.bi-chevron-down
 
-              .accordion-collapse.collapse(id=`collapse-${panelId}`)
-                .accordion-body
-                  ul.list-group
-                    each su in comp.subUnits
-                      - const subId = (typeof su === 'object') ? su._id : su
-                      - const subName = (typeof su === 'object') ? (su.name || subId) : subId
-                      li.list-group-item.d-flex.align-items-center
-                        label.form-check.mb-0.d-flex.align-items-center.w-100
-                          input.form-check-input.unit-sub-checkbox.me-2(type='checkbox', data-unit=unit._id, data-subunit=subId)
-                          span.flex-grow-1= subName
+                    .accordion-collapse.collapse(id=`collapse-${panelId}`)
+                      .accordion-body
+                        ul.list-group
+                          each su in comp.subUnits
+                            - const subId = (typeof su === 'object') ? su._id : su
+                            - const subName = (typeof su === 'object') ? (su.name || subId) : subId
+                            li.list-group-item.d-flex.align-items-center
+                              label.form-check.mb-0.d-flex.align-items-center.w-100
+                                input.form-check-input.unit-sub-checkbox.me-2(type='checkbox', data-unit=unit._id, data-subunit=subId)
+                                span.flex-grow-1= subName
 
   //- Price assignment (placed in a content-card so inputs/dropdowns follow dark styles)
   #priceRulesAssignPanel.content-card.mt-3(style=pricingMode === 'large_format' ? 'display:none;' : null)
