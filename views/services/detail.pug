@@ -17,7 +17,7 @@ block content
         .form-check.me-1
           input.form-check-input(type='checkbox', id='requiresPrinter', name='requiresPrinter', checked=pricingMode === 'large_format' || (service && service.requiresPrinter), disabled=pricingMode === 'large_format')
           label.form-check-label(for='requiresPrinter') Requires printer
-        button.btn.btn-sm.btn-secondary(type='submit') Save Settings
+        button#serviceSettingsSubmitBtn.btn.btn-sm.btn-secondary(type='submit', style=pricingMode === 'large_format' ? 'display:none;' : null) Save Settings
 
     a.btn.btn-secondary(href='/admin/services') Back
 
@@ -229,6 +229,7 @@ block content
         var waste = document.getElementById('largeFormatWasteInput');
         var minimum = document.getElementById('largeFormatMinimumInput');
         var printer = document.getElementById('requiresPrinter');
+        var saveSettingsBtn = document.getElementById('serviceSettingsSubmitBtn');
         var largePanel = document.getElementById('largeFormatConfigPanel');
         var pricePanels = [
           document.getElementById('priceRulesUnitsPanel'),
@@ -244,6 +245,7 @@ block content
           printer.disabled = isLarge;
           if (isLarge) printer.checked = true;
         }
+        if (saveSettingsBtn) saveSettingsBtn.style.display = isLarge ? 'none' : '';
         if (largePanel) largePanel.style.display = isLarge ? '' : 'none';
         pricePanels.forEach(function (panel) {
           if (panel) panel.style.display = isLarge ? 'none' : '';
