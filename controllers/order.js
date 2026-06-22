@@ -1243,7 +1243,9 @@ return {
           return res.status(400).json({ error: 'Enter valid outsourced Amount for outsourced service.' });
         }
 
-        outsourcedTotal = Number((outsourcedQty * outsourcedAmount).toFixed(2));
+        if (!isLargeFormatService) {
+          outsourcedTotal = Number((outsourcedQty * outsourcedAmount).toFixed(2));
+        }
       }
 
       if (isLargeFormatService) {
@@ -1287,6 +1289,10 @@ return {
           ? Number(((length * breadth) / 144).toFixed(4))
           : Number((length * breadth).toFixed(4));
         const squareFeetTotal = Number((squareFeetEach * quantity).toFixed(4));
+        if (isOutSourcedLine) {
+          outsourcedQty = squareFeetTotal;
+          outsourcedTotal = Number((squareFeetTotal * outsourcedAmount).toFixed(2));
+        }
         const consumedSquareFeet = isOutSourcedLine
           ? 0
           : roundCount(Math.max(minimumSquareFeet, squareFeetTotal * (1 + (wastePercent / 100))));

@@ -1754,7 +1754,7 @@ function renderLargeFormatInputs(serviceId, largeFormat) {
     outAmt.type = 'number';
     outAmt.min = '0.01';
     outAmt.step = '0.01';
-    outAmt.placeholder = 'Artist Amount';
+    outAmt.placeholder = 'Artist Amount / sq ft';
     outAmt.className = 'form-control form-control-sm outsourced-amount-input';
     outAmt.style.width = '112px';
     mid.appendChild(outAmt);
@@ -2119,8 +2119,8 @@ function addLargeFormatToCart({
     : Number((len * br).toFixed(4));
   const squareFeetTotal = Number((squareFeetEach * qty).toFixed(4));
   const subtotal = Number((squareFeetTotal * rate).toFixed(2));
-  const outQty = Math.max(0, Number(outsourcedQty || 0));
   const outAmount = Math.max(0, Number(outsourcedAmount || 0));
+  const outQty = outAmount > 0 ? squareFeetTotal : 0;
   const outsourcedTotal = Number((outQty > 0 && outAmount > 0 ? outQty * outAmount : 0).toFixed(2));
 
   cart.push({
@@ -2227,7 +2227,7 @@ function addLargeFormatToCart({
       } else {
         const toneClass = (it.tone === 'color') ? 'text-danger' : '';
         const outsourcedMeta = (Number(it.outsourcedTotal || 0) > 0)
-          ? `<br/><small class="text-info">Out-Sourced: ${escapeHtml(it.outsourcedArtistName || 'Artist')} | QTY ${escapeHtml(String(it.outsourcedQty || 0))} | GH₵ ${escapeHtml(formatMoney(it.outsourcedAmount || 0))} = GH₵ ${escapeHtml(formatMoney(it.outsourcedTotal || 0))}</small>`
+          ? `<br/><small class="text-info">Out-Sourced: ${escapeHtml(it.outsourcedArtistName || 'Artist')} | ${it.isLargeFormat ? 'SQ FT' : 'QTY'} ${escapeHtml(String(it.outsourcedQty || 0))} | GH₵ ${escapeHtml(formatMoney(it.outsourcedAmount || 0))} = GH₵ ${escapeHtml(formatMoney(it.outsourcedTotal || 0))}</small>`
           : '';
         displayLabel = `<div class="${toneClass}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(cartDisplaySelectionLabel(it) || '')}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
       }
