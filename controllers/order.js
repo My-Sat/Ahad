@@ -48,6 +48,16 @@ function roundCount(value) {
   return Number.isFinite(n) ? Number(n.toFixed(4)) : 0;
 }
 
+function bookletSheetsFromPages(pages) {
+  const p = Math.max(1, Math.floor(Number(pages) || 1));
+  return Math.max(1, Math.ceil(p / 4));
+}
+
+function bookletPrinterFacesFromPages(pages) {
+  const p = Math.max(1, Math.floor(Number(pages) || 1));
+  return Math.max(1, Math.ceil(p / 2));
+}
+
 async function resolveMaterialUnitCostSnapshot(stockDoc, storeId, materialId) {
   const stored = roundUnitCost(stockDoc && stockDoc.averageUnitCost ? stockDoc.averageUnitCost : 0);
   if (!stockDoc || !storeId || !materialId || stored <= 0) return stored;
@@ -571,8 +581,11 @@ function buildMaterialRequirements(builtItems, opStocks) {
     const itemSelections = it.selections || [];
 
     const pages = Number(it.pages) || 1;
+    const isBooklet = !!it.booklet;
     const isFb = !!it.fb;
-    const baseCount = (!pages || pages <= 0) ? 1 : (isFb ? Math.ceil(pages / 2) : pages);
+    const baseCount = (!pages || pages <= 0)
+      ? 1
+      : (isBooklet ? bookletSheetsFromPages(pages) : (isFb ? Math.ceil(pages / 2) : pages));
 
     const spoiled = (it.spoiled !== undefined && it.spoiled !== null)
       ? Math.floor(Number(it.spoiled) || 0)
@@ -1015,7 +1028,8 @@ exports.apiCreateOrder = async (req, res) => {
     // normalize pages, fb flag and validate shape; also normalize printerId (may be null)
     items = items.map(it => {
       const pages = Number(it.pages) || 1;
-      const fb = (it.fb === true || it.fb === 'true' || it.fb === 1 || it.fb === '1') ? true : false;
+      const booklet = (it.booklet === true || it.booklet === 'true' || it.booklet === 1 || it.booklet === '1') ? true : false;
+      const fb = !!(booklet || it.fb === true || it.fb === 'true' || it.fb === 1 || it.fb === '1');
       let spoiled = 0;
       if (it.spoiled !== undefined && it.spoiled !== null && String(it.spoiled).trim() !== '') {
         const sp = Number(it.spoiled);
@@ -1046,6 +1060,7 @@ return {
   pages,
   factor,              // NEW
   fb,
+  booklet,
   printerId: it.printerId || null,
   spoiled,
   outsourced: it.outsourced === true || it.outsourced === 'true' || it.outsourced === 1 || it.outsourced === '1',
@@ -1343,31 +1358,34 @@ return {
         pricingFactor = (isNaN(f) || f < 1) ? 1 : Math.floor(f);
       }
 
-      // Determine which price to use: use price2 only when client requested FB and price2 exists
+      // Determine which price to use. Booklet forces F/B mode, but uses a
+      // separate paper-sheets formula below.
       let unitPrice = Number(pr.price);
-      let usedFB = false;
-      if (it.fb && pr.price2 !== undefined && pr.price2 !== null) {
+      const usedBooklet = !!(it.booklet && svcRequiresPrinter);
+      const usedFB = !!(svcRequiresPrinter && (it.fb || usedBooklet));
+      if (usedFB && pr.price2 !== undefined && pr.price2 !== null) {
         unitPrice = Number(pr.price2);
-        usedFB = true;
       }
 
       const pages = Number(it.pages) || 1;
 
-      // determine effective quantity for pricing: if FB was used for this line
-      const effectiveQtyForPrice = usedFB ? Math.ceil(pages / 2) : pages;
+      // Determine effective quantity for pricing/material sheets.
+      const effectiveQtyForPrice = usedBooklet
+        ? bookletSheetsFromPages(pages)
+        : (usedFB ? Math.ceil(pages / 2) : pages);
 
       // APPLY pricing factor HERE
       const subtotal = Number(
         (unitPrice * effectiveQtyForPrice * pricingFactor).toFixed(2)
       );
 
-      // Build human-friendly selection label (append F/B suffix always when usedFB)
+      // Build human-friendly selection label (append print mode suffix)
       const baseLabel = (pr.customLabel && String(pr.customLabel).trim()) || ((pr.selections || []).map(s => {
         const u = s.unit && s.unit.name ? s.unit.name : String(s.unit);
         const su = s.subUnit && s.subUnit.name ? s.subUnit.name : String(s.subUnit);
         return `${u}: ${su}`;
       }).join(' + '));
-      const selectionLabel = baseLabel + (usedFB ? ' (F/B)' : '');
+      const selectionLabel = baseLabel + (usedBooklet ? ' (Booklet)' : (usedFB ? ' (F/B)' : ''));
 
       // store selections as unit/subUnit objectIds (not populated objects)
       const selectionsForOrder = (pr.selections || []).map(s => ({
@@ -1434,7 +1452,8 @@ return {
         factor: pricingFactor,             // NEW: quantity multiplier for printer-required services
         subtotal,            // computed using effectiveQty (server authoritative)
         spoiled: isOutSourcedLine ? 0 : (Number(it.spoiled) || 0),
-        fb: !!(it.fb || usedFB),  // store original intent (client flag) OR our usedFB calc
+        fb: usedFB,  // booklet also runs as F/B for price selection
+        booklet: usedBooklet,
         printerType, // NEW: 'monochrome' | 'colour' | null
         printFactor, // NEW: multiplier for printer counts (default 1)
         outsourcedArtist,
@@ -1897,11 +1916,12 @@ for (let idx = 0; idx < builtItems.length; idx++) {
   if (!it.printer) continue;
   // pages (raw) default is 1 already
   const pages = Number(it.pages) || 1;
-  // Large Format printer usage is tracked by square feet; normal jobs keep the existing whole-page count.
+  // Large Format printer usage is tracked by square feet. Booklet jobs count
+  // printed faces, while stock consumption uses the lower paper-sheet count.
   const isLargeFormatUsage = String(it.pricingMode || '').toLowerCase() === 'large_format';
   const baseCount = isLargeFormatUsage
     ? Math.max(0, roundCount(pages))
-    : Math.max(0, Math.floor(pages));
+    : (it.booklet ? bookletPrinterFacesFromPages(pages) : Math.max(0, Math.floor(pages)));
   const factor = positiveCountFactor(it.printFactor, 1);
   // final usage count applied to printer = baseCount * configured service factor
   const usageCount = Math.max(0, roundCount(baseCount * factor));

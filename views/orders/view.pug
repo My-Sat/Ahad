@@ -71,8 +71,9 @@ block content
             -       }
             -       if (out.length) subs = out.join(', ')
             -     }
+            -     subs = String(subs || '').replace(/\s*\((F\/B|Booklet)\)\s*$/i, '').trim()
             -     var rawPages = Number(it.pages || 1)
-            -     var qty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (it.fb ? Math.ceil(rawPages / 2) : rawPages)
+            -     var qty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null) ? Number(it.effectiveQty) : (it.booklet ? Math.ceil(rawPages / 4) : (it.fb ? Math.ceil(rawPages / 2) : rawPages))
             -     var factor = Number(it.factor || 1)
             -     if (isNaN(factor) || factor < 1) factor = 1
             -     var usesFactorPricing = !!(it.printer || Number(it.outsourcedTotal || 0) > 0 || factor > 1)
@@ -114,6 +115,10 @@ block content
                       .me-2(style='min-width:0;flex:1;')
                         div(style='white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:480px;')
                           span.text-white #{row.label}
+                          if it.booklet
+                            span.badge.bg-info.text-dark.ms-2 Booklet
+                          else if it.fb
+                            span.badge.bg-secondary.ms-2 F/B
                         if it.spoiled
                           span.text-danger.ms-2 Spoiled: #{it.spoiled}
                       .text-end(style='min-width:200px;')

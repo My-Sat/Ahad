@@ -1568,12 +1568,14 @@ function discountAppliedLabel(order) {
     }
     if (!selLabel) selLabel = rawLabel || '(no label)';
 
-    const isFb = (it && it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
+    const isBooklet = (it && it.booklet === true) || (typeof rawLabel === 'string' && rawLabel.includes('(Booklet)'));
+    const isFb = isBooklet || (it && it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
+    selLabel = selLabel.replace(/\s*\((F\/B|Booklet)\)\s*$/i, '').trim();
     const rawPages = Number((it && it.pages) || 1);
     const baseSheets =
       (it && typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null)
         ? Number(it.effectiveQty)
-        : (isFb ? Math.ceil(rawPages / 2) : rawPages);
+        : (isBooklet ? Math.ceil(rawPages / 4) : (isFb ? Math.ceil(rawPages / 2) : rawPages));
     const factor = Math.max(1, Math.floor(Number((it && it.factor) || 1)));
     const usesFactorPricing = !!(it && (it.printer || Number(it.outsourcedTotal || 0) > 0 || factor > 1));
     const displayQty = usesFactorPricing ? (baseSheets * factor) : baseSheets;
@@ -1586,7 +1588,7 @@ function discountAppliedLabel(order) {
 
     return {
       serviceName: (it && it.serviceName) || 'Service',
-      selectionLabel: selLabel,
+      selectionLabel: isBooklet ? `${selLabel} (Booklet)` : selLabel,
       qtyLabel: usesFactorPricing ? 'Sheets' : 'QTY',
       qty: displayQty,
       pages: usesFactorPricing ? rawPages : null,

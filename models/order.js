@@ -35,6 +35,7 @@ const OrderItemSchema = new mongoose.Schema({
   subtotal: { type: Number, required: true },
   // optional flags stored per-item (backwards compat)
   fb: { type: Boolean, default: false },
+  booklet: { type: Boolean, default: false },
   spoiled: { type: Number, default: 0 },
   printerType: { type: String, enum: ['monochrome', 'colour', null], default: null },
   printFactor: { type: Number, default: 1 },

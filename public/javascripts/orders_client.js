@@ -330,6 +330,18 @@ let outsourcedOrderDetailsByKey = Object.create(null);
     return !!(window._isAdmin && outsourcedModeToggle && outsourcedModeToggle.checked);
   }
 
+  function positiveWholePages(value) {
+    return Math.max(1, Math.floor(Number(value) || 1));
+  }
+
+  function bookletSheetsFromPages(pages) {
+    return Math.max(1, Math.ceil(positiveWholePages(pages) / 4));
+  }
+
+  function bookletPrinterFacesFromPages(pages) {
+    return Math.max(1, Math.ceil(positiveWholePages(pages) / 2));
+  }
+
   function resetOutsourcedMode() {
     if (outsourcedModeToggle) outsourcedModeToggle.checked = false;
     hideOutsourcedArtistSuggestions();
@@ -1537,6 +1549,7 @@ function renderPrices(bookMode = false) {
 
     // F/B checkbox only for services that require a printer
     let fbInput = null;
+    let bookletInput = null;
     if (serviceRequiresPrinter) {
       const fbWrap = document.createElement('div');
       fbWrap.className = 'form-check form-check-inline ms-1';
@@ -1552,6 +1565,28 @@ function renderPrices(bookMode = false) {
       fbWrap.appendChild(fbInput);
       fbWrap.appendChild(fbLabel);
       mid.appendChild(fbWrap);
+
+      const bookletWrap = document.createElement('div');
+      bookletWrap.className = 'form-check form-check-inline ms-1';
+      bookletInput = document.createElement('input');
+      bookletInput.type = 'checkbox';
+      bookletInput.className = 'form-check-input booklet-checkbox';
+      bookletInput.id = `booklet-${String(p._id)}`;
+      bookletInput.setAttribute('data-prid', p._id);
+      const bookletLabel = document.createElement('label');
+      bookletLabel.className = 'form-check-label small';
+      bookletLabel.htmlFor = bookletInput.id;
+      bookletLabel.textContent = 'Booklet';
+      bookletWrap.appendChild(bookletInput);
+      bookletWrap.appendChild(bookletLabel);
+      mid.appendChild(bookletWrap);
+
+      bookletInput.addEventListener('change', function () {
+        if (bookletInput.checked && fbInput) fbInput.checked = true;
+      });
+      fbInput.addEventListener('change', function () {
+        if (!fbInput.checked && bookletInput) bookletInput.checked = false;
+      });
     }
 
     // Our printer/spoil fields are skipped for outsourced work because the job is done outside.
@@ -2030,6 +2065,7 @@ function addToCart({
   pages,
   factor,          // NEW (optional)
   fb,
+  booklet,
   printerId,
   spoiled,
   tone,
@@ -2043,8 +2079,10 @@ function addToCart({
 
   spoiled = Math.max(0, Math.floor(Number(spoiled) || 0));
 
-  // effective quantity used for price calculation (existing logic)
-  const effectiveQty = fb ? Math.ceil(origPages / 2) : origPages;
+  // effective quantity used for price/material sheets
+  const bookletEnabled = !!(serviceRequiresPrinter && booklet);
+  const fbEnabled = !!(fb || bookletEnabled);
+  const effectiveQty = bookletEnabled ? bookletSheetsFromPages(origPages) : (fbEnabled ? Math.ceil(origPages / 2) : origPages);
 
   // subtotal logic:
   // - printing service → unitPrice × effectiveQty × factor
@@ -2080,7 +2118,8 @@ function addToCart({
     usesFactorPricing: !!serviceRequiresPrinter,
 
     subtotal,
-    fb: !!fb,
+    fb: fbEnabled,
+    booklet: bookletEnabled,
     printerId: printerId || null,
     spoiled,
     tone: tone || 'other',
@@ -2229,7 +2268,8 @@ function addLargeFormatToCart({
         const outsourcedMeta = (Number(it.outsourcedTotal || 0) > 0)
           ? `<br/><small class="text-info">Out-Sourced: ${escapeHtml(it.outsourcedArtistName || 'Artist')} | ${it.isLargeFormat ? 'SQ FT' : 'QTY'} ${escapeHtml(String(it.outsourcedQty || 0))} | GH₵ ${escapeHtml(formatMoney(it.outsourcedAmount || 0))} = GH₵ ${escapeHtml(formatMoney(it.outsourcedTotal || 0))}</small>`
           : '';
-        displayLabel = `<div class="${toneClass}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(cartDisplaySelectionLabel(it) || '')}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
+        const bookletMeta = it.booklet ? '<br/><small class="text-info">Booklet</small>' : '';
+        displayLabel = `<div class="${toneClass}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(cartDisplaySelectionLabel(it) || '')}${bookletMeta}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
       }
 
       let qtyCell = '';
@@ -2369,6 +2409,7 @@ function addLargeFormatToCart({
     const effectiveQty = Number((it && it.pages) || 0) || 0;
     const sheets = usesFactorPricing ? Math.max(0, Math.floor(effectiveQty * f)) : '';
     const noteParts = [];
+    if (it && it.booklet) noteParts.push('Booklet');
     if (it && it.spoiled && Number(it.spoiled) > 0) noteParts.push(`Spoiled: ${Number(it.spoiled)}`);
 
     return {
@@ -3520,7 +3561,10 @@ function addLargeFormatToCart({
 
 
     const fbCheckbox = row ? row.querySelector('.fb-checkbox') : null;
-    const fbChecked = fbCheckbox ? fbCheckbox.checked : false;
+    const bookletCheckbox = row ? row.querySelector('.booklet-checkbox') : null;
+    const bookletChecked = !!(bookletCheckbox && bookletCheckbox.checked);
+    if (bookletChecked && fbCheckbox) fbCheckbox.checked = true;
+    const fbChecked = bookletChecked || (fbCheckbox ? fbCheckbox.checked : false);
 
     let selectedPrinterId = null;
     if (serviceRequiresPrinter && !outsourcedMode) {
@@ -3589,9 +3633,9 @@ function addLargeFormatToCart({
       await refreshMaterialsIfStale(false);
 
       // compute count exactly like controllers/orders.js material logic:
-      // baseCount = fb ? ceil(pages/2) : pages; count = baseCount + spoiled
+      // booklet = ceil(pages/4), otherwise fb = ceil(pages/2)
       const pgs = Math.max(1, Math.floor(Number(pages) || 1));
-      const baseCount = fbChecked ? Math.ceil(pgs / 2) : pgs;
+      const baseCount = bookletChecked ? bookletSheetsFromPages(pgs) : (fbChecked ? Math.ceil(pgs / 2) : pgs);
       const spoiledCount = Math.max(0, Math.floor(Number(spoiled) || 0));
 
       // factor only meaningful for printing services
@@ -3661,6 +3705,7 @@ function addLargeFormatToCart({
         pages: pages,
         factor,
         fb: fbChecked,
+        booklet: bookletChecked,
         printerId: outsourcedMode ? null : (selectedPrinterId || priceObj.__bookItem.printer),
         spoiled: outsourcedMode ? 0 : spoiled,
         tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || ''),
@@ -3678,7 +3723,7 @@ function addLargeFormatToCart({
         chosenPrice = Number(priceObj.price2);
       }
       const effectiveServiceId = priceObj.serviceId || serviceId;
-      addToCart({ serviceId: effectiveServiceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), invoiceLabelOverride, unitPrice: chosenPrice, pages, factor, fb: fbChecked, printerId: selectedPrinterId, spoiled: outsourcedMode ? 0 : spoiled, tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || ''), outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount });
+      addToCart({ serviceId: effectiveServiceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), invoiceLabelOverride, unitPrice: chosenPrice, pages, factor, fb: fbChecked, booklet: bookletChecked, printerId: selectedPrinterId, spoiled: outsourcedMode ? 0 : spoiled, tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || ''), outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount });
     }
 
     // clear inputs
@@ -3687,6 +3732,7 @@ function addLargeFormatToCart({
       const factorInput = row ? row.querySelector('.factor-input') : null;
       if (factorInput) factorInput.value = '';
       if (fbCheckbox) { fbCheckbox.checked = false; }
+      if (bookletCheckbox) { bookletCheckbox.checked = false; }
       const printerSelect = row ? row.querySelector('.printer-select') : null;
       if (printerSelect) { printerSelect.selectedIndex = 0; }
       if (spoiledInput) spoiledInput.value = '';
@@ -3871,6 +3917,7 @@ async function placeOrderFlow() {
             pages: pagesToSend,
             factor: bi.factor || undefined,
             fb: !!bi.fb,
+            booklet: !!(line.booklet || bi.booklet),
             printerId: bi.printerId || null,
             spoiled: bi.spoiled || 0,
             outsourcedArtistId: line.outsourcedArtistId || '',
@@ -3911,6 +3958,7 @@ async function placeOrderFlow() {
           pages: rawPages,
           factor: line.factor || undefined,
           fb: !!line.fb,
+          booklet: !!line.booklet,
           printerId: line.printerId || null,
           spoiled: line.spoiled || 0,
           outsourcedArtistId: line.outsourcedArtistId || '',
@@ -4489,8 +4537,9 @@ function renderOrdersList(orders) {
         o.items.forEach(it => {
           const rawLabel = it.selectionLabel || '';
           const selLabel = subUnitsOnlyFromLabel(rawLabel) || (it.selections && it.selections.length ? it.selections.map(s => (s.subUnit ? (s.subUnit.name || String(s.subUnit)) : '')).join(', ') : '(no label)');
-          const isFb = (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
-          const cleanLabel = isFb ? selLabel.replace(/\s*\(F\/B\)\s*$/i, '').trim() : selLabel;
+          const isBooklet = (it.booklet === true) || (typeof rawLabel === 'string' && rawLabel.includes('(Booklet)'));
+          const isFb = isBooklet || (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
+          const cleanLabel = selLabel.replace(/\s*\((F\/B|Booklet)\)\s*$/i, '').trim();
 
           // IMPORTANT: display the stored subtotal and pages — do not recompute based on pages only.
           const qty = (typeof it.pages !== 'undefined' && it.pages !== null) ? String(it.pages) : '1';
@@ -4498,7 +4547,7 @@ function renderOrdersList(orders) {
           const subtotal = (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))) ? formatMoney(it.subtotal) : (it.subtotal || '');
           const printerStr = it.printer ? escapeHtml(String(it.printer)) : '-';
 
-          const labelHtml = `<div>${escapeHtml(cleanLabel)}${isFb ? ' <span class="badge bg-secondary ms-2">F/B</span>' : ''}</div>`;
+          const labelHtml = `<div>${escapeHtml(cleanLabel)}${isBooklet ? ' <span class="badge bg-info text-dark ms-2">Booklet</span>' : (isFb ? ' <span class="badge bg-secondary ms-2">F/B</span>' : '')}</div>`;
 
           html += `<tr>
             <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;">${labelHtml}</td>
