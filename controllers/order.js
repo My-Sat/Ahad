@@ -58,6 +58,33 @@ function bookletPrinterFacesFromPages(pages) {
   return Math.max(1, Math.ceil(p / 2));
 }
 
+function normalizePriceCustomerCategory(value) {
+  const category = String(value || '').toLowerCase().trim();
+  if (category === 'artist' || category === 'organisation') return category;
+  return 'customer';
+}
+
+function pickEffectivePriceForCustomerCategory(priceDoc, customerCategory) {
+  const category = normalizePriceCustomerCategory(customerCategory);
+  const basePrice = Number(priceDoc && priceDoc.price != null ? priceDoc.price : 0);
+  const basePrice2 = (priceDoc && priceDoc.price2 != null) ? Number(priceDoc.price2) : null;
+
+  if (category === 'customer') {
+    return { price: basePrice, price2: basePrice2 };
+  }
+
+  const categoryPrice = priceDoc && priceDoc.categoryPrices
+    ? priceDoc.categoryPrices[category]
+    : null;
+  const hasPrice = categoryPrice && categoryPrice.price != null && !isNaN(Number(categoryPrice.price));
+  const hasPrice2 = categoryPrice && categoryPrice.price2 != null && !isNaN(Number(categoryPrice.price2));
+
+  return {
+    price: hasPrice ? Number(categoryPrice.price) : basePrice,
+    price2: hasPrice2 ? Number(categoryPrice.price2) : basePrice2
+  };
+}
+
 async function resolveMaterialUnitCostSnapshot(stockDoc, storeId, materialId) {
   const stored = roundUnitCost(stockDoc && stockDoc.averageUnitCost ? stockDoc.averageUnitCost : 0);
   if (!stockDoc || !storeId || !materialId || stored <= 0) return stored;
@@ -1179,6 +1206,26 @@ return {
       });
     });
 
+    const submissionCustomerId = submission && submission.customer
+      ? String(submission.customer._id || submission.customer)
+      : '';
+    let pricingCustomerCategory = invoice && invoice.customerCategory
+      ? String(invoice.customerCategory)
+      : '';
+    if (submissionCustomerId && mongoose.Types.ObjectId.isValid(submissionCustomerId)) {
+      try {
+        const pricingCustomer = await Customer.findById(new mongoose.Types.ObjectId(submissionCustomerId))
+          .select('_id category')
+          .lean();
+        if (pricingCustomer && pricingCustomer.category) {
+          pricingCustomerCategory = String(pricingCustomer.category);
+        }
+      } catch (categoryErr) {
+        console.error('Order pricing: failed to load customer category', categoryErr);
+      }
+    }
+    const effectivePricingCategory = normalizePriceCustomerCategory(pricingCustomerCategory);
+
     const builtItems = [];
     let total = 0;
     const canMarkOutsourced = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
@@ -1360,11 +1407,12 @@ return {
 
       // Determine which price to use. Booklet forces F/B mode, but uses a
       // separate paper-sheets formula below.
-      let unitPrice = Number(pr.price);
+      const effectivePrice = pickEffectivePriceForCustomerCategory(pr, effectivePricingCategory);
+      let unitPrice = Number(effectivePrice.price);
       const usedBooklet = !!(it.booklet && svcRequiresPrinter);
       const usedFB = !!(svcRequiresPrinter && (it.fb || usedBooklet));
-      if (usedFB && pr.price2 !== undefined && pr.price2 !== null) {
-        unitPrice = Number(pr.price2);
+      if (usedFB && effectivePrice.price2 !== undefined && effectivePrice.price2 !== null) {
+        unitPrice = Number(effectivePrice.price2);
       }
 
       const pages = Number(it.pages) || 1;
