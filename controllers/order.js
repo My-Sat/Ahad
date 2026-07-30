@@ -1970,9 +1970,13 @@ for (let idx = 0; idx < builtItems.length; idx++) {
   const baseCount = isLargeFormatUsage
     ? Math.max(0, roundCount(pages))
     : (it.booklet ? bookletPrinterFacesFromPages(pages) : Math.max(0, Math.floor(pages)));
-  const factor = positiveCountFactor(it.printFactor, 1);
-  // final usage count applied to printer = baseCount * configured service factor
-  const usageCount = Math.max(0, roundCount(baseCount * factor));
+  const serviceQtyFactor = isLargeFormatUsage
+    ? 1
+    : Math.max(1, Math.floor(Number(it.factor) || 1));
+  const configuredPrintFactor = positiveCountFactor(it.printFactor, 1);
+  // final usage count = pages/faces * order QTY * configured service factor.
+  // Large Format already stores quantity in printFactor, so don't multiply it twice.
+  const usageCount = Math.max(0, roundCount(baseCount * serviceQtyFactor * configuredPrintFactor));
 
   // determine type for this usage (may be 'monochrome'|'colour'|null)
   const usageType = (it.printerType === 'monochrome' || it.printerType === 'colour') ? it.printerType : null;
