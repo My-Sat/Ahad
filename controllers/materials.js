@@ -1,6 +1,7 @@
 // controllers/materials.js
 const mongoose = require('mongoose');
 const Material = require('../models/material');
+const CatalogueCategory = require('../models/catalogue_category');
 const ServiceCostUnit = require('../models/service_cost_unit');
 const ServiceCostSubUnit = require('../models/service_cost_subunit');
 const { MaterialUsage, MaterialAggregate } = require('../models/material_usage');
@@ -64,6 +65,19 @@ async function getOperationalStoreLean() {
   return await Store.findOne({ isOperational: true }).lean();
 }
 
+function uncategorizedMaterialFilter() {
+  return { $or: [{ category: null }, { category: { $exists: false } }] };
+}
+
+async function resolveCatalogueCategory(categoryId, options = {}) {
+  const raw = String(categoryId || '').trim();
+  if (!raw || raw === 'uncategorized') {
+    return options.allowEmpty ? null : undefined;
+  }
+  if (!mongoose.Types.ObjectId.isValid(raw)) return undefined;
+  return await CatalogueCategory.findById(raw).lean();
+}
+
 // helper: subset match (material selections must be contained in item selections)
 function materialMatchesItem(matSelections, itemSelections) {
   const itemSet = new Set((itemSelections || []).map(s => `${String(s.unit)}:${String(s.subUnit)}`));
@@ -81,10 +95,38 @@ function materialMatchesItem(matSelections, itemSelections) {
 // Render catalogue page
 exports.cataloguePage = async (req, res) => {
   try {
-    const units = await ServiceCostUnit.find().sort('name').lean();
-    const subunits = await ServiceCostSubUnit.find().sort('name').lean();
-    const materials = await Material.find().populate('selections.unit selections.subUnit').sort({ createdAt: -1 }).lean();
-    return res.render('catalogue/index', { materials, units, subunits });
+    const [units, subunits, categories, uncategorizedCount] = await Promise.all([
+      ServiceCostUnit.find().sort('name').lean(),
+      ServiceCostSubUnit.find().sort('name').lean(),
+      CatalogueCategory.find({}).sort({ name: 1, _id: 1 }).lean(),
+      Material.countDocuments(uncategorizedMaterialFilter())
+    ]);
+
+    const requestedCategory = String(req.query.category || '').trim();
+    const requestedExists = mongoose.Types.ObjectId.isValid(requestedCategory)
+      && categories.some(category => String(category._id) === requestedCategory);
+    const selectedCategoryId = requestedCategory === 'uncategorized'
+      ? 'uncategorized'
+      : (requestedExists
+          ? requestedCategory
+          : (categories.length ? String(categories[0]._id) : 'uncategorized'));
+    const materialFilter = selectedCategoryId === 'uncategorized'
+      ? uncategorizedMaterialFilter()
+      : { category: selectedCategoryId };
+    const materials = await Material.find(materialFilter)
+      .populate('category', '_id name')
+      .populate('selections.unit selections.subUnit')
+      .sort({ createdAt: -1, _id: -1 })
+      .lean();
+
+    return res.render('catalogue/index', {
+      materials,
+      units,
+      subunits,
+      categories,
+      selectedCategoryId,
+      uncategorizedCount
+    });
   } catch (err) {
     console.error('materials.cataloguePage error', err);
     return res.status(500).send('Error loading catalogue page');
@@ -94,8 +136,25 @@ exports.cataloguePage = async (req, res) => {
 // List catalogues (JSON)
 exports.listCatalogues = async (req, res) => {
   try {
-    const mats = await Material.find().populate('selections.unit selections.subUnit').sort({ createdAt: -1 }).lean();
-    return res.json({ ok: true, materials: mats });
+    const requestedCategory = String(req.query.category || '').trim();
+    let filter = {};
+    if (requestedCategory === 'uncategorized') {
+      filter = uncategorizedMaterialFilter();
+    } else if (requestedCategory) {
+      if (!mongoose.Types.ObjectId.isValid(requestedCategory)) {
+        return res.status(400).json({ ok: false, error: 'Invalid catalogue category id' });
+      }
+      const exists = await CatalogueCategory.exists({ _id: requestedCategory });
+      if (!exists) return res.status(404).json({ ok: false, error: 'Catalogue category not found' });
+      filter = { category: requestedCategory };
+    }
+
+    const mats = await Material.find(filter)
+      .populate('category', '_id name')
+      .populate('selections.unit selections.subUnit')
+      .sort({ createdAt: -1, _id: -1 })
+      .lean();
+    return res.json({ ok: true, materials: mats, category: requestedCategory || null });
   } catch (err) {
     console.error('materials.listCatalogues error', err);
     return res.status(500).json({ ok: false, error: 'Error fetching catalogue' });
@@ -112,6 +171,12 @@ exports.createCatalogue = async (req, res) => {
 
     if (!name || !String(name).trim()) {
       return res.status(400).json({ error: 'Name required' });
+    }
+    const requestedCategoryId = String(req.body.categoryId || '').trim();
+    let category = null;
+    if (requestedCategoryId) {
+      category = await resolveCatalogueCategory(requestedCategoryId, { allowEmpty: false });
+      if (!category) return res.status(400).json({ error: 'Select a valid catalogue category' });
     }
     selections = parseSelections(selections);
     if (!Array.isArray(selections)) selections = [];
@@ -154,6 +219,7 @@ exports.createCatalogue = async (req, res) => {
       name: String(name).trim(),
       selections: normalized,
       key,
+      category: category ? category._id : null,
       baseUnitName,
       stockUnits
     };
@@ -178,6 +244,7 @@ exports.createCatalogue = async (req, res) => {
 
     if (wasInserted) {
       const populated = await Material.findOne(filter)
+        .populate('category', '_id name')
         .populate('selections.unit selections.subUnit')
         .lean();
 
@@ -186,6 +253,7 @@ exports.createCatalogue = async (req, res) => {
 
     // Not inserted => it already exists
     const existing = await Material.findOne(filter)
+      .populate('category', '_id name')
       .populate('selections.unit selections.subUnit')
       .lean();
 
@@ -251,11 +319,22 @@ exports.updateCatalogueUnits = async (req, res) => {
     }
 
     mat.name = nextName;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'categoryId')) {
+      const requestedCategoryId = String(req.body.categoryId || '').trim();
+      if (!requestedCategoryId || requestedCategoryId === 'uncategorized') {
+        mat.category = null;
+      } else {
+        const category = await resolveCatalogueCategory(requestedCategoryId, { allowEmpty: false });
+        if (!category) return res.status(400).json({ error: 'Select a valid catalogue category' });
+        mat.category = category._id;
+      }
+    }
     mat.baseUnitName = baseUnitName;
     mat.stockUnits = stockUnits;
     await mat.save();
 
     const populated = await Material.findById(mat._id)
+      .populate('category', '_id name')
       .populate('selections.unit selections.subUnit')
       .lean();
 
@@ -458,8 +537,11 @@ exports.stockPage = async (req, res) => {
     if (!selectedStore && operational) selectedStore = operational;
     if (!selectedStore && stores.length) selectedStore = stores[0];
 
-    const catalogues = await Material.find().sort({ createdAt: -1 }).lean();
-    const suppliers = await Supplier.find().sort({ active: -1, name: 1 }).lean();
+    const [catalogues, catalogueCategories, suppliers] = await Promise.all([
+      Material.find().sort({ createdAt: -1 }).lean(),
+      CatalogueCategory.find({}).sort({ name: 1, _id: 1 }).lean(),
+      Supplier.find().sort({ active: -1, name: 1 }).lean()
+    ]);
 
     let stocks = [];
     if (selectedStore) {
@@ -558,6 +640,7 @@ exports.stockPage = async (req, res) => {
       selectedStore: selectedStore || null,
       operationalStore: operational || null,
       catalogues,
+      catalogueCategories,
       suppliers,
       stocks
     });
@@ -639,6 +722,7 @@ exports.purchaseStock = async (req, res) => {
   try {
     const { storeId } = req.params;
     const materialId = req.body.materialId;
+    const catalogueCategoryId = String(req.body.catalogueCategoryId || '').trim();
     const supplierId = req.body.supplierId;
     const paymentType = String(req.body.paymentType || 'cash').toLowerCase().trim() === 'credit' ? 'credit' : 'cash';
     const note = String(req.body.note || '').trim();
@@ -648,6 +732,7 @@ exports.purchaseStock = async (req, res) => {
     const requestedUnitFactor = Number(req.body.purchaseUnitFactor || req.body.unitFactor || 0);
 
     if (!mongoose.Types.ObjectId.isValid(storeId)) return res.status(400).json({ error: 'Invalid store id' });
+    if (!mongoose.Types.ObjectId.isValid(catalogueCategoryId)) return res.status(400).json({ error: 'Select a valid catalogue category' });
     if (!mongoose.Types.ObjectId.isValid(materialId)) return res.status(400).json({ error: 'Invalid catalogue id' });
     if (!mongoose.Types.ObjectId.isValid(supplierId)) return res.status(400).json({ error: 'Invalid supplier id' });
     if (!isFinite(purchaseQty) || purchaseQty <= 0) return res.status(400).json({ error: 'Purchase quantity must be greater than zero' });
@@ -671,6 +756,11 @@ exports.purchaseStock = async (req, res) => {
       if (!material) {
         const e = new Error('Catalogue not found');
         e.statusCode = 404;
+        throw e;
+      }
+      if (!material.category || String(material.category) !== catalogueCategoryId) {
+        const e = new Error('The selected catalogue item does not belong to the selected category');
+        e.statusCode = 400;
         throw e;
       }
       if (!supplier || supplier.active === false) {

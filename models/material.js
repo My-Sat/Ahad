@@ -9,6 +9,8 @@ const SelectionRef = new mongoose.Schema({
 // Material is GLOBAL now (not scoped to a service)
 const MaterialSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
+  // Existing records remain valid and can be assigned from the Catalogue page.
+  category: { type: mongoose.Schema.Types.ObjectId, ref: 'CatalogueCategory', default: null, index: true },
   // removed `service` field — materials are unique across all services
   selections: { type: [SelectionRef], default: [] },
   key: { type: String, required: true }, // indexed/unique via schema.index below

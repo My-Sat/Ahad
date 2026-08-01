@@ -26,7 +26,9 @@ function initStoreStockPage() {
   // ----------------------------
   const purchaseForm = document.getElementById('purchase-stock-form');
   const purchaseSupplierSelect = document.getElementById('purchaseSupplierSelect');
+  const purchaseCatalogueCategorySelect = document.getElementById('purchaseCatalogueCategorySelect');
   const purchaseCatalogueSelect = document.getElementById('purchaseCatalogueSelect');
+  const purchaseCatalogueStatus = document.getElementById('purchaseCatalogueStatus');
   const purchaseUnitSelect = document.getElementById('purchaseUnitSelect');
   const purchaseQty = document.getElementById('purchaseQty');
   const purchaseUnitCost = document.getElementById('purchaseUnitCost');
@@ -80,6 +82,7 @@ function initStoreStockPage() {
   let suppliersCache = [];
   let purchaseHistoryPage = 1;
   const purchaseHistoryLimit = 100;
+  let purchaseCatalogueRequestSerial = 0;
 
   // ----------------------------
   // Adjust
@@ -250,9 +253,88 @@ function initStoreStockPage() {
     }
   }
 
+  function resetPurchaseUnits(message) {
+    if (!purchaseUnitSelect) return;
+    purchaseUnitSelect.innerHTML = '';
+    purchaseUnitSelect.add(new Option(message || 'Select an item first', ''));
+    purchaseUnitSelect.disabled = true;
+    if (purchaseBaseUnitHint) purchaseBaseUnitHint.textContent = '';
+  }
+
+  function resetPurchaseCatalogue(message) {
+    if (!purchaseCatalogueSelect) return;
+    purchaseCatalogueSelect.innerHTML = '';
+    purchaseCatalogueSelect.add(new Option(message || 'Select a category first', ''));
+    purchaseCatalogueSelect.disabled = true;
+    resetPurchaseUnits('Select an item first');
+  }
+
+  async function loadPurchaseCatalogues(categoryId) {
+    const selectedCategoryId = String(categoryId || '').trim();
+    const requestId = ++purchaseCatalogueRequestSerial;
+    if (!selectedCategoryId) {
+      resetPurchaseCatalogue('Select a category first');
+      if (purchaseCatalogueStatus) purchaseCatalogueStatus.textContent = '';
+      return;
+    }
+
+    resetPurchaseCatalogue('Loading catalogue items...');
+    if (purchaseCatalogueStatus) purchaseCatalogueStatus.textContent = 'Loading...';
+
+    try {
+      const res = await fetch(`/admin/materials?category=${encodeURIComponent(selectedCategoryId)}`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+        credentials: 'same-origin',
+        cache: 'no-store'
+      });
+      const data = await res.json().catch(() => null);
+      if (requestId !== purchaseCatalogueRequestSerial) return;
+      if (!res.ok || !data || !data.ok) {
+        throw new Error((data && data.error) || 'Failed to load catalogue items');
+      }
+
+      const materials = Array.isArray(data.materials) ? data.materials : [];
+      purchaseCatalogueSelect.innerHTML = '';
+      if (!materials.length) {
+        purchaseCatalogueSelect.add(new Option('No items in this category', ''));
+        purchaseCatalogueSelect.disabled = true;
+        resetPurchaseUnits('No catalogue item selected');
+        if (purchaseCatalogueStatus) purchaseCatalogueStatus.textContent = 'This category has no catalogue items.';
+        return;
+      }
+
+      purchaseCatalogueSelect.add(new Option('Select catalogue item', ''));
+      materials.forEach(material => {
+        const baseUnit = String(material.baseUnitName || 'piece').trim() || 'piece';
+        const units = Array.isArray(material.stockUnits) && material.stockUnits.length
+          ? material.stockUnits
+          : [{ name: baseUnit, factor: 1, isBase: true }];
+        const option = new Option(String(material.name || 'Catalogue item'), String(material._id || ''));
+        option.dataset.baseUnit = baseUnit;
+        option.dataset.units = JSON.stringify(units);
+        purchaseCatalogueSelect.add(option);
+      });
+      purchaseCatalogueSelect.disabled = false;
+      resetPurchaseUnits('Select an item first');
+      if (purchaseCatalogueStatus) {
+        purchaseCatalogueStatus.textContent = `${materials.length} item${materials.length === 1 ? '' : 's'} available`;
+      }
+    } catch (err) {
+      console.error('loadPurchaseCatalogues error', err);
+      if (requestId !== purchaseCatalogueRequestSerial) return;
+      resetPurchaseCatalogue('Failed to load catalogue items');
+      if (purchaseCatalogueStatus) purchaseCatalogueStatus.textContent = err.message || 'Failed to load catalogue items';
+    }
+  }
+
   function populatePurchaseUnits() {
     if (!purchaseCatalogueSelect || !purchaseUnitSelect) return;
     const opt = purchaseCatalogueSelect.selectedOptions && purchaseCatalogueSelect.selectedOptions[0];
+    if (!purchaseCatalogueSelect.value || !opt) {
+      resetPurchaseUnits('Select an item first');
+      updatePurchaseTotal();
+      return;
+    }
     const baseUnit = String(opt?.dataset?.baseUnit || 'piece').trim() || 'piece';
     const units = parseJsonAttr(opt?.dataset?.units, [{ name: baseUnit, factor: 1, isBase: true }]);
     const current = purchaseUnitSelect.value;
@@ -269,6 +351,7 @@ function initStoreStockPage() {
         item.textContent = factor === 1 ? `${name} (base)` : `${name} = ${factor} ${baseUnit}`;
         purchaseUnitSelect.appendChild(item);
       });
+    purchaseUnitSelect.disabled = false;
 
     if (current && Array.from(purchaseUnitSelect.options).some(o => o.value === current)) {
       purchaseUnitSelect.value = current;
@@ -536,11 +619,18 @@ function initStoreStockPage() {
     }
   }
 
-  populatePurchaseUnits();
+  resetPurchaseCatalogue('Select a category first');
   updatePurchaseTotal();
   togglePurchaseCashBook();
   loadCashBooksForPurchase();
   loadSuppliers();
+
+  if (purchaseCatalogueCategorySelect && purchaseCatalogueCategorySelect.dataset.bound !== '1') {
+    purchaseCatalogueCategorySelect.dataset.bound = '1';
+    purchaseCatalogueCategorySelect.addEventListener('change', function () {
+      loadPurchaseCatalogues(purchaseCatalogueCategorySelect.value);
+    });
+  }
 
   if (purchaseCatalogueSelect && purchaseCatalogueSelect.dataset.unitsBound !== '1') {
     purchaseCatalogueSelect.dataset.unitsBound = '1';
@@ -589,6 +679,7 @@ function initStoreStockPage() {
 
       const storeId = selectedStoreId();
       const supplierIdVal = String(purchaseSupplierSelect?.value || '').trim();
+      const catalogueCategoryId = String(purchaseCatalogueCategorySelect?.value || '').trim();
       const materialId = String(purchaseCatalogueSelect?.value || '').trim();
       const quantity = Math.floor(numOr(purchaseQty ? purchaseQty.value : 0, 0));
       const unitCost = numOr(purchaseUnitCost ? purchaseUnitCost.value : 0, 0);
@@ -598,6 +689,7 @@ function initStoreStockPage() {
 
       if (!storeId) return alert('Select a store first');
       if (!supplierIdVal) return alert('Select a supplier');
+      if (!catalogueCategoryId) return alert('Select a catalogue category');
       if (!materialId) return alert('Select a catalogue item');
       if (!isFinite(quantity) || quantity <= 0) return alert('Quantity must be greater than zero');
       if (!isFinite(unitCost) || unitCost <= 0) return alert('Unit cost must be greater than zero');
@@ -609,6 +701,7 @@ function initStoreStockPage() {
       try {
         const body = new URLSearchParams();
         body.append('supplierId', supplierIdVal);
+        body.append('catalogueCategoryId', catalogueCategoryId);
         body.append('materialId', materialId);
         body.append('quantity', String(quantity));
         body.append('unitCost', String(unitCost));

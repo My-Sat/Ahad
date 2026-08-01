@@ -187,19 +187,25 @@ block content
                 option(value='') No suppliers yet
 
           .col-12.col-lg-3
-            label.form-label.text-muted-light(for='purchaseCatalogueSelect') Catalogue item
-            select.form-select#purchaseCatalogueSelect
-              if catalogues && catalogues.length
-                each c in catalogues
-                  - const cUnits = (c.stockUnits && c.stockUnits.length) ? c.stockUnits : [{ name: (c.baseUnitName || 'piece'), factor: 1, isBase: true }];
-                  option(value=c._id data-base-unit=(c.baseUnitName || 'piece') data-units=JSON.stringify(cUnits))= c.name
+            label.form-label.text-muted-light(for='purchaseCatalogueCategorySelect') Catalogue category
+            select.form-select#purchaseCatalogueCategorySelect
+              option(value='' selected) Select catalogue category
+              if catalogueCategories && catalogueCategories.length
+                each category in catalogueCategories
+                  option(value=category._id)= category.name
               else
-                option(value='') No catalogue items yet
+                option(value='' disabled) No catalogue categories yet
 
-          .col-6.col-lg-2
+          .col-12.col-lg-3
+            label.form-label.text-muted-light(for='purchaseCatalogueSelect') Catalogue item
+            select.form-select#purchaseCatalogueSelect(disabled)
+              option(value='') Select a category first
+            small.text-muted-light#purchaseCatalogueStatus
+
+          .col-6.col-lg-3
             label.form-label.text-muted-light(for='purchaseUnitSelect') Unit
-            select.form-select#purchaseUnitSelect
-              option(value='piece' data-factor='1') piece
+            select.form-select#purchaseUnitSelect(disabled)
+              option(value='') Select an item first
 
           .col-6.col-lg-2
             label.form-label.text-muted-light(for='purchaseQty') Quantity

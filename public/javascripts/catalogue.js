@@ -9,6 +9,7 @@ function initCataloguePage() {
 
   const createSpinner = document.getElementById('createCatalogueSpinner');
   const nameEl = document.getElementById('cuName');
+  const createCategoryEl = document.getElementById('cuCategory');
   const baseUnitNameEl = document.getElementById('baseUnitName');
   const stockUnitsTableBody = document.querySelector('#stockUnitsTable tbody');
   const addStockUnitRowBtn = document.getElementById('addStockUnitRowBtn');
@@ -16,6 +17,7 @@ function initCataloguePage() {
   const unitConfigModal = document.getElementById('unitConfigModal');
   const unitMaterialId = document.getElementById('unitMaterialId');
   const unitMaterialNameInput = document.getElementById('unitMaterialNameInput');
+  const unitMaterialCategory = document.getElementById('unitMaterialCategory');
   const unitBaseName = document.getElementById('unitBaseName');
   const unitConfigRows = document.getElementById('unitConfigRows');
   const addUnitConfigRowBtn = document.getElementById('addUnitConfigRowBtn');
@@ -24,6 +26,20 @@ function initCataloguePage() {
 
   const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
   let pendingDeleteId = null;
+
+  const categoryFilter = document.getElementById('catalogueCategoryFilter');
+  const catalogueTableBody = document.getElementById('catalogueTableBody');
+  const catalogueListSpinner = document.getElementById('catalogueListSpinner');
+  const catalogueFilterStatus = document.getElementById('catalogueFilterStatus');
+  const categoryModal = document.getElementById('catalogueCategoryModal');
+  const manageCategoriesBtn = document.getElementById('manageCatalogueCategoriesBtn');
+  const categoryManagerList = document.getElementById('catalogueCategoryManagerList');
+  const newCategoryName = document.getElementById('newCatalogueCategoryName');
+  const createCategoryBtn = document.getElementById('createCatalogueCategoryBtn');
+  const createCategorySpinner = document.getElementById('createCatalogueCategorySpinner');
+  const uncategorizedCategoryCount = document.getElementById('uncategorizedCategoryCount');
+  let catalogueCategories = [];
+  let catalogueRequestSerial = 0;
 
   const unitCheckboxSelector = '.unit-sub-checkbox';
 
@@ -171,11 +187,13 @@ function initCataloguePage() {
       e.preventDefault();
       const id = btn.dataset.id || '';
       const name = btn.dataset.name || 'Catalogue item';
+      const categoryId = btn.dataset.categoryId || 'uncategorized';
       const base = cleanUnitName(btn.dataset.baseUnit, 'piece');
       const units = parseJsonAttr(btn.dataset.units, [{ name: base, factor: 1, isBase: true }]);
 
       if (unitMaterialId) unitMaterialId.value = id;
       if (unitMaterialNameInput) unitMaterialNameInput.value = name;
+      if (unitMaterialCategory) unitMaterialCategory.value = categoryId;
       if (unitBaseName) unitBaseName.value = base;
       if (unitConfigRows) {
         unitConfigRows.innerHTML = '';
@@ -189,28 +207,8 @@ function initCataloguePage() {
     });
   }
 
-  function updateCatalogueRow(id, material) {
-    const tr = document.querySelector(`tr[data-id="${id}"]`);
-    if (!tr || !material) return;
-    const name = String(material.name || '').trim();
-    const base = cleanUnitName(material.baseUnitName, 'piece');
-    const units = Array.isArray(material.stockUnits) && material.stockUnits.length
-      ? material.stockUnits
-      : [{ name: base, factor: 1, isBase: true }];
-    const nameEl = tr.querySelector('.catalogue-material-name');
-    if (nameEl) nameEl.textContent = name;
-    const summary = tr.querySelector('.catalogue-unit-summary');
-    if (summary) summary.textContent = unitSummary(base, units);
-    const btn = tr.querySelector('.configure-units-btn');
-    if (btn) {
-      btn.dataset.name = name;
-      btn.dataset.baseUnit = base;
-      btn.dataset.units = JSON.stringify(units);
-    }
-  }
-
-  function insertRow(mat) {
-    const tbody = document.querySelector('table tbody');
+  function insertRow(mat, prepend = true) {
+    const tbody = catalogueTableBody;
     if (!tbody) return;
 
     const labels = (mat.selections || []).map(s => {
@@ -221,6 +219,8 @@ function initCataloguePage() {
 
     const tr = document.createElement('tr');
     tr.setAttribute('data-id', mat._id);
+    const categoryId = mat.category && mat.category._id ? String(mat.category._id) : 'uncategorized';
+    tr.setAttribute('data-category-id', categoryId);
     const baseUnit = cleanUnitName(mat.baseUnitName, 'piece');
     const units = Array.isArray(mat.stockUnits) && mat.stockUnits.length
       ? mat.stockUnits
@@ -235,16 +235,293 @@ function initCataloguePage() {
       </td>
       <td class="text-center">
         <div class="d-inline-flex gap-2 justify-content-center flex-wrap">
-          <button class="btn btn-sm btn-outline-light-custom configure-units-btn" data-id="${mat._id}" data-name="${escapeHtml(mat.name)}" data-base-unit="${escapeHtml(baseUnit)}" data-units="${escapeHtml(JSON.stringify(units))}" type="button">Edit</button>
+          <button class="btn btn-sm btn-outline-light-custom configure-units-btn" data-id="${mat._id}" data-name="${escapeHtml(mat.name)}" data-category-id="${escapeHtml(categoryId)}" data-base-unit="${escapeHtml(baseUnit)}" data-units="${escapeHtml(JSON.stringify(units))}" type="button">Edit</button>
           <button class="btn btn-sm btn-outline-danger delete-catalogue-btn" data-id="${mat._id}" type="button">Delete</button>
         </div>
       </td>
     `;
-    tbody.insertBefore(tr, tbody.firstChild);
+    if (prepend) tbody.insertBefore(tr, tbody.firstChild);
+    else tbody.appendChild(tr);
 
     const delBtn = tr.querySelector('.delete-catalogue-btn');
     bindDeleteButton(delBtn);
     bindConfigureUnitsButton(tr.querySelector('.configure-units-btn'));
+  }
+
+  function renderCatalogueList(materials) {
+    if (!catalogueTableBody) return;
+    catalogueTableBody.innerHTML = '';
+    const list = Array.isArray(materials) ? materials : [];
+    if (!list.length) {
+      catalogueTableBody.innerHTML = '<tr id="catalogueEmptyRow"><td class="text-muted" colspan="3">No catalogue items in this category.</td></tr>';
+      return;
+    }
+    list.forEach(material => insertRow(material, false));
+  }
+
+  function categoryLabel(categoryId) {
+    if (categoryId === 'uncategorized') return 'Uncategorized';
+    const category = catalogueCategories.find(row => String(row._id) === String(categoryId));
+    return category ? category.name : 'Selected category';
+  }
+
+  async function loadCatalogue(categoryId) {
+    const selected = String(categoryId || categoryFilter?.value || 'uncategorized');
+    const requestId = ++catalogueRequestSerial;
+    if (catalogueListSpinner) catalogueListSpinner.style.display = 'inline-block';
+    if (categoryFilter) categoryFilter.disabled = true;
+    if (catalogueFilterStatus) catalogueFilterStatus.textContent = `Loading ${categoryLabel(selected)}...`;
+
+    try {
+      const res = await fetch(`/admin/materials?category=${encodeURIComponent(selected)}`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' }
+      });
+      const data = await res.json().catch(() => null);
+      if (requestId !== catalogueRequestSerial) return;
+      if (!res.ok || !data || !data.ok) {
+        throw new Error((data && data.error) || 'Failed to load catalogue items');
+      }
+      renderCatalogueList(data.materials);
+      const count = Array.isArray(data.materials) ? data.materials.length : 0;
+      if (catalogueFilterStatus) {
+        catalogueFilterStatus.textContent = `${categoryLabel(selected)}: ${count} item${count === 1 ? '' : 's'}`;
+      }
+    } catch (err) {
+      console.error(err);
+      if (requestId === catalogueRequestSerial) {
+        renderCatalogueList([]);
+        if (catalogueFilterStatus) catalogueFilterStatus.textContent = err.message || 'Failed to load catalogue items';
+      }
+    } finally {
+      if (requestId === catalogueRequestSerial) {
+        if (catalogueListSpinner) catalogueListSpinner.style.display = 'none';
+        if (categoryFilter) categoryFilter.disabled = false;
+      }
+    }
+  }
+
+  function replaceCategoryOptions(select, options) {
+    if (!select) return;
+    const current = String(options.selected || select.value || '');
+    select.innerHTML = '';
+
+    if (options.includeUncategorized) {
+      const suffix = typeof options.uncategorizedCount === 'number'
+        ? ` (${options.uncategorizedCount})`
+        : '';
+      select.add(new Option(`Uncategorized${suffix}`, 'uncategorized'));
+    }
+
+    catalogueCategories.forEach(category => {
+      select.add(new Option(category.name, String(category._id)));
+    });
+
+    if (!catalogueCategories.length && !options.includeUncategorized) {
+      select.add(new Option('Create a category first', ''));
+      select.disabled = true;
+      select.value = '';
+      return;
+    }
+
+    select.disabled = false;
+    const values = Array.from(select.options).map(option => option.value);
+    select.value = values.includes(current)
+      ? current
+      : (values.includes(String(options.fallback || '')) ? String(options.fallback) : (values[0] || ''));
+  }
+
+  function renderCategoryManager() {
+    if (!categoryManagerList) return;
+    if (!catalogueCategories.length) {
+      categoryManagerList.innerHTML = '<p class="text-muted-light mb-0" id="noCatalogueCategoriesMessage">No categories created yet.</p>';
+      return;
+    }
+
+    categoryManagerList.innerHTML = catalogueCategories.map(category => {
+      const count = Number(category.materialCount || 0);
+      return `
+        <div class="catalogue-category-manager-row border rounded p-2" data-category-id="${escapeHtml(category._id)}">
+          <div class="row g-2 align-items-center">
+            <div class="col-12 col-md">
+              <input class="form-control form-control-sm catalogue-category-name" type="text" maxlength="100" value="${escapeHtml(category.name)}">
+            </div>
+            <div class="col-auto">
+              <span class="badge bg-info text-dark catalogue-category-count">${count} item${count === 1 ? '' : 's'}</span>
+            </div>
+            <div class="col-auto">
+              <button class="btn btn-sm btn-outline-light-custom save-catalogue-category-btn" type="button">Save</button>
+            </div>
+            <div class="col-auto">
+              <button class="btn btn-sm btn-outline-danger delete-catalogue-category-btn" type="button">Delete</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function refreshCategories(options = {}) {
+    const filterValue = String(options.filterValue || categoryFilter?.value || 'uncategorized');
+    const createValue = String(options.createValue || createCategoryEl?.value || '');
+    const editValue = String(unitMaterialCategory?.value || 'uncategorized');
+    const res = await fetch('/admin/catalogue-categories', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' }
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || !data.ok) {
+      throw new Error((data && data.error) || 'Failed to load catalogue categories');
+    }
+
+    catalogueCategories = Array.isArray(data.categories) ? data.categories : [];
+    const fallback = catalogueCategories.length ? String(catalogueCategories[0]._id) : 'uncategorized';
+    replaceCategoryOptions(categoryFilter, {
+      includeUncategorized: true,
+      uncategorizedCount: Number(data.uncategorizedCount || 0),
+      selected: filterValue,
+      fallback
+    });
+    replaceCategoryOptions(createCategoryEl, {
+      includeUncategorized: false,
+      selected: createValue,
+      fallback: filterValue !== 'uncategorized' ? filterValue : fallback
+    });
+    replaceCategoryOptions(unitMaterialCategory, {
+      includeUncategorized: true,
+      selected: editValue,
+      fallback: 'uncategorized'
+    });
+    if (createBtn) createBtn.disabled = catalogueCategories.length === 0;
+    if (uncategorizedCategoryCount) {
+      const count = Number(data.uncategorizedCount || 0);
+      uncategorizedCategoryCount.textContent = `${count} uncategorized`;
+    }
+    renderCategoryManager();
+    return data;
+  }
+
+  if (categoryFilter && categoryFilter.dataset.bound !== '1') {
+    categoryFilter.dataset.bound = '1';
+    categoryFilter.addEventListener('change', function () {
+      loadCatalogue(categoryFilter.value);
+    });
+  }
+
+  if (manageCategoriesBtn && manageCategoriesBtn.dataset.bound !== '1') {
+    manageCategoriesBtn.dataset.bound = '1';
+    manageCategoriesBtn.addEventListener('click', function () {
+      if (categoryModal) bootstrap.Modal.getOrCreateInstance(categoryModal).show();
+      refreshCategories().catch(err => {
+        console.error(err);
+        alert(err.message || 'Failed to load catalogue categories');
+      });
+    });
+  }
+
+  async function createCatalogueCategory() {
+    const name = String(newCategoryName?.value || '').trim();
+    if (!name) return alert('Provide a category name.');
+    if (createCategoryBtn) createCategoryBtn.disabled = true;
+    if (createCategorySpinner) createCategorySpinner.style.display = 'inline-block';
+
+    try {
+      const body = new URLSearchParams({ name });
+      const res = await fetch('/admin/catalogue-categories', {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+        },
+        body: body.toString()
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || !data.category) {
+        throw new Error((data && data.error) || 'Failed to create catalogue category');
+      }
+      if (newCategoryName) newCategoryName.value = '';
+      const id = String(data.category._id);
+      await refreshCategories({ filterValue: id, createValue: id });
+      if (categoryFilter) categoryFilter.value = id;
+      if (createCategoryEl) createCategoryEl.value = id;
+      await loadCatalogue(id);
+    } catch (err) {
+      console.error(err);
+      alert(err.message || 'Failed to create catalogue category');
+    } finally {
+      if (createCategoryBtn) createCategoryBtn.disabled = false;
+      if (createCategorySpinner) createCategorySpinner.style.display = 'none';
+    }
+  }
+
+  if (createCategoryBtn && createCategoryBtn.dataset.bound !== '1') {
+    createCategoryBtn.dataset.bound = '1';
+    createCategoryBtn.addEventListener('click', createCatalogueCategory);
+  }
+  if (newCategoryName && newCategoryName.dataset.bound !== '1') {
+    newCategoryName.dataset.bound = '1';
+    newCategoryName.addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      createCatalogueCategory();
+    });
+  }
+
+  if (categoryManagerList && categoryManagerList.dataset.bound !== '1') {
+    categoryManagerList.dataset.bound = '1';
+    categoryManagerList.addEventListener('click', async function (event) {
+      const row = event.target.closest('.catalogue-category-manager-row');
+      if (!row) return;
+      const id = String(row.dataset.categoryId || '');
+      const saveBtn = event.target.closest('.save-catalogue-category-btn');
+      const deleteBtn = event.target.closest('.delete-catalogue-category-btn');
+      if (!saveBtn && !deleteBtn) return;
+
+      if (saveBtn) {
+        const name = String(row.querySelector('.catalogue-category-name')?.value || '').trim();
+        if (!name) return alert('Provide a category name.');
+        saveBtn.disabled = true;
+        try {
+          const res = await fetch(`/admin/catalogue-categories/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+            },
+            body: new URLSearchParams({ name }).toString()
+          });
+          const data = await res.json().catch(() => null);
+          if (!res.ok) throw new Error((data && data.error) || 'Failed to update category');
+          await refreshCategories({ filterValue: categoryFilter?.value || id });
+          if (catalogueFilterStatus) {
+            const current = String(categoryFilter?.value || '');
+            catalogueFilterStatus.textContent = `${categoryLabel(current)} catalogue items`;
+          }
+        } catch (err) {
+          console.error(err);
+          alert(err.message || 'Failed to update category');
+          saveBtn.disabled = false;
+        }
+        return;
+      }
+
+      const category = catalogueCategories.find(item => String(item._id) === id);
+      if (!confirm(`Delete ${category ? category.name : 'this category'}?`)) return;
+      deleteBtn.disabled = true;
+      try {
+        const res = await fetch(`/admin/catalogue-categories/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((data && data.error) || 'Failed to delete category');
+        const nextFilter = String(categoryFilter?.value || '') === id ? '' : String(categoryFilter?.value || '');
+        await refreshCategories({ filterValue: nextFilter });
+        await loadCatalogue(categoryFilter?.value || 'uncategorized');
+      } catch (err) {
+        console.error(err);
+        alert(err.message || 'Failed to delete category');
+        deleteBtn.disabled = false;
+      }
+    });
   }
 
   // Create
@@ -254,6 +531,8 @@ function initCataloguePage() {
 
       const name = String(nameEl?.value || '').trim();
       if (!name) return alert('Provide a name for the catalogue item.');
+      const categoryId = String(createCategoryEl?.value || '').trim();
+      if (!categoryId) return alert('Create and select a catalogue category first.');
 
       const selections = gatherSelections();
 
@@ -263,6 +542,7 @@ function initCataloguePage() {
       try {
         const body = new URLSearchParams();
         body.append('name', name);
+        body.append('categoryId', categoryId);
         body.append('selections', JSON.stringify(selections));
         const baseUnit = cleanUnitName(baseUnitNameEl?.value || 'piece', 'piece');
         body.append('baseUnitName', baseUnit);
@@ -280,7 +560,6 @@ function initCataloguePage() {
         const j = await res.json().catch(() => null);
 
         if (res.status === 201 && j && j.material) {
-          insertRow(j.material);
           nameEl.value = '';
           if (baseUnitNameEl) baseUnitNameEl.value = 'piece';
           if (stockUnitsTableBody) {
@@ -289,6 +568,9 @@ function initCataloguePage() {
             seedDefaultUnitRows();
           }
           document.querySelectorAll(`${unitCheckboxSelector}:checked`).forEach(cb => cb.checked = false);
+          await refreshCategories({ filterValue: categoryId, createValue: categoryId });
+          if (categoryFilter) categoryFilter.value = categoryId;
+          await loadCatalogue(categoryId);
         } else if (res.status === 409) {
           alert((j && j.error) ? j.error : 'Duplicate catalogue');
         } else {
@@ -298,7 +580,7 @@ function initCataloguePage() {
         console.error(err);
         alert('Failed to create catalogue');
       } finally {
-        createBtn.disabled = false;
+        createBtn.disabled = catalogueCategories.length === 0;
         if (createSpinner) createSpinner.style.display = 'none';
       }
     });
@@ -314,6 +596,7 @@ function initCataloguePage() {
       ev.preventDefault();
       const id = String(unitMaterialId?.value || '').trim();
       const name = String(unitMaterialNameInput?.value || '').trim();
+      const categoryId = String(unitMaterialCategory?.value || 'uncategorized');
       const baseUnit = cleanUnitName(unitBaseName?.value || 'piece', 'piece');
       if (!id) return;
       if (!name) return alert('Provide a name for the catalogue item.');
@@ -324,6 +607,7 @@ function initCataloguePage() {
       try {
         const body = new URLSearchParams();
         body.append('name', name);
+        body.append('categoryId', categoryId);
         body.append('baseUnitName', baseUnit);
         body.append('stockUnits', JSON.stringify(gatherStockUnits(unitConfigRows, baseUnit)));
 
@@ -337,8 +621,10 @@ function initCataloguePage() {
         });
         const j = await res.json().catch(() => null);
         if (res.ok && j && j.material) {
-          updateCatalogueRow(id, j.material);
           bootstrap.Modal.getInstance(unitConfigModal)?.hide();
+          const currentFilter = String(categoryFilter?.value || 'uncategorized');
+          await refreshCategories({ filterValue: currentFilter, createValue: createCategoryEl?.value || '' });
+          await loadCatalogue(currentFilter);
         } else {
           alert((j && j.error) ? j.error : 'Failed to save catalogue item');
         }
@@ -360,8 +646,9 @@ function initCataloguePage() {
       });
       const j = await res.json().catch(() => null);
       if (res.ok) {
-        const tr = document.querySelector(`tr[data-id="${id}"]`);
-        tr?.parentNode?.removeChild(tr);
+        const currentFilter = String(categoryFilter?.value || 'uncategorized');
+        await refreshCategories({ filterValue: currentFilter });
+        await loadCatalogue(currentFilter);
       } else {
         alert((j && j.error) ? j.error : 'Failed to delete');
       }
@@ -380,6 +667,18 @@ function initCataloguePage() {
       bootstrap.Modal.getInstance(document.getElementById('deleteConfirmModal'))?.hide();
     });
   }
+
+  refreshCategories().then(() => {
+    const current = String(categoryFilter?.value || 'uncategorized');
+    const count = catalogueTableBody
+      ? catalogueTableBody.querySelectorAll('tr[data-id]').length
+      : 0;
+    if (catalogueFilterStatus) {
+      catalogueFilterStatus.textContent = `${categoryLabel(current)}: ${count} item${count === 1 ? '' : 's'}`;
+    }
+  }).catch(err => {
+    console.error('Failed to initialize catalogue categories', err);
+  });
 }
 
 if (document.readyState === 'loading') {

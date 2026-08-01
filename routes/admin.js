@@ -7,6 +7,7 @@ const subUnitController = require('../controllers/subunit');
 const serviceController = require('../controllers/service');
 const priceController = require('../controllers/price');
 const materialsController = require('../controllers/materials');
+const catalogueCategoriesController = require('../controllers/catalogueCategories');
 router.get('/', (req, res) => res.redirect('/login'));
 const printersController = require('../controllers/printers');
 const usersController = require('../controllers/users');
@@ -87,6 +88,11 @@ router.delete('/service-categories/:id', ensureAdmin, serviceCategoryController.
 // Catalogue (Materials)
 // ----------------------
 router.get('/catalogue', ensureAdmin, materialsController.cataloguePage);
+
+router.get('/catalogue-categories', ensureAdmin, catalogueCategoriesController.list);
+router.post('/catalogue-categories', ensureAdmin, catalogueCategoriesController.create);
+router.put('/catalogue-categories/:id', ensureAdmin, catalogueCategoriesController.update);
+router.delete('/catalogue-categories/:id', ensureAdmin, catalogueCategoriesController.remove);
 
 // JSON catalogue endpoints (keep same /materials path so existing JS works easily)
 router.get('/materials', ensureAdmin, materialsController.listCatalogues);

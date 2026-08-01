@@ -14,19 +14,34 @@ block content
 
   .card.mb-4.dark-surface
     .card-body.dark-card-body
+      .row.g-3.align-items-end.mb-3
+        .col-12.col-md-7.col-lg-5
+          label.form-label.text-muted-light(for='catalogueCategoryFilter') Display category
+          select.form-select#catalogueCategoryFilter
+            each category in (categories || [])
+              option(value=category._id selected=String(selectedCategoryId) === String(category._id))= category.name
+            option(value='uncategorized' selected=selectedCategoryId === 'uncategorized') Uncategorized (#{Number(uncategorizedCount || 0)})
+        .col-12.col-md-auto
+          button.btn.btn-outline-light-custom.w-100(type='button', id='manageCatalogueCategoriesBtn')
+            i.bi.bi-folder-plus.me-1
+            | Manage categories
+      .d-flex.align-items-center.gap-2.mb-3
+        span.spinner-border.spinner-border-sm.text-info#catalogueListSpinner(style='display:none;' aria-hidden='true')
+        small.text-muted-light#catalogueFilterStatus Catalogue items in the selected category
       .table-responsive
-        table.table.table-striped.table-hover.table-sm
+        table.table.table-striped.table-hover.table-sm#catalogueItemsTable
           thead
             tr
               th.text-white Material
               th.text-muted-light Stock units
               th.text-center.text-muted-light Actions
-          tbody
+          tbody#catalogueTableBody
             if materials && materials.length
               each m in materials
                 - const mUnits = (m.stockUnits && m.stockUnits.length) ? m.stockUnits : [{ name: (m.baseUnitName || 'piece'), factor: 1, isBase: true }];
                 - const unitSummary = mUnits.map(u => Number(u.factor || 1) === 1 ? `${u.name} (base)` : `${u.name} = ${u.factor} ${m.baseUnitName || 'piece'}`).join(' | ');
-                tr(data-id=m._id)
+                - const materialCategoryId = m.category && m.category._id ? String(m.category._id) : 'uncategorized';
+                tr(data-id=m._id data-category-id=materialCategoryId)
                   td
                     strong.text-white.catalogue-material-name= m.name
                     if m.selections && m.selections.length
@@ -44,21 +59,32 @@ block content
                       button.btn.btn-sm.btn-outline-light-custom.configure-units-btn(
                         data-id=m._id
                         data-name=m.name
+                        data-category-id=materialCategoryId
                         data-base-unit=(m.baseUnitName || 'piece')
                         data-units=JSON.stringify(mUnits)
                         type='button'
                       ) Edit
                       button.btn.btn-sm.btn-outline-danger.delete-catalogue-btn(data-id=m._id type='button') Delete
             else
-              tr
-                td.text-muted(colspan='3') No catalogue items defined.
+              tr#catalogueEmptyRow
+                td.text-muted(colspan='3') No catalogue items in this category.
 
   // Create Catalogue
   .card.mb-4.dark-surface
     .card-body.dark-card-body
       h5.mb-3.text-white Create catalogue item (global)
       form#create-catalogue-form(class='row g-3' novalidate)
-        .col-12.col-md-6
+        .col-12.col-md-4
+          label.form-label(for='cuCategory') Category
+          select.form-select#cuCategory(required disabled=!(categories && categories.length))
+            if categories && categories.length
+              each category in categories
+                option(value=category._id selected=String(selectedCategoryId) === String(category._id))= category.name
+            else
+              option(value='') Create a category first
+          small.text-muted-light Catalogue items must be assigned to a category.
+
+        .col-12.col-md-8
           label.form-label(for='cuName') Name
           input.form-control(type='text', id='cuName', placeholder='e.g. A3 STD paper' required)
 
@@ -114,7 +140,7 @@ block content
                                   span= su.name
 
         .col-12.text-end
-          button.btn.btn-primary(type='button' id='createCatalogueBtn')
+          button.btn.btn-primary(type='button' id='createCatalogueBtn' disabled=!(categories && categories.length))
             span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='createCatalogueSpinner')
             | Create
 
@@ -132,6 +158,46 @@ block content
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-outline-danger(type='button', id='confirmDeleteBtn') Yes, delete
 
+  // Catalogue category manager
+  .modal.fade(id='catalogueCategoryModal', tabindex='-1', aria-hidden='true')
+    .modal-dialog.modal-dialog-centered.modal-lg
+      .modal-content.dark-surface
+        .modal-header
+          .d-flex.flex-column
+            h5.modal-title.text-white Catalogue categories
+            small.text-muted-light Create categories before assigning catalogue items.
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          .row.g-2.align-items-end
+            .col-12.col-md
+              label.form-label.text-muted-light(for='newCatalogueCategoryName') New category name
+              input.form-control#newCatalogueCategoryName(type='text', maxlength='100', placeholder='e.g. Papers')
+            .col-12.col-md-auto
+              button.btn.btn-primary.w-100#createCatalogueCategoryBtn(type='button')
+                span.spinner-border.spinner-border-sm.me-2#createCatalogueCategorySpinner(style='display:none;')
+                | Create category
+          hr.my-4
+          .d-flex.justify-content-between.align-items-center.mb-2
+            h6.text-white.mb-0 Existing categories
+            small.text-muted-light#uncategorizedCategoryCount #{Number(uncategorizedCount || 0)} uncategorized
+          .d-grid.gap-2#catalogueCategoryManagerList
+            if categories && categories.length
+              each category in categories
+                .catalogue-category-manager-row.border.rounded.p-2(data-category-id=category._id)
+                  .row.g-2.align-items-center
+                    .col-12.col-md
+                      input.form-control.form-control-sm.catalogue-category-name(type='text', value=category.name, maxlength='100')
+                    .col-auto
+                      span.badge.bg-info.text-dark.catalogue-category-count 0 items
+                    .col-auto
+                      button.btn.btn-sm.btn-outline-light-custom.save-catalogue-category-btn(type='button') Save
+                    .col-auto
+                      button.btn.btn-sm.btn-outline-danger.delete-catalogue-category-btn(type='button') Delete
+            else
+              p.text-muted-light.mb-0#noCatalogueCategoriesMessage No categories created yet.
+          .alert.alert-info.mt-3.mb-0.py-2
+            small To move existing items, select "Uncategorized" in the catalogue filter, click Edit on an item, then choose its category.
+
   // Catalogue edit modal
   .modal.fade(id='unitConfigModal', tabindex='-1', aria-hidden='true')
     .modal-dialog.modal-dialog-centered.modal-lg
@@ -142,10 +208,17 @@ block content
         .modal-body.dark-card-body
           input(type='hidden', id='unitMaterialId')
           .row.g-3.mb-3
-            .col-12.col-md-6
+            .col-12.col-md-4
               label.form-label.text-muted-light(for='unitMaterialNameInput') Catalogue name
               input.form-control#unitMaterialNameInput(type='text', required)
-            .col-12.col-md-6
+            .col-12.col-md-4
+              label.form-label.text-muted-light(for='unitMaterialCategory') Category
+              select.form-select#unitMaterialCategory
+                option(value='uncategorized') Uncategorized
+                each category in (categories || [])
+                  option(value=category._id)= category.name
+              small.text-muted-light Use this to move existing items.
+            .col-12.col-md-4
               label.form-label.text-muted-light(for='unitBaseName') Smallest stock unit
               input.form-control#unitBaseName(type='text', value='piece', required)
               small.text-muted-light Orders consume stock in this smallest unit.
