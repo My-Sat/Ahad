@@ -1579,6 +1579,7 @@ function discountAppliedLabel(order) {
     const factor = Math.max(1, Math.floor(Number((it && it.factor) || 1)));
     const usesFactorPricing = !!(it && (it.printer || Number(it.outsourcedTotal || 0) > 0 || factor > 1));
     const displayQty = usesFactorPricing ? (baseSheets * factor) : baseSheets;
+    const displayPages = usesFactorPricing ? Math.max(0, Math.floor(rawPages * factor)) : null;
     const unit = Number((it && it.unitPrice) || 0);
     const subtotal = Number(
       (it && (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))))
@@ -1591,7 +1592,7 @@ function discountAppliedLabel(order) {
       selectionLabel: isBooklet ? `${selLabel} (Booklet)` : selLabel,
       qtyLabel: usesFactorPricing ? 'Sheets' : 'QTY',
       qty: displayQty,
-      pages: usesFactorPricing ? rawPages : null,
+      pages: displayPages,
       unit,
       subtotal
     };

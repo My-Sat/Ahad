@@ -2288,14 +2288,16 @@ function addLargeFormatToCart({
   // printer service:
   // - QTY column shows factor (copies)
   // - Sheets column should be effective sheets = effectiveQty * factor
-  // - Pages column shows raw pages entered
+  // - Pages column shows total raw pages = pages entered * QTY
   const f = it.factor ? Number(it.factor) : 1;
+  const qtyFactor = isNaN(f) ? 1 : f;
   const effectiveQty = Number(it.pages) || 0;           // this is already "effectiveQty" (FB aware)
-  const sheets = Math.max(0, Math.floor(effectiveQty * (isNaN(f) ? 1 : f)));
+  const sheets = Math.max(0, Math.floor(effectiveQty * qtyFactor));
+  const totalPages = Math.max(0, Math.floor((Number(it.pagesOriginal) || 0) * qtyFactor));
 
-  qtyCell = String(isNaN(f) ? 1 : f);
+  qtyCell = String(qtyFactor);
   factorCell = String(sheets);                          // ✅ Sheets
-  pagesCell = String(it.pagesOriginal);                 // raw pages
+  pagesCell = String(totalPages || it.pagesOriginal || ''); // entered pages × QTY
 } else {
         // normal service
         qtyCell = String(it.pages);
@@ -2408,6 +2410,9 @@ function addLargeFormatToCart({
     const f = usesFactorPricing ? (Number(it.factor || 1) || 1) : 1;
     const effectiveQty = Number((it && it.pages) || 0) || 0;
     const sheets = usesFactorPricing ? Math.max(0, Math.floor(effectiveQty * f)) : '';
+    const totalPages = usesFactorPricing
+      ? Math.max(0, Math.floor((Number((it && it.pagesOriginal) || 0) || 0) * f))
+      : '';
     const noteParts = [];
     if (it && it.booklet) noteParts.push('Booklet');
     if (it && it.spoiled && Number(it.spoiled) > 0) noteParts.push(`Spoiled: ${Number(it.spoiled)}`);
@@ -2415,7 +2420,7 @@ function addLargeFormatToCart({
     return {
       description: cartDisplaySelectionLabel(it) || '',
       service: (it && it.serviceName) || '',
-      pages: usesFactorPricing ? String((it && it.pagesOriginal) || '') : '',
+      pages: usesFactorPricing ? String(totalPages || (it && it.pagesOriginal) || '') : '',
       qty: usesFactorPricing ? String(f) : String((it && it.pages) || ''),
       sheets: sheets === '' ? '' : String(sheets),
       unitPrice: Number((it && it.unitPrice) || 0),
@@ -4531,18 +4536,36 @@ function renderOrdersList(orders) {
       let html = '';
       if (o.items && o.items.length) {
         html += `<div class="table-responsive"><table class="table table-sm table-borderless mb-0"><thead><tr>
-          <th>Selection</th><th class="text-center">QTY</th><th class="text-end">Unit</th><th class="text-end">Subtotal</th><th class="text-center">Printer</th>
+          <th>Selection</th><th class="text-center">Details</th><th class="text-end">Unit</th><th class="text-end">Subtotal</th><th class="text-center">Printer</th>
         </tr></thead><tbody>`;
 
         o.items.forEach(it => {
           const rawLabel = it.selectionLabel || '';
+          const isLargeFormat = String((it && it.pricingMode) || '').toLowerCase() === 'large_format';
           const selLabel = subUnitsOnlyFromLabel(rawLabel) || (it.selections && it.selections.length ? it.selections.map(s => (s.subUnit ? (s.subUnit.name || String(s.subUnit)) : '')).join(', ') : '(no label)');
           const isBooklet = (it.booklet === true) || (typeof rawLabel === 'string' && rawLabel.includes('(Booklet)'));
           const isFb = isBooklet || (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
           const cleanLabel = selLabel.replace(/\s*\((F\/B|Booklet)\)\s*$/i, '').trim();
 
           // IMPORTANT: display the stored subtotal and pages — do not recompute based on pages only.
-          const qty = (typeof it.pages !== 'undefined' && it.pages !== null) ? String(it.pages) : '1';
+          const rawPages = Number((it && it.pages) || 1);
+          const factor = Math.max(1, Math.floor(Number((it && it.factor) || 1)));
+          const effectiveQty = (typeof it.effectiveQty !== 'undefined' && it.effectiveQty !== null)
+            ? Number(it.effectiveQty)
+            : (isBooklet ? Math.ceil(rawPages / 4) : (isFb ? Math.ceil(rawPages / 2) : rawPages));
+          const usesFactorPricing = !!(it && (it.printer || Number(it.outsourcedTotal || 0) > 0 || factor > 1));
+          let detailsHtml = '';
+          if (isLargeFormat) {
+            const lfQty = Math.max(1, Math.floor(Number((it && it.largeFormatQty) || factor || 1)));
+            const sqFt = Number((it && it.largeFormatSquareFeet) || (it && it.effectiveQty) || 0);
+            detailsHtml = `QTY: ${escapeHtml(String(lfQty))}<br><small>${escapeHtml(formatCompactNumber(sqFt))} sq ft</small>`;
+          } else if (usesFactorPricing) {
+            const totalPages = Math.max(0, Math.floor(rawPages * factor));
+            const totalSheets = Math.max(0, Math.floor((Number(effectiveQty) || 0) * factor));
+            detailsHtml = `Pages: ${escapeHtml(String(totalPages))}<br><small>QTY: ${escapeHtml(String(factor))} | Sheets: ${escapeHtml(String(totalSheets))}</small>`;
+          } else {
+            detailsHtml = `QTY: ${escapeHtml(String(rawPages))}`;
+          }
           const unitPrice = (typeof it.unitPrice === 'number' || !isNaN(Number(it.unitPrice))) ? formatMoney(it.unitPrice) : (it.unitPrice || '');
           const subtotal = (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))) ? formatMoney(it.subtotal) : (it.subtotal || '');
           const printerStr = it.printer ? escapeHtml(String(it.printer)) : '-';
@@ -4551,7 +4574,7 @@ function renderOrdersList(orders) {
 
           html += `<tr>
             <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;">${labelHtml}</td>
-            <td class="text-center">${escapeHtml(qty)}</td>
+            <td class="text-center">${detailsHtml}</td>
             <td class="text-end">GH₵ ${escapeHtml(unitPrice)}</td>
             <td class="text-end">GH₵ ${escapeHtml(subtotal)}</td>
             <td class="text-center">${printerStr}</td>
