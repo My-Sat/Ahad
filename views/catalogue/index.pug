@@ -28,7 +28,7 @@ block content
                 - const unitSummary = mUnits.map(u => Number(u.factor || 1) === 1 ? `${u.name} (base)` : `${u.name} = ${u.factor} ${m.baseUnitName || 'piece'}`).join(' | ');
                 tr(data-id=m._id)
                   td
-                    strong.text-white= m.name
+                    strong.text-white.catalogue-material-name= m.name
                     if m.selections && m.selections.length
                       br
                       small.text-muted-light
@@ -47,7 +47,7 @@ block content
                         data-base-unit=(m.baseUnitName || 'piece')
                         data-units=JSON.stringify(mUnits)
                         type='button'
-                      ) Units
+                      ) Edit
                       button.btn.btn-sm.btn-outline-danger.delete-catalogue-btn(data-id=m._id type='button') Delete
             else
               tr
@@ -132,19 +132,26 @@ block content
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-outline-danger(type='button', id='confirmDeleteBtn') Yes, delete
 
-  // Unit config modal
+  // Catalogue edit modal
   .modal.fade(id='unitConfigModal', tabindex='-1', aria-hidden='true')
     .modal-dialog.modal-dialog-centered.modal-lg
       .modal-content.dark-surface
         .modal-header
-          h5.modal-title.text-white Configure stock units
+          h5.modal-title.text-white Edit catalogue item
           button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
         .modal-body.dark-card-body
           input(type='hidden', id='unitMaterialId')
-          .mb-3
-            label.form-label.text-muted-light(for='unitBaseName') Smallest stock unit
-            input.form-control#unitBaseName(type='text', value='piece', required)
-            small.text-muted-light#unitMaterialName
+          .row.g-3.mb-3
+            .col-12.col-md-6
+              label.form-label.text-muted-light(for='unitMaterialNameInput') Catalogue name
+              input.form-control#unitMaterialNameInput(type='text', required)
+            .col-12.col-md-6
+              label.form-label.text-muted-light(for='unitBaseName') Smallest stock unit
+              input.form-control#unitBaseName(type='text', value='piece', required)
+              small.text-muted-light Orders consume stock in this smallest unit.
+          .mb-2
+            h6.text-white.mb-1 Stock purchase units
+            small.text-muted-light Configure purchase units for this catalogue item.
           .table-responsive
             table.table.table-sm.align-middle#unitConfigTable
               thead
@@ -160,6 +167,6 @@ block content
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel
           button.btn.btn-primary(type='button', id='saveUnitConfigBtn')
             span.spinner-border.spinner-border-sm.me-2(style='display:none;' id='saveUnitConfigSpinner')
-            | Save units
+            | Save changes
   // Keep Catalogue page scripts inside #main-content so dashboard_nav AJAX loads them
   script(src='/javascripts/catalogue.js')

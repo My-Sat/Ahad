@@ -232,9 +232,25 @@ exports.updateCatalogueUnits = async (req, res) => {
     const mat = await Material.findById(id);
     if (!mat) return res.status(404).json({ error: 'Catalogue not found' });
 
+    const nextName = String(
+      typeof req.body.name !== 'undefined' ? req.body.name : mat.name
+    ).trim();
+    if (!nextName) return res.status(400).json({ error: 'Name required' });
+
     const baseUnitName = String(req.body.baseUnitName || 'piece').trim() || 'piece';
     const stockUnits = parseStockUnits(req.body.stockUnits, baseUnitName);
+    const isStandalone = !(Array.isArray(mat.selections) && mat.selections.length);
+    const nextKey = isStandalone ? standaloneMaterialKey(nextName) : mat.key;
 
+    if (nextKey && String(nextKey) !== String(mat.key || '')) {
+      const duplicate = await Material.findOne({ _id: { $ne: mat._id }, key: nextKey }).select('_id').lean();
+      if (duplicate) {
+        return res.status(409).json({ error: 'A catalogue material with this name already exists' });
+      }
+      mat.key = nextKey;
+    }
+
+    mat.name = nextName;
     mat.baseUnitName = baseUnitName;
     mat.stockUnits = stockUnits;
     await mat.save();
@@ -246,6 +262,9 @@ exports.updateCatalogueUnits = async (req, res) => {
     return res.json({ ok: true, material: populated });
   } catch (err) {
     console.error('materials.updateCatalogueUnits error', err);
+    if (err && err.code === 11000) {
+      return res.status(409).json({ error: 'A matching catalogue material already exists' });
+    }
     return res.status(500).json({ error: err.message || 'Error updating catalogue units' });
   }
 };

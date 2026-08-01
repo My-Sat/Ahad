@@ -15,7 +15,7 @@ function initCataloguePage() {
 
   const unitConfigModal = document.getElementById('unitConfigModal');
   const unitMaterialId = document.getElementById('unitMaterialId');
-  const unitMaterialName = document.getElementById('unitMaterialName');
+  const unitMaterialNameInput = document.getElementById('unitMaterialNameInput');
   const unitBaseName = document.getElementById('unitBaseName');
   const unitConfigRows = document.getElementById('unitConfigRows');
   const addUnitConfigRowBtn = document.getElementById('addUnitConfigRowBtn');
@@ -175,7 +175,7 @@ function initCataloguePage() {
       const units = parseJsonAttr(btn.dataset.units, [{ name: base, factor: 1, isBase: true }]);
 
       if (unitMaterialId) unitMaterialId.value = id;
-      if (unitMaterialName) unitMaterialName.textContent = name;
+      if (unitMaterialNameInput) unitMaterialNameInput.value = name;
       if (unitBaseName) unitBaseName.value = base;
       if (unitConfigRows) {
         unitConfigRows.innerHTML = '';
@@ -189,17 +189,21 @@ function initCataloguePage() {
     });
   }
 
-  function updateCatalogueRowUnits(id, material) {
+  function updateCatalogueRow(id, material) {
     const tr = document.querySelector(`tr[data-id="${id}"]`);
     if (!tr || !material) return;
+    const name = String(material.name || '').trim();
     const base = cleanUnitName(material.baseUnitName, 'piece');
     const units = Array.isArray(material.stockUnits) && material.stockUnits.length
       ? material.stockUnits
       : [{ name: base, factor: 1, isBase: true }];
+    const nameEl = tr.querySelector('.catalogue-material-name');
+    if (nameEl) nameEl.textContent = name;
     const summary = tr.querySelector('.catalogue-unit-summary');
     if (summary) summary.textContent = unitSummary(base, units);
     const btn = tr.querySelector('.configure-units-btn');
     if (btn) {
+      btn.dataset.name = name;
       btn.dataset.baseUnit = base;
       btn.dataset.units = JSON.stringify(units);
     }
@@ -223,7 +227,7 @@ function initCataloguePage() {
       : [{ name: baseUnit, factor: 1, isBase: true }];
     tr.innerHTML = `
       <td>
-        <strong class="text-white">${escapeHtml(mat.name)}</strong>
+        <strong class="text-white catalogue-material-name">${escapeHtml(mat.name)}</strong>
         <br/><small class="text-muted-light">${labels ? escapeHtml(labels) : 'Standalone material'}</small>
       </td>
       <td>
@@ -231,7 +235,7 @@ function initCataloguePage() {
       </td>
       <td class="text-center">
         <div class="d-inline-flex gap-2 justify-content-center flex-wrap">
-          <button class="btn btn-sm btn-outline-light-custom configure-units-btn" data-id="${mat._id}" data-name="${escapeHtml(mat.name)}" data-base-unit="${escapeHtml(baseUnit)}" data-units="${escapeHtml(JSON.stringify(units))}" type="button">Units</button>
+          <button class="btn btn-sm btn-outline-light-custom configure-units-btn" data-id="${mat._id}" data-name="${escapeHtml(mat.name)}" data-base-unit="${escapeHtml(baseUnit)}" data-units="${escapeHtml(JSON.stringify(units))}" type="button">Edit</button>
           <button class="btn btn-sm btn-outline-danger delete-catalogue-btn" data-id="${mat._id}" type="button">Delete</button>
         </div>
       </td>
@@ -309,14 +313,17 @@ function initCataloguePage() {
     saveUnitConfigBtn.addEventListener('click', async function (ev) {
       ev.preventDefault();
       const id = String(unitMaterialId?.value || '').trim();
+      const name = String(unitMaterialNameInput?.value || '').trim();
       const baseUnit = cleanUnitName(unitBaseName?.value || 'piece', 'piece');
       if (!id) return;
+      if (!name) return alert('Provide a name for the catalogue item.');
 
       saveUnitConfigBtn.disabled = true;
       if (saveUnitConfigSpinner) saveUnitConfigSpinner.style.display = 'inline-block';
 
       try {
         const body = new URLSearchParams();
+        body.append('name', name);
         body.append('baseUnitName', baseUnit);
         body.append('stockUnits', JSON.stringify(gatherStockUnits(unitConfigRows, baseUnit)));
 
@@ -330,14 +337,14 @@ function initCataloguePage() {
         });
         const j = await res.json().catch(() => null);
         if (res.ok && j && j.material) {
-          updateCatalogueRowUnits(id, j.material);
+          updateCatalogueRow(id, j.material);
           bootstrap.Modal.getInstance(unitConfigModal)?.hide();
         } else {
-          alert((j && j.error) ? j.error : 'Failed to save units');
+          alert((j && j.error) ? j.error : 'Failed to save catalogue item');
         }
       } catch (err) {
         console.error(err);
-        alert('Failed to save units');
+        alert('Failed to save catalogue item');
       } finally {
         saveUnitConfigBtn.disabled = false;
         if (saveUnitConfigSpinner) saveUnitConfigSpinner.style.display = 'none';
