@@ -276,7 +276,7 @@
   let cart = [];   // cart lines: either normal item or book line
                    // normal: { isBook:false, serviceId, serviceName, priceRuleId, selectionLabel, invoiceLabelOverride, unitPrice, pages, pagesOriginal, subtotal, fb, printerId, spoiled, outsourced, outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount, outsourcedTotal }
                    // large : { isBook:false, isLargeFormat:true, serviceId, serviceName, largeFormatLength, largeFormatBreadth, largeFormatUnit, largeFormatQty, largeFormatSquareFeet, unitPrice, subtotal, printerId }
-                   // book  : { isBook:true, bookId, bookName, unitPrice, qty, subtotal, bookItems: [ { serviceId, priceRuleId, pagesOriginal, fb, printerId, spoiled, unitPrice, subtotal, selectionLabel } ] }
+                   // book  : { isBook:true, bookId, bookName, unitPrice, qty, subtotal, bookItems: [ { serviceId, priceRuleId, pagesOriginal, fb, booklet, printerId, spoiled, unitPrice, subtotal, selectionLabel } ] }
   let serviceRequiresPrinter = false;
   let printers = []; // list of printers for the currently loaded service
   let books = [];    // list of available books (basic metadata)
@@ -1993,6 +1993,7 @@ function renderLargeFormatInputs(serviceId, largeFormat) {
           priceRuleId: bi.priceRule,
           pages: bi.pages,
           fb: !!bi.fb,
+          booklet: !!bi.booklet,
           printer: bi.printer || null,
           spoiled: bi.spoiled || 0,
           subtotal: Number(bi.subtotal || 0)
@@ -2030,6 +2031,7 @@ function renderLargeFormatInputs(serviceId, largeFormat) {
         priceRuleId: it.priceRule,
         pagesOriginal: Number(it.pages || 1),
         fb: !!it.fb,
+        booklet: !!it.booklet,
         printerId: it.printer || null,
         spoiled: Number(it.spoiled || 0),
         unitPrice: Number(it.unitPrice || 0),
@@ -3907,20 +3909,24 @@ async function placeOrderFlow() {
 
     cart.forEach(line => {
       if (line.isBook) {
-        // expand to underlying rules. Multiply raw pages by book quantity
+        // Expand the compound service into its underlying price rules.
         (line.bookItems || []).forEach(bi => {
           const rawPages =
             (typeof bi.pagesOriginal === 'number'
               ? bi.pagesOriginal
               : Number(bi.pagesOriginal || bi.pages || 1));
 
-          const pagesToSend = rawPages * Number(line.qty || 1);
+          const bookQty = Math.max(1, Math.floor(Number(line.qty || 1)));
+          const printerBound = !!bi.printerId;
+          // Printer-bound components keep their per-copy pages so booklet/F/B
+          // rounding happens per compound service, then QTY multiplies the result.
+          const pagesToSend = printerBound ? rawPages : (rawPages * bookQty);
 
           items.push({
             serviceId: bi.serviceId,
             priceRuleId: bi.priceRuleId,
             pages: pagesToSend,
-            factor: bi.factor || undefined,
+            factor: printerBound ? bookQty : (bi.factor || undefined),
             fb: !!bi.fb,
             booklet: !!(line.booklet || bi.booklet),
             printerId: bi.printerId || null,

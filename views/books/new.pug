@@ -53,7 +53,7 @@ block content
             .card.dark-surface
               .card-body.dark-card-body
                 h6.mb-2.text-white Price rules for selected service
-                p.text-muted-light.small Select a rule and configure Qty/Pages, F/B, printer (if required) then click Add to include in the book.
+                p.text-muted-light.small Select a rule and configure Qty/Pages, F/B or Booklet, printer (if required), then click Add to include it.
                 #pricesList
                   p.text-muted-light Select a service to load price rules.
 
@@ -97,7 +97,7 @@ block content
       let printers = [];
       let serviceRequiresPrinter = false;
       let prices = [];
-      let bookItems = []; // { priceRuleId, selectionLabel, unitPrice, pagesOriginal, pagesEffective, fb, printerId, spoiled, subtotal }
+      let bookItems = []; // { priceRuleId, selectionLabel, unitPrice, pagesOriginal, pagesEffective, fb, booklet, printerId, spoiled, subtotal }
 
       function escapeHtml(s) { if (s === undefined || s === null) return ''; return String(s).replace(/[&<>"'`=\/]/g, function (c){ return '&#'+c.charCodeAt(0)+';'; }); }
       function formatMoney(n) { return (Number(n)||0).toFixed(2); }
@@ -218,8 +218,9 @@ block content
       }
 
       // compute effective qty used for pricing/display (same logic as server)
-      function computeEffectiveQty(origPages, fb) {
+      function computeEffectiveQty(origPages, fb, booklet) {
         const p = Number(origPages) || 1;
+        if (booklet) return Math.ceil(p / 4);
         return fb ? Math.ceil(p / 2) : p;
       }
 
@@ -251,6 +252,7 @@ block content
 
           // F/B checkbox only when printer required
           let fbInput = null;
+          let bookletInput = null;
           if (serviceRequiresPrinter) {
             const fbWrap = document.createElement('div');
             fbWrap.className = 'form-check form-check-inline ms-1';
@@ -263,6 +265,25 @@ block content
             fbLabel.textContent = 'F/B';
             fbWrap.appendChild(fbLabel);
             mid.appendChild(fbWrap);
+
+            const bookletWrap = document.createElement('div');
+            bookletWrap.className = 'form-check form-check-inline ms-1';
+            bookletInput = document.createElement('input');
+            bookletInput.type = 'checkbox';
+            bookletInput.className = 'form-check-input booklet-checkbox';
+            bookletWrap.appendChild(bookletInput);
+            const bookletLabel = document.createElement('label');
+            bookletLabel.className = 'form-check-label small';
+            bookletLabel.textContent = 'Booklet';
+            bookletWrap.appendChild(bookletLabel);
+            mid.appendChild(bookletWrap);
+
+            bookletInput.addEventListener('change', function () {
+              if (bookletInput.checked) fbInput.checked = true;
+            });
+            fbInput.addEventListener('change', function () {
+              if (!fbInput.checked) bookletInput.checked = false;
+            });
           }
 
           // printer select if required
@@ -359,7 +380,10 @@ block content
         const pages = pagesInput && pagesInput.value ? Number(pagesInput.value) : 1;
 
         const fbCheckbox = row ? row.querySelector('.fb-checkbox') : null;
-        const fbChecked = fbCheckbox ? fbCheckbox.checked : false;
+        const bookletCheckbox = row ? row.querySelector('.booklet-checkbox') : null;
+        const bookletChecked = !!(bookletCheckbox && bookletCheckbox.checked);
+        if (bookletChecked && fbCheckbox) fbCheckbox.checked = true;
+        const fbChecked = bookletChecked || (fbCheckbox ? fbCheckbox.checked : false);
 
         let selectedPrinterId = null;
         if (serviceRequiresPrinter) {
@@ -384,7 +408,7 @@ block content
 
         // compute effective quantity & subtotal client-side (same logic as server)
         const origPages = Number(pages) || 1;
-        const effectiveQty = fbChecked ? Math.ceil(origPages/2) : origPages;
+        const effectiveQty = computeEffectiveQty(origPages, fbChecked, bookletChecked);
         const chosenPrice = (fbChecked && priceObj.price2 !== null && priceObj.price2 !== undefined) ? Number(priceObj.price2) : Number(priceObj.unitPrice);
         const subtotal = Number((chosenPrice * effectiveQty).toFixed(2));
 
@@ -397,6 +421,7 @@ block content
           pagesOriginal: origPages,
           pagesEffective: effectiveQty,
           fb: !!fbChecked,
+          booklet: bookletChecked,
           printerId: selectedPrinterId,
           spoiled: spoiled,
           subtotal: subtotal
@@ -404,7 +429,7 @@ block content
 
         renderBookItems();
         // clear inputs
-        try { if (pagesInput) pagesInput.value = ''; if (fbCheckbox) fbCheckbox.checked = false; const printerSelect = row ? row.querySelector('.printer-select') : null; if (printerSelect) printerSelect.selectedIndex = 0; if (spoiledInput) spoiledInput.value = ''; } catch(e){}
+        try { if (pagesInput) pagesInput.value = ''; if (fbCheckbox) fbCheckbox.checked = false; if (bookletCheckbox) bookletCheckbox.checked = false; const printerSelect = row ? row.querySelector('.printer-select') : null; if (printerSelect) printerSelect.selectedIndex = 0; if (spoiledInput) spoiledInput.value = ''; } catch(e){}
       });
 
       function renderBookItems() {
@@ -427,7 +452,7 @@ block content
 
           tr.innerHTML = `
             <td>
-              <div class="small text-muted-light">${escapeHtml(it.selectionLabel)}</div>
+              <div class="small text-muted-light">${escapeHtml(it.selectionLabel)}${it.booklet ? ' <span class="badge bg-info text-dark ms-1">Booklet</span>' : (it.fb ? ' <span class="badge bg-secondary ms-1">F/B</span>' : '')}</div>
             </td>
             <td class="text-center">${qtyHtml}</td>
             <td class="text-end">GH₵ ${formatMoney(it.unitPrice)}</td>
@@ -457,14 +482,17 @@ block content
 
           bookItems = (b.items || []).map(it => {
             const orig = Number(it.pages || 1);
-            const eff = it.fb ? Math.ceil(orig / 2) : orig;
+            const booklet = !!it.booklet;
+            const fb = booklet || !!it.fb;
+            const eff = computeEffectiveQty(orig, fb, booklet);
             return {
               priceRuleId: it.priceRule,
               selectionLabel: it.selectionLabel,
               unitPrice: it.unitPrice,
               pagesOriginal: orig,
               pagesEffective: eff,
-              fb: !!it.fb,
+              fb,
+              booklet,
               printerId: it.printer || null,
               spoiled: it.spoiled || 0,
               subtotal: it.subtotal
@@ -516,6 +544,7 @@ block content
             priceRuleId: it.priceRuleId,
             pages: it.pagesOriginal,
             fb: !!it.fb,
+            booklet: !!it.booklet,
             printerId: it.printerId || null,
             spoiled: it.spoiled || 0
           }))

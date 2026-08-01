@@ -24,9 +24,17 @@ function buildSelectionLabelFromPrice(pr) {
   }
 }
 
+function isTruthyFlag(value) {
+  return value === true || value === 1 || value === '1' || value === 'true';
+}
+
+function bookletSheetsFromPages(pages) {
+  return Math.max(1, Math.ceil(Math.max(1, Number(pages) || 1) / 4));
+}
+
 /**
  * Compute effective unit price & subtotal for an item spec:
- * itemSpec: { priceRuleId, pages (number), fb (bool), spoiled (int) }
+ * itemSpec: { priceRuleId, pages (number), fb (bool), booklet (bool), spoiled (int) }
  * Returns { unitPrice, effectiveQty, subtotal, selectionLabel, serviceId }
  */
 async function computeItemSnapshot(itemSpec) {
@@ -41,14 +49,15 @@ async function computeItemSnapshot(itemSpec) {
   if (!pr) throw new Error(`Price rule not found: ${itemSpec.priceRuleId}`);
 
   // choose unitPrice: use price2 if fb and price2 present; otherwise price
-  const wantFb = !!itemSpec.fb;
+  const booklet = isTruthyFlag(itemSpec.booklet);
+  const wantFb = booklet || isTruthyFlag(itemSpec.fb);
   let unitPrice = Number(pr.price || 0);
   if (wantFb && pr.price2 !== undefined && pr.price2 !== null) {
     unitPrice = Number(pr.price2);
   }
 
   const pages = Number(itemSpec.pages || 1) || 1;
-  const effectiveQty = wantFb ? Math.ceil(pages / 2) : pages;
+  const effectiveQty = booklet ? bookletSheetsFromPages(pages) : (wantFb ? Math.ceil(pages / 2) : pages);
   const spoiled = itemSpec.spoiled !== undefined && itemSpec.spoiled !== null ? Math.max(0, Math.floor(Number(itemSpec.spoiled) || 0)) : 0;
   const totalCount = Math.max(0, effectiveQty) + Math.max(0, spoiled);
   const subtotal = Number((unitPrice * effectiveQty).toFixed(2));
@@ -169,6 +178,7 @@ exports.get = async (req, res) => {
             priceRuleId: it.priceRule,
             pages: it.pages,
             fb: it.fb,
+            booklet: it.booklet,
             spoiled: it.spoiled
           });
           items.push(Object.assign({}, it, {
@@ -195,9 +205,9 @@ exports.get = async (req, res) => {
 
 /**
  * POST /books
- * Body: { name, items: [ { priceRuleId, pages, fb, printerId, spoiled } ] }
+ * Body: { name, items: [ { priceRuleId, pages, fb, booklet, printerId, spoiled } ] }
  * Computes per-item unitPrice & subtotal using ServicePrice server authoritative logic,
- * stores book with snapshots: service, priceRule, pages, fb, printer, spoiled, unitPrice, subtotal, selectionLabel
+ * stores book with snapshots: service, priceRule, pages, fb, booklet, printer, spoiled, unitPrice, subtotal, selectionLabel
  */
 exports.create = async (req, res) => {
   try {
@@ -224,18 +234,20 @@ exports.create = async (req, res) => {
       }
       // pages default to 1
       const pages = Math.max(1, Math.floor(Number(it.pages || 1)));
-      const fb = !!it.fb;
+      const booklet = isTruthyFlag(it.booklet);
+      const fb = booklet || isTruthyFlag(it.fb);
       const spoiled = it.spoiled !== undefined && it.spoiled !== null ? Math.max(0, Math.floor(Number(it.spoiled) || 0)) : 0;
       const printer = (it.printerId && ObjectId.isValid(it.printerId)) ? new ObjectId(it.printerId) : null;
 
       // compute snapshot using service_price authoritative logic
-      const snap = await computeItemSnapshot({ priceRuleId: it.priceRuleId, pages, fb, spoiled });
+      const snap = await computeItemSnapshot({ priceRuleId: it.priceRuleId, pages, fb, booklet, spoiled });
 
       const itemRecord = {
         service: snap.serviceId || null,
         priceRule: new ObjectId(it.priceRuleId),
         pages,
         fb,
+        booklet,
         printer: printer,
         spoiled,
         unitPrice: snap.unitPrice,
@@ -301,7 +313,8 @@ exports.update = async (req, res) => {
       }
 
       const pages = Math.max(1, Math.floor(Number(it.pages || 1)));
-      const fb = !!it.fb;
+      const booklet = isTruthyFlag(it.booklet);
+      const fb = booklet || isTruthyFlag(it.fb);
       const spoiled = Math.max(0, Math.floor(Number(it.spoiled || 0)));
       const printer = (it.printerId && ObjectId.isValid(it.printerId))
         ? new ObjectId(it.printerId)
@@ -311,6 +324,7 @@ exports.update = async (req, res) => {
         priceRuleId: it.priceRuleId,
         pages,
         fb,
+        booklet,
         spoiled
       });
 
@@ -319,6 +333,7 @@ exports.update = async (req, res) => {
         priceRule: new ObjectId(it.priceRuleId),
         pages,
         fb,
+        booklet,
         printer,
         spoiled,
         unitPrice: snap.unitPrice,

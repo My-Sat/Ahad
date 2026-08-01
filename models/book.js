@@ -14,6 +14,9 @@ const BookItemSchema = new mongoose.Schema({
   // whether this selection used front+back pricing
   fb: { type: Boolean, default: false },
 
+  // booklet imposes two document pages per printed face and forces F/B mode
+  booklet: { type: Boolean, default: false },
+
   // optional printer used for this item (if applicable)
   printer: { type: mongoose.Schema.Types.ObjectId, ref: 'Printer', default: null },
 

@@ -161,12 +161,13 @@ function initBooksListPage() {
         const rows = (book.items || []).map((it, idx) => {
           const selLabel = it.selectionLabel || (it.selections && it.selections.length ? it.selections.map(s => (s.subUnit ? (s.subUnit.name || String(s.subUnit)) : '')).join(', ') : '(no label)');
           const pagesOrig = Number(it.pages || 1);
-          const isFb = !!it.fb;
-          const effective = isFb ? Math.ceil(pagesOrig / 2) : pagesOrig;
+          const isBooklet = !!it.booklet;
+          const isFb = isBooklet || !!it.fb;
+          const effective = isBooklet ? Math.ceil(pagesOrig / 4) : (isFb ? Math.ceil(pagesOrig / 2) : pagesOrig);
           const unit = (typeof it.unitPrice !== 'undefined' && it.unitPrice !== null) ? Number(it.unitPrice) : '';
           const subtotal = (typeof it.subtotal !== 'undefined' && it.subtotal !== null) ? Number(it.subtotal) : (unit ? (unit * effective) : '');
           return `<tr>
-              <td style="min-width:280px">${escapeHtml(selLabel)}${isFb ? ' <span class="badge bg-secondary ms-2">F/B</span>' : ''}</td>
+              <td style="min-width:280px">${escapeHtml(selLabel)}${isBooklet ? ' <span class="badge bg-info text-dark ms-2">Booklet</span>' : (isFb ? ' <span class="badge bg-secondary ms-2">F/B</span>' : '')}</td>
               <td class="text-center">${escapeHtml(String(effective))}${pagesOrig !== effective ? ` <small class="text-muted">(orig ${pagesOrig})</small>` : ''}</td>
               <td class="text-end">GH₵ ${unit ? unit.toFixed(2) : '-'}</td>
               <td class="text-end">GH₵ ${subtotal ? Number(subtotal).toFixed(2) : '-'}</td>
