@@ -53,7 +53,7 @@ block content
             .card.dark-surface
               .card-body.dark-card-body
                 h6.mb-2.text-white Price rules for selected service
-                p.text-muted-light.small Select a rule and configure Qty/Pages, F/B or Booklet, printer (if required), then click Add to include it.
+                p.text-muted-light.small Select a rule and configure Qty/Pages, Print Mode, printer (if required), then click Add to include it.
                 #pricesList
                   p.text-muted-light Select a service to load price rules.
 
@@ -250,40 +250,19 @@ block content
           input.style.width = '90px';
           mid.appendChild(input);
 
-          // F/B checkbox only when printer required
-          let fbInput = null;
-          let bookletInput = null;
+          // Compact print mode selector for printer-required services.
+          let printModeSelect = null;
           if (serviceRequiresPrinter) {
-            const fbWrap = document.createElement('div');
-            fbWrap.className = 'form-check form-check-inline ms-1';
-            fbInput = document.createElement('input');
-            fbInput.type = 'checkbox';
-            fbInput.className = 'form-check-input fb-checkbox';
-            fbWrap.appendChild(fbInput);
-            const fbLabel = document.createElement('label');
-            fbLabel.className = 'form-check-label small';
-            fbLabel.textContent = 'F/B';
-            fbWrap.appendChild(fbLabel);
-            mid.appendChild(fbWrap);
-
-            const bookletWrap = document.createElement('div');
-            bookletWrap.className = 'form-check form-check-inline ms-1';
-            bookletInput = document.createElement('input');
-            bookletInput.type = 'checkbox';
-            bookletInput.className = 'form-check-input booklet-checkbox';
-            bookletWrap.appendChild(bookletInput);
-            const bookletLabel = document.createElement('label');
-            bookletLabel.className = 'form-check-label small';
-            bookletLabel.textContent = 'Booklet';
-            bookletWrap.appendChild(bookletLabel);
-            mid.appendChild(bookletWrap);
-
-            bookletInput.addEventListener('change', function () {
-              if (bookletInput.checked) fbInput.checked = true;
-            });
-            fbInput.addEventListener('change', function () {
-              if (!fbInput.checked) bookletInput.checked = false;
-            });
+            printModeSelect = document.createElement('select');
+            printModeSelect.className = 'form-select form-select-sm print-mode-select';
+            printModeSelect.style.width = '116px';
+            printModeSelect.setAttribute('aria-label', 'Print mode');
+            printModeSelect.innerHTML = `
+              <option value="single">Single Side</option>
+              <option value="fb">F/B</option>
+              <option value="booklet">Booklet</option>
+            `;
+            mid.appendChild(printModeSelect);
           }
 
           // printer select if required
@@ -379,11 +358,10 @@ block content
         const pagesInput = row ? row.querySelector('.pages-input') : null;
         const pages = pagesInput && pagesInput.value ? Number(pagesInput.value) : 1;
 
-        const fbCheckbox = row ? row.querySelector('.fb-checkbox') : null;
-        const bookletCheckbox = row ? row.querySelector('.booklet-checkbox') : null;
-        const bookletChecked = !!(bookletCheckbox && bookletCheckbox.checked);
-        if (bookletChecked && fbCheckbox) fbCheckbox.checked = true;
-        const fbChecked = bookletChecked || (fbCheckbox ? fbCheckbox.checked : false);
+        const printModeSelect = row ? row.querySelector('.print-mode-select') : null;
+        const printMode = String(printModeSelect ? printModeSelect.value : 'single').toLowerCase();
+        const bookletChecked = printMode === 'booklet';
+        const fbChecked = bookletChecked || printMode === 'fb';
 
         let selectedPrinterId = null;
         if (serviceRequiresPrinter) {
@@ -429,7 +407,7 @@ block content
 
         renderBookItems();
         // clear inputs
-        try { if (pagesInput) pagesInput.value = ''; if (fbCheckbox) fbCheckbox.checked = false; if (bookletCheckbox) bookletCheckbox.checked = false; const printerSelect = row ? row.querySelector('.printer-select') : null; if (printerSelect) printerSelect.selectedIndex = 0; if (spoiledInput) spoiledInput.value = ''; } catch(e){}
+        try { if (pagesInput) pagesInput.value = ''; if (printModeSelect) printModeSelect.value = 'single'; const printerSelect = row ? row.querySelector('.printer-select') : null; if (printerSelect) printerSelect.selectedIndex = 0; if (spoiledInput) spoiledInput.value = ''; } catch(e){}
       });
 
       function renderBookItems() {

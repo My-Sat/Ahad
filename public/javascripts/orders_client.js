@@ -1,9 +1,9 @@
 // public/javascripts/orders_client.js
-// Orders client with Books support, printer-aware F/B checkbox and dynamic QTY placeholder.
+// Orders client with Books support, printer-aware print mode and dynamic QTY placeholder.
 // Keeps existing logic intact while adding:
 //  - Books dropdown + Add Book button
 //  - Add book to cart as a single cart line (expanded into items on order submission)
-//  - F/B checkbox only shown when serviceRequiresPrinter is true
+//  - Print mode is only shown when serviceRequiresPrinter is true
 //  - QTY placeholder shows "Pages" when printer required, otherwise "Qty"
 
 
@@ -1547,46 +1547,22 @@ function renderPrices(bookMode = false) {
 
     
 
-    // F/B checkbox only for services that require a printer
-    let fbInput = null;
-    let bookletInput = null;
+    // Compact print mode selector for printer-required services.
+    let printModeSelect = null;
     if (serviceRequiresPrinter) {
-      const fbWrap = document.createElement('div');
-      fbWrap.className = 'form-check form-check-inline ms-1';
-      fbInput = document.createElement('input');
-      fbInput.type = 'checkbox';
-      fbInput.className = 'form-check-input fb-checkbox';
-      fbInput.id = `fb-${String(p._id)}`;
-      fbInput.setAttribute('data-prid', p._id);
-      const fbLabel = document.createElement('label');
-      fbLabel.className = 'form-check-label small';
-      fbLabel.htmlFor = fbInput.id;
-      fbLabel.textContent = 'F/B';
-      fbWrap.appendChild(fbInput);
-      fbWrap.appendChild(fbLabel);
-      mid.appendChild(fbWrap);
-
-      const bookletWrap = document.createElement('div');
-      bookletWrap.className = 'form-check form-check-inline ms-1';
-      bookletInput = document.createElement('input');
-      bookletInput.type = 'checkbox';
-      bookletInput.className = 'form-check-input booklet-checkbox';
-      bookletInput.id = `booklet-${String(p._id)}`;
-      bookletInput.setAttribute('data-prid', p._id);
-      const bookletLabel = document.createElement('label');
-      bookletLabel.className = 'form-check-label small';
-      bookletLabel.htmlFor = bookletInput.id;
-      bookletLabel.textContent = 'Booklet';
-      bookletWrap.appendChild(bookletInput);
-      bookletWrap.appendChild(bookletLabel);
-      mid.appendChild(bookletWrap);
-
-      bookletInput.addEventListener('change', function () {
-        if (bookletInput.checked && fbInput) fbInput.checked = true;
-      });
-      fbInput.addEventListener('change', function () {
-        if (!fbInput.checked && bookletInput) bookletInput.checked = false;
-      });
+      printModeSelect = document.createElement('select');
+      printModeSelect.className = 'form-select form-select-sm print-mode-select';
+      printModeSelect.style.width = '116px';
+      printModeSelect.setAttribute('aria-label', 'Print mode');
+      printModeSelect.innerHTML = `
+        <option value="single">Single Side</option>
+        <option value="fb">F/B</option>
+        <option value="booklet">Booklet</option>
+      `;
+      if (p.__bookItem) {
+        printModeSelect.value = p.__bookItem.booklet ? 'booklet' : (p.__bookItem.fb ? 'fb' : 'single');
+      }
+      mid.appendChild(printModeSelect);
     }
 
     // Our printer/spoil fields are skipped for outsourced work because the job is done outside.
@@ -1689,24 +1665,6 @@ function selectedServiceName() {
   return opt ? String(opt.text || opt.textContent || 'Large Format').trim() : 'Large Format';
 }
 
-function updateLargeFormatUnitChecks(scope) {
-  const root = scope || document;
-  root.querySelectorAll('.large-format-unit-label').forEach(label => {
-    let input = null;
-    if (label.htmlFor) {
-      input = root.querySelector ? root.querySelector('#' + label.htmlFor) : null;
-      if (!input) input = document.getElementById(label.htmlFor);
-    }
-    const checked = !!(input && input.checked);
-    label.classList.toggle('btn-primary', checked);
-    label.classList.toggle('btn-outline-light-custom', !checked);
-    label.classList.toggle('active', checked);
-    label.setAttribute('aria-pressed', checked ? 'true' : 'false');
-    const check = label.querySelector('.large-format-unit-check');
-    if (check) check.style.visibility = checked ? 'visible' : 'hidden';
-  });
-}
-
 function renderLargeFormatInputs(serviceId, largeFormat) {
   const outsourcedMode = isOutsourcedModeEnabled();
   const amountPerSquareFeet = Number(
@@ -1732,28 +1690,15 @@ function renderLargeFormatInputs(serviceId, largeFormat) {
 
   const mid = document.createElement('div');
   mid.className = 'd-flex align-items-center gap-2 flex-wrap';
-  const unitIdSuffix = String(serviceId || 'x').replace(/[^a-zA-Z0-9_-]/g, '');
   mid.innerHTML = `
     <input type="number" min="0.01" step="0.01" class="form-control form-control-sm large-format-length-input" placeholder="L" style="width:82px;">
     <input type="number" min="0.01" step="0.01" class="form-control form-control-sm large-format-breadth-input" placeholder="B" style="width:82px;">
     <input type="number" min="1" step="1" class="form-control form-control-sm large-format-qty-input" placeholder="QTY" title="Quantity" aria-label="Quantity" style="width:76px;">
-    <div class="btn-group btn-group-sm" role="group" aria-label="Large format unit">
-      <input type="radio" class="btn-check large-format-unit-input" name="largeFormatUnit-${unitIdSuffix}" id="largeFormatFeet-${unitIdSuffix}" value="feet" checked>
-      <label class="btn btn-outline-light-custom large-format-unit-label" for="largeFormatFeet-${unitIdSuffix}">
-        <i class="bi bi-check2 me-1 large-format-unit-check" aria-hidden="true"></i>Feet
-      </label>
-      <input type="radio" class="btn-check large-format-unit-input" name="largeFormatUnit-${unitIdSuffix}" id="largeFormatInches-${unitIdSuffix}" value="inches">
-      <label class="btn btn-outline-light-custom large-format-unit-label" for="largeFormatInches-${unitIdSuffix}">
-        <i class="bi bi-check2 me-1 large-format-unit-check" aria-hidden="true"></i>Inches
-      </label>
-    </div>
+    <select class="form-select form-select-sm large-format-unit-select" aria-label="Large Format measurement unit" style="width:92px;">
+      <option value="feet">ft</option>
+      <option value="inches">Inches</option>
+    </select>
   `;
-  mid.addEventListener('change', function (e) {
-    if (e.target && e.target.classList.contains('large-format-unit-input')) {
-      updateLargeFormatUnitChecks(mid);
-    }
-  });
-  updateLargeFormatUnitChecks(mid);
 
   if (serviceRequiresPrinter && !outsourcedMode) {
     const printerWrap = document.createElement('div');
@@ -3425,7 +3370,7 @@ function addLargeFormatToCart({
         const lengthInput = row ? row.querySelector('.large-format-length-input') : null;
         const breadthInput = row ? row.querySelector('.large-format-breadth-input') : null;
         const qtyInput = row ? row.querySelector('.large-format-qty-input') : null;
-        const unitInput = row ? row.querySelector('.large-format-unit-input:checked') : null;
+        const unitInput = row ? row.querySelector('.large-format-unit-select') : null;
         const length = Number(lengthInput && lengthInput.value ? lengthInput.value : 0);
         const breadth = Number(breadthInput && breadthInput.value ? breadthInput.value : 0);
         const quantity = Math.max(1, Math.floor(Number(qtyInput && qtyInput.value ? qtyInput.value : 1)));
@@ -3519,6 +3464,7 @@ function addLargeFormatToCart({
         if (lengthInput) lengthInput.value = '';
         if (breadthInput) breadthInput.value = '';
         if (qtyInput) qtyInput.value = '';
+        if (unitInput) unitInput.value = 'feet';
         const printerSelect = row ? row.querySelector('.printer-select') : null;
         if (printerSelect) printerSelect.selectedIndex = 0;
         const outAmtInput = row ? row.querySelector('.outsourced-amount-input') : null;
@@ -3567,11 +3513,10 @@ function addLargeFormatToCart({
     }
 
 
-    const fbCheckbox = row ? row.querySelector('.fb-checkbox') : null;
-    const bookletCheckbox = row ? row.querySelector('.booklet-checkbox') : null;
-    const bookletChecked = !!(bookletCheckbox && bookletCheckbox.checked);
-    if (bookletChecked && fbCheckbox) fbCheckbox.checked = true;
-    const fbChecked = bookletChecked || (fbCheckbox ? fbCheckbox.checked : false);
+    const printModeSelect = row ? row.querySelector('.print-mode-select') : null;
+    const printMode = String(printModeSelect ? printModeSelect.value : 'single').toLowerCase();
+    const bookletChecked = printMode === 'booklet';
+    const fbChecked = bookletChecked || printMode === 'fb';
 
     let selectedPrinterId = null;
     if (serviceRequiresPrinter && !outsourcedMode) {
@@ -3738,8 +3683,7 @@ function addLargeFormatToCart({
       if (pagesInput) pagesInput.value = '';
       const factorInput = row ? row.querySelector('.factor-input') : null;
       if (factorInput) factorInput.value = '';
-      if (fbCheckbox) { fbCheckbox.checked = false; }
-      if (bookletCheckbox) { bookletCheckbox.checked = false; }
+      if (printModeSelect) printModeSelect.value = 'single';
       const printerSelect = row ? row.querySelector('.printer-select') : null;
       if (printerSelect) { printerSelect.selectedIndex = 0; }
       if (spoiledInput) spoiledInput.value = '';

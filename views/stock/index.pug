@@ -141,6 +141,7 @@ block content
                               data-stock-id=ss._id
                               data-base-unit=(ss.material && ss.material.baseUnitName ? ss.material.baseUnitName : 'piece')
                               data-units=JSON.stringify(ss.stockUnits && ss.stockUnits.length ? ss.stockUnits : [{ name: (ss.material && ss.material.baseUnitName ? ss.material.baseUnitName : 'piece'), factor: 1, isBase: true }])
+                              data-can-convert-a3=(ss.canConvertA3ToA4 ? 'true' : 'false')
                             )
                               i.bi.bi-arrow-left-right.me-2
                               | Transfer
@@ -514,6 +515,8 @@ block content
           .mb-3
             label.form-label.text-muted-light(for='transferToStore') To store
             select.form-select#transferToStore
+              if selectedStore
+                option(value=selectedStore._id data-current-store='true' disabled)= `${selectedStore.name} (current store - conversion only)`
               if stores && stores.length
                 each s in stores
                   if !selectedStore || String(s._id) !== String(selectedStore._id)
@@ -526,6 +529,13 @@ block content
             label.form-label.text-muted-light(for='transferQty') Quantity
             input.form-control#transferQty(type='number', min='1', step='1', value='1')
             small.text-muted-light#transferUnitHint
+          .mb-3.border.border-primary.rounded.p-3#transferConvertWrap(style='display:none;')
+            .form-check
+              input.form-check-input#transferConvertA3(type='checkbox')
+              label.form-check-label.text-white(for='transferConvertA3') Convert A3 to A4
+            small.text-muted-light.d-block.mt-1
+              | Keeps the same paper type and other selections. One A3 sheet becomes two A4 sheets. The current store also becomes available as a destination.
+            .alert.alert-primary.py-2.px-3.mt-2.mb-0#transferConversionPreview(style='display:none;' role='status')
 
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Cancel

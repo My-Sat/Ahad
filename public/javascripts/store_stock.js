@@ -104,8 +104,12 @@ function initStoreStockPage() {
   const transferUnitSelect = document.getElementById('transferUnitSelect');
   const transferQty = document.getElementById('transferQty');
   const transferUnitHint = document.getElementById('transferUnitHint');
+  const transferConvertWrap = document.getElementById('transferConvertWrap');
+  const transferConvertA3 = document.getElementById('transferConvertA3');
+  const transferConversionPreview = document.getElementById('transferConversionPreview');
   const confirmTransferBtn = document.getElementById('confirmTransferBtn');
   const transferSpinner = document.getElementById('transferSpinner');
+  let transferBaseUnitName = 'piece';
 
   // ----------------------------
   // Activity
@@ -227,9 +231,56 @@ function initStoreStockPage() {
     };
   }
 
+  function formatTransferQuantity(value) {
+    const quantity = Number(value || 0);
+    if (!isFinite(quantity)) return '0';
+    if (Math.abs(quantity - Math.round(quantity)) < 0.000001) return String(Math.round(quantity));
+    return Number(quantity.toFixed(3)).toString();
+  }
+
+  function updateSameStoreTransferOption(isConverting) {
+    if (!transferToStore) return;
+    const currentStoreOption = transferToStore.querySelector('option[data-current-store="true"]');
+    if (!currentStoreOption) return;
+
+    currentStoreOption.disabled = !isConverting;
+    if (isConverting && !transferToStore.value) {
+      currentStoreOption.selected = true;
+      return;
+    }
+
+    if (!isConverting && currentStoreOption.selected) {
+      const fallback = Array.from(transferToStore.options).find(option => !option.disabled);
+      if (fallback) fallback.selected = true;
+      else transferToStore.selectedIndex = -1;
+    }
+  }
+
+  function updateTransferHint() {
+    const selected = selectedTransferUnit();
+    const requestedQty = Math.max(0, Math.floor(numOr(transferQty?.value, 0)));
+    const sourceBaseQty = Number((requestedQty * selected.factor).toFixed(6));
+    const isConverting = !!(transferConvertA3 && transferConvertA3.checked);
+    updateSameStoreTransferOption(isConverting);
+
+    if (transferUnitHint) {
+      transferUnitHint.textContent = selected.factor > 1
+        ? `${selected.name} contains ${formatTransferQuantity(selected.factor)} ${transferBaseUnitName}.`
+        : `Transfers in ${transferBaseUnitName}.`;
+    }
+
+    if (transferConversionPreview) {
+      transferConversionPreview.style.display = isConverting ? 'block' : 'none';
+      transferConversionPreview.textContent = isConverting
+        ? `${formatTransferQuantity(sourceBaseQty)} A3 ${transferBaseUnitName} will become ${formatTransferQuantity(sourceBaseQty * 2)} A4 ${transferBaseUnitName}.`
+        : '';
+    }
+  }
+
   function populateTransferUnitsFromButton(btn) {
     if (!transferUnitSelect) return;
     const baseUnit = String(btn?.dataset?.baseUnit || 'piece').trim() || 'piece';
+    transferBaseUnitName = baseUnit;
     const units = parseJsonAttr(btn?.dataset?.units, [{ name: baseUnit, factor: 1, isBase: true }]);
 
     transferUnitSelect.innerHTML = '';
@@ -245,12 +296,7 @@ function initStoreStockPage() {
         transferUnitSelect.appendChild(item);
       });
 
-    if (transferUnitHint) {
-      const selected = selectedTransferUnit();
-      transferUnitHint.textContent = selected.factor > 1
-        ? `Transfers ${selected.factor} ${baseUnit} per ${selected.name}.`
-        : `Transfers in ${baseUnit}.`;
-    }
+    updateTransferHint();
   }
 
   function resetPurchaseUnits(message) {
@@ -644,11 +690,17 @@ function initStoreStockPage() {
 
   if (transferUnitSelect && transferUnitSelect.dataset.bound !== '1') {
     transferUnitSelect.dataset.bound = '1';
-    transferUnitSelect.addEventListener('change', function () {
-      const opt = transferUnitSelect.selectedOptions && transferUnitSelect.selectedOptions[0];
-      const text = opt ? opt.textContent : '';
-      if (transferUnitHint) transferUnitHint.textContent = text ? `Selected: ${text}` : '';
-    });
+    transferUnitSelect.addEventListener('change', updateTransferHint);
+  }
+
+  if (transferQty && transferQty.dataset.transferHintBound !== '1') {
+    transferQty.dataset.transferHintBound = '1';
+    transferQty.addEventListener('input', updateTransferHint);
+  }
+
+  if (transferConvertA3 && transferConvertA3.dataset.bound !== '1') {
+    transferConvertA3.dataset.bound = '1';
+    transferConvertA3.addEventListener('change', updateTransferHint);
   }
 
   if (purchaseQty && purchaseQty.dataset.bound !== '1') {
@@ -1256,6 +1308,13 @@ function initStoreStockPage() {
     const stockId = btn.dataset.stockId;
     transferStockId.value = stockId;
     transferQty.value = '1';
+    const canConvertA3 = btn.dataset.canConvertA3 === 'true';
+    if (transferConvertA3) {
+      transferConvertA3.checked = false;
+      transferConvertA3.disabled = !canConvertA3;
+    }
+    if (transferConvertWrap) transferConvertWrap.style.display = canConvertA3 ? 'block' : 'none';
+    if (transferConversionPreview) transferConversionPreview.style.display = 'none';
     populateTransferUnitsFromButton(btn);
 
     bsShow(transferModalEl);
@@ -1287,6 +1346,7 @@ function initStoreStockPage() {
         body.append('qty', String(qty));
         body.append('transferUnitName', transferUnit.name);
         body.append('transferUnitFactor', String(transferUnit.factor));
+        body.append('convertA3ToA4', transferConvertA3 && transferConvertA3.checked ? 'true' : 'false');
 
         const res = await fetch(
           `/admin/stores/${encodeURIComponent(storeId)}/stocks/${encodeURIComponent(stockId)}/transfer`,
@@ -1303,7 +1363,7 @@ function initStoreStockPage() {
         const j = await res.json().catch(() => null);
         if (res.ok) {
           bsHide(transferModalEl);
-          showToast('Transferred', 1200);
+          showToast(j && j.conversion ? 'Converted to A4 and transferred' : 'Transferred', 1200);
           window.location.reload();
         } else {
           alert((j && j.error) ? j.error : 'Transfer failed');

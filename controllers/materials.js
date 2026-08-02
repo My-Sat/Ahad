@@ -61,6 +61,114 @@ function standaloneMaterialKey(name) {
   return `standalone:${nameKey}`;
 }
 
+function labelTokens(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+function isPaperSizeUnit(value) {
+  const tokens = labelTokens(value);
+  return tokens.includes('paper') && tokens.some(token => token === 'size' || token === 'sizes');
+}
+
+function hasPaperSizeToken(value, size) {
+  return labelTokens(value).includes(String(size || '').toLowerCase());
+}
+
+function refId(value) {
+  return value && value._id ? value._id : value;
+}
+
+function materialSelectionKey(selections) {
+  return (Array.isArray(selections) ? selections : [])
+    .filter(selection => selection && selection.unit && selection.subUnit)
+    .map(selection => `${String(refId(selection.unit))}:${String(refId(selection.subUnit))}`)
+    .sort()
+    .join('|');
+}
+
+function findPaperSizeSelection(material, size) {
+  return (Array.isArray(material && material.selections) ? material.selections : []).find(selection => (
+    selection
+    && selection.unit
+    && selection.subUnit
+    && isPaperSizeUnit(selection.unit.name)
+    && hasPaperSizeToken(selection.subUnit.name, size)
+  ));
+}
+
+function a4MaterialName(sourceName) {
+  const name = String(sourceName || '').trim();
+  const replaced = name.replace(/(^|[^a-z0-9])a3(?=$|[^a-z0-9])/ig, '$1A4');
+  return replaced !== name ? replaced : `${name || 'Paper'} (A4)`;
+}
+
+async function resolveA4TransferMaterial(sourceMaterial, session, createdBy) {
+  const a3Selection = findPaperSizeSelection(sourceMaterial, 'a3');
+  if (!a3Selection) {
+    const error = new Error('Convert is only available for materials whose Paper Size selection contains A3');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const unitId = refId(a3Selection.unit);
+  const sourceSubName = String(
+    a3Selection.subUnit.nameNormalized || a3Selection.subUnit.name || ''
+  ).trim().toLowerCase();
+  const matchingA4Name = sourceSubName.replace(/(^|[^a-z0-9])a3(?=$|[^a-z0-9])/g, '$1a4');
+
+  let a4SubUnit = matchingA4Name !== sourceSubName
+    ? await ServiceCostSubUnit.findOne({ unit: unitId, nameNormalized: matchingA4Name }).session(session).lean()
+    : null;
+
+  if (!a4SubUnit) {
+    const candidates = await ServiceCostSubUnit.find({ unit: unitId }).session(session).lean();
+    const a4Candidates = candidates.filter(candidate => hasPaperSizeToken(candidate.name, 'a4'));
+    a4SubUnit = a4Candidates.find(candidate => String(candidate.nameNormalized || '').trim().toLowerCase() === 'a4')
+      || (a4Candidates.length === 1 ? a4Candidates[0] : null);
+  }
+
+  if (!a4SubUnit) {
+    const error = new Error('No matching A4 sub-unit exists under the Paper Size unit');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const destinationSelections = (sourceMaterial.selections || []).map(selection => ({
+    unit: new mongoose.Types.ObjectId(refId(selection.unit)),
+    subUnit: new mongoose.Types.ObjectId(
+      String(refId(selection.subUnit)) === String(refId(a3Selection.subUnit))
+        ? a4SubUnit._id
+        : refId(selection.subUnit)
+    )
+  }));
+  const key = materialSelectionKey(destinationSelections);
+  let material = await Material.findOne({ key }).session(session).lean();
+
+  if (!material) {
+    const stockUnits = (Array.isArray(sourceMaterial.stockUnits) ? sourceMaterial.stockUnits : []).map(unit => ({
+      name: unit.name,
+      factor: unit.factor,
+      isBase: unit.isBase
+    }));
+    const created = await Material.create([{
+      name: a4MaterialName(sourceMaterial.name),
+      category: sourceMaterial.category || null,
+      selections: destinationSelections,
+      key,
+      baseUnitName: sourceMaterial.baseUnitName || 'piece',
+      stockUnits,
+      createdBy: createdBy || sourceMaterial.createdBy || ''
+    }], { session });
+    material = created[0].toObject();
+  }
+
+  return material;
+}
+
 async function getOperationalStoreLean() {
   return await Store.findOne({ isOperational: true }).lean();
 }
@@ -627,6 +735,7 @@ exports.stockPage = async (req, res) => {
           used,
           remaining,
           stockUnits,
+          canConvertA3ToA4: !!findPaperSizeSelection(ss.material, 'a3'),
           stockedDisplay: ss.material ? formatMaterialQuantity(stocked, ss.material, unitDisplayOpts) : String(stocked),
           usedDisplay: ss.material ? formatMaterialQuantity(used, ss.material, unitDisplayOpts) : String(used),
           remainingDisplay: ss.material ? formatMaterialQuantity(remaining, ss.material, unitDisplayOpts) : String(remaining),
@@ -1194,12 +1303,17 @@ exports.transferStoreStock = async (req, res) => {
     const transferUnitQty = Math.floor(Number(req.body.qty || 0));
     const requestedTransferUnitName = String(req.body.transferUnitName || req.body.unitName || '').trim();
     const requestedTransferUnitFactor = Number(req.body.transferUnitFactor || req.body.unitFactor || 0);
+    const convertA3ToA4 = ['1', 'true', 'on', 'yes'].includes(
+      String(req.body.convertA3ToA4 || req.body.convert || '').trim().toLowerCase()
+    );
 
     if (!mongoose.Types.ObjectId.isValid(storeId)) return res.status(400).json({ error: 'Invalid from store id' });
     if (!mongoose.Types.ObjectId.isValid(stockId)) return res.status(400).json({ error: 'Invalid stock id' });
     if (!mongoose.Types.ObjectId.isValid(toStoreId)) return res.status(400).json({ error: 'Invalid destination store id' });
 
-    if (String(storeId) === String(toStoreId)) return res.status(400).json({ error: 'Destination store must be different' });
+    if (String(storeId) === String(toStoreId) && !convertA3ToA4) {
+      return res.status(400).json({ error: 'The current store can only be selected for an A3 to A4 conversion' });
+    }
 
     if (!isFinite(transferUnitQty) || transferUnitQty <= 0) return res.status(400).json({ error: 'Transfer quantity must be greater than 0' });
 
@@ -1223,7 +1337,14 @@ exports.transferStoreStock = async (req, res) => {
       }
 
       const fromStock = await StoreStock.findById(stockId)
-        .populate('material', 'name selections baseUnitName stockUnits')
+        .populate({
+          path: 'material',
+          select: 'name category selections key baseUnitName stockUnits createdBy',
+          populate: [
+            { path: 'selections.unit', select: 'name nameNormalized' },
+            { path: 'selections.subUnit', select: 'name nameNormalized unit' }
+          ]
+        })
         .session(session)
         .lean();
       if (!fromStock) {
@@ -1242,6 +1363,16 @@ exports.transferStoreStock = async (req, res) => {
       const transferUnitFactor = Number(selectedTransferUnit.factor || 1);
       const transferUnitName = selectedTransferUnit.name || fromStock.material.baseUnitName || 'piece';
       const qty = Number((transferUnitQty * transferUnitFactor).toFixed(6));
+      const destinationMaterial = convertA3ToA4
+        ? await resolveA4TransferMaterial(
+            fromStock.material,
+            session,
+            req.user && (req.user.name || req.user.username || req.user.email || req.user._id)
+          )
+        : fromStock.material;
+      const destinationMaterialId = destinationMaterial._id;
+      const conversionFactor = convertA3ToA4 ? 2 : 1;
+      const destinationQty = Number((qty * conversionFactor).toFixed(6));
 
       const agg = await MaterialAggregate.findOne({ store: storeId, material: materialId }).session(session).lean();
       const used = agg ? Number(agg.total || 0) : 0;
@@ -1270,37 +1401,45 @@ exports.transferStoreStock = async (req, res) => {
         { new: true, session }
       ).populate('material', 'name selections').lean();
 
-      const transferUnitCost = consumedLots.weightedUnitCost || roundUnitCost(fromStock.averageUnitCost || 0);
-      const existingToStock = await StoreStock.findOne({ store: toStoreId, material: materialId }).session(session);
+      const sourceUnitCost = consumedLots.weightedUnitCost || roundUnitCost(fromStock.averageUnitCost || 0);
+      const destinationUnitCost = roundUnitCost(sourceUnitCost / conversionFactor);
+      const existingToStock = await StoreStock.findOne({
+        store: toStoreId,
+        material: destinationMaterialId
+      }).session(session);
       if (existingToStock) {
         await ensureLotsForStock({
           store: toStore._id,
           stock: existingToStock._id,
-          material: materialId,
+          material: destinationMaterialId,
           session
         });
       }
 
       const updatedTo = await StoreStock.findOneAndUpdate(
-        { store: toStoreId, material: materialId },
+        { store: toStoreId, material: destinationMaterialId },
         {
           $set: {
             active: true,
-            lastPurchaseUnitCost: transferUnitCost,
+            lastPurchaseUnitCost: destinationUnitCost,
             lastPurchaseAt: new Date()
           },
-          $inc: { stocked: qty }
+          $inc: { stocked: destinationQty }
         },
         { upsert: true, new: true, setDefaultsOnInsert: true, session }
       ).populate('material', 'name selections').lean();
 
       const transferDocs = await StoreStockTransfer.create([{
         material: materialId,
+        toMaterial: destinationMaterialId,
         fromStore: fromStore._id,
         toStore: toStore._id,
         fromStock: updatedFrom._id,
         toStock: updatedTo._id,
         qty,
+        destinationQty,
+        converted: convertA3ToA4,
+        conversionFactor,
         transferUnitName,
         transferUnitFactor,
         transferUnitQuantity: transferUnitQty,
@@ -1312,13 +1451,16 @@ exports.transferStoreStock = async (req, res) => {
         await createStockLot({
           store: toStore._id,
           stock: updatedTo._id,
-          material: materialId,
-          quantity: lot.quantity,
-          unitCost: lot.unitCost,
+          material: destinationMaterialId,
+          quantity: Number((Number(lot.quantity || 0) * conversionFactor).toFixed(6)),
+          unitCost: roundUnitCost(Number(lot.unitCost || 0) / conversionFactor),
           sourceType: 'transfer',
           sourceId: transfer._id,
-          sourceRef: `Transfer from ${fromStore.name || 'store'}`,
+          sourceRef: convertA3ToA4
+            ? `A3 to A4 conversion from ${fromStore.name || 'store'}`
+            : `Transfer from ${fromStore.name || 'store'}`,
           parentLot: lot.lot,
+          baseUnitName: destinationMaterial.baseUnitName || 'piece',
           session
         });
       }
@@ -1332,7 +1474,7 @@ exports.transferStoreStock = async (req, res) => {
       const destBalance = await recalculateAverageCostFromLots({
         store: toStore._id,
         stock: updatedTo._id,
-        material: materialId,
+        material: destinationMaterialId,
         session
       });
 
@@ -1347,7 +1489,17 @@ exports.transferStoreStock = async (req, res) => {
           remaining: remaining2,
           averageUnitCost: sourceBalance.averageUnitCost
         }),
-        to: Object.assign({}, updatedTo, { averageUnitCost: destBalance.averageUnitCost })
+        to: Object.assign({}, updatedTo, { averageUnitCost: destBalance.averageUnitCost }),
+        conversion: convertA3ToA4 ? {
+          type: 'a3-to-a4',
+          factor: conversionFactor,
+          sourceQuantity: qty,
+          destinationQuantity: destinationQty,
+          destinationMaterial: {
+            _id: destinationMaterialId,
+            name: destinationMaterial.name
+          }
+        } : null
       };
     });
 
@@ -1355,6 +1507,9 @@ exports.transferStoreStock = async (req, res) => {
   } catch (err) {
     console.error('materials.transferStoreStock error', err);
     if (err && err.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    if (err && err.code === 11000) {
+      return res.status(409).json({ error: 'A matching A4 catalogue was created by another request. Please retry the transfer.' });
+    }
     return res.status(500).json({ error: 'Error transferring stock' });
   } finally {
     try { if (session) session.endSession(); } catch (e) {}
@@ -1425,6 +1580,8 @@ exports.stockActivity = async (req, res) => {
     const transfers = await StoreStockTransfer.find({
       $or: [{ fromStock: stockId }, { toStock: stockId }]
     })
+      .populate('material', 'name')
+      .populate('toMaterial', 'name')
       .populate('fromStore', 'name')
       .populate('toStore', 'name')
       .sort({ createdAt: 1, _id: 1 })
@@ -1449,12 +1606,16 @@ exports.stockActivity = async (req, res) => {
     // transfers are deltas to remaining
     transfers.forEach(t => {
       const isOut = String(t.fromStock || '') === String(stockId);
+      const incomingQuantity = Number(t.destinationQty || t.qty || 0);
+      const conversionDetails = t.converted
+        ? ` | ${t.material?.name || 'A3 material'} to ${t.toMaterial?.name || 'A4 material'} (x${Number(t.conversionFactor || 2)})`
+        : '';
       events.push({
         createdAt: t.createdAt,
         type: isOut ? 'transfer-out' : 'transfer-in',
-        delta: isOut ? -Number(t.qty || 0) : Number(t.qty || 0),
+        delta: isOut ? -Number(t.qty || 0) : incomingQuantity,
         setTo: null,
-        details: `${t.fromStore?.name || ''} → ${t.toStore?.name || ''}`
+        details: `${t.fromStore?.name || ''} -> ${t.toStore?.name || ''}${conversionDetails}`
       });
     });
 
