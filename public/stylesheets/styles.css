@@ -169,8 +169,40 @@ body.app-bg{
 /* ---------------------------
    Main content container
    --------------------------- */
-#main-content{ max-width: 1100px; }
-#main-content.wide-content{ max-width: 1400px; }
+#main-content,
+#main-content.wide-content{
+  width: 100%;
+  max-width: none;
+  padding-right: clamp(.9rem, 2vw, 2.5rem);
+  padding-left: clamp(.9rem, 2vw, 2.5rem);
+}
+
+#main-content > .content-card{
+  width: 100%;
+  max-width: none;
+}
+
+/* Page templates historically add another fixed-width Bootstrap container. */
+#main-content > .container,
+#main-content > .content-card > .container{
+  width: 100%;
+  max-width: none;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+#main-content .card{
+  width: 100%;
+  max-width: none;
+}
+
+@media (max-width: 575.98px){
+  #main-content,
+  #main-content.wide-content{
+    padding-right: .75rem;
+    padding-left: .75rem;
+  }
+}
 
 /* dashboard_nav.js wraps content in .content-card */
 .content-card,
