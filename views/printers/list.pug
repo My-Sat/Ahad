@@ -42,6 +42,8 @@ block content
                 // include data attributes for client to know breakdown counts (defaults 0)
                 - const mono = (typeof pr.monochromeCount !== 'undefined' && pr.monochromeCount !== null) ? pr.monochromeCount : 0;
                 - const colour = (typeof pr.colourCount !== 'undefined' && pr.colourCount !== null) ? pr.colourCount : 0;
+                - const total = Number(pr.totalCount || 0);
+                - const unclassified = Number((total - Number(mono || 0) - Number(colour || 0)).toFixed(4));
                 tr(data-id=pr._id data-mono-count=mono data-colour-count=colour)
                   td
                     .d-flex.align-items-center.justify-content-between
@@ -56,21 +58,21 @@ block content
                       .printer-total-box.d-flex.align-items-center.justify-content-center
                         span.total-label.small.text-muted-light.me-2 Total:
                         span.total-value.text-end
-                          strong.text-white #{pr.totalCount || 0}
+                          strong.text-white #{total}
 
                       // chevron-button (keeps existing collapse wiring) — absolute so it doesn't affect centering
-                      if (mono || colour)
+                      if (total || mono || colour)
                         button.btn.btn-sm.btn-link.expand-toggle.position-absolute.top-50.end-0.translate-middle-y(type='button', aria-expanded='false', aria-controls=`printer-totals-${pr._id}`, title='Show breakdown', data-bs-toggle='collapse', data-bs-target=`#printer-totals-${pr._id}`)
                           i.bi.bi-chevron-down.text-white
 
                     // breakdown collapse (kept as before)
-                    if (mono || colour)
+                    if (total || mono || colour)
                       .collapse.mt-2(id=`printer-totals-${pr._id}`)
                         .card.card-body.p-2.dark-surface
-                          if mono
-                            div.small.mb-1.mono-value.text-muted-light Monochrome: #{mono}
-                          if colour
-                            div.small.mb-0.colour-value.text-muted-light Colour: #{colour}
+                          div.small.mb-1.mono-value.text-muted-light Monochrome: #{mono}
+                          div.small.mb-1.colour-value.text-muted-light Colour: #{colour}
+                          if unclassified
+                            div.small.mb-0.unclassified-value.text-muted-light Unclassified: #{unclassified}
 
                   td.text-center
                     .btn-group
@@ -184,13 +186,25 @@ block content
                   input.form-control.form-control-sm.form-control-dark(type='date' id='pd-range-end' placeholder='To')
                   button.btn.btn-sm.btn-secondary(type='button' id='pd-range-refresh') Refresh
 
-          // summary metrics row (Counts and Revenue) - single value per container (for active filter)
+          // summary metrics for the active period
           .row.mb-3#printerDetailsSummary(style='display:none;')
             .col-md-6
               .card.mb-2.dark-surface
                 .card-body
                   h6.mb-1.text-white Counts
-                  p.h2.mb-0#pd-count-value.text-white 0
+                  .row.g-2.mt-1
+                    .col-4
+                      .printer-count-metric.h-100
+                        span.small.text-muted-light Monochrome
+                        strong#pd-mono-value.d-block.text-white 0
+                    .col-4
+                      .printer-count-metric.h-100
+                        span.small.text-muted-light Colour
+                        strong#pd-colour-value.d-block.text-white 0
+                    .col-4
+                      .printer-count-metric.printer-count-metric-total.h-100
+                        span.small.text-muted-light Total
+                        strong#pd-count-value.d-block.text-white 0
             .col-md-6
               .card.mb-2.dark-surface
                 .card-body

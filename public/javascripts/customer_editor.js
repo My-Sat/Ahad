@@ -54,7 +54,13 @@ function openEditCustomerModal(customer) {
 
   // Fill form
   const categoryEl = document.getElementById('regCategory');
-  if (categoryEl) categoryEl.value = customer.category || 'one_time';
+  if (categoryEl) {
+    const category = String(customer.category || 'one_time').trim().toLowerCase();
+    categoryEl.value = category;
+
+    // Do not let a legacy/unsupported value become an empty PATCH category.
+    if (!categoryEl.value) categoryEl.value = 'one_time';
+  }
 
   updateRegFields();
 

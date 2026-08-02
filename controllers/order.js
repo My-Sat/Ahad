@@ -27,6 +27,7 @@ const {
   recordCashBookMovement
 } = require('../utilities/cash_books');
 const { consumeStockLots } = require('../utilities/stock_lots');
+const { resolvePrinterUsageType } = require('../utilities/printer_usage');
 const {
   actorFromReq,
   postOrderRevenue,
@@ -705,12 +706,18 @@ function scheduleOrderPostResponseTasks({ orderId, materialUsageIds, printerUsag
           const customerController = require('./customer');
           let cust = await customerController.updateRegularStatus(order.customer);
           if (!cust) {
-            cust = await Customer.findById(order.customer).select('_id phone category accountBalance').lean();
+            cust = await Customer.findById(order.customer)
+              .select('_id phone category firstName businessName accountBalance')
+              .lean();
           }
           if (!cust || !cust.phone) return;
 
           const { sendSms } = require('../utilities/hubtel_sms');
           const messagingController = require('./messaging');
+          const paidAmount = (order.payments || []).reduce((sum, payment) => (
+            sum + (Number(payment && payment.amount) || 0)
+          ), 0);
+          const outstanding = Number(Math.max(0, Number(order.total || 0) - paidAmount).toFixed(2));
           const auto = await messagingController.buildAutoMessageForCustomer(
             cust,
             'order',
@@ -718,7 +725,8 @@ function scheduleOrderPostResponseTasks({ orderId, materialUsageIds, printerUsag
               orderId: order.orderId,
               amount: order.total,
               totalBeforeDiscount: order.totalBeforeDiscount ?? '',
-              discountAmount: order.discountAmount ?? ''
+              discountAmount: order.discountAmount ?? '',
+              outstanding
             }
           );
 
@@ -1383,7 +1391,12 @@ return {
           subtotal,
           spoiled: 0,
           fb: false,
-          printerType: null,
+          // Large-format output is colour unless a future service explicitly says otherwise.
+          printerType: resolvePrinterUsageType({
+            ruleText: selectionLabel,
+            serviceName: svc.name,
+            fallbackType: 'colour'
+          }),
           printFactor: quantity,
           outsourcedArtist,
           outsourcedArtistName,
@@ -1441,18 +1454,12 @@ return {
         subUnit: s.subUnit && s.subUnit._id ? s.subUnit._id : s.subUnit
       }));
 
-      // Determine printer-type for this price rule (inspect populated subUnit names)
-      let printerType = null;
-      try {
-        // prefer 'colour' if any subunit indicates colour, otherwise monochrome if present
-        const subs = (pr.selections || []).map(s => (s.subUnit && s.subUnit.name) ? String(s.subUnit.name) : '');
-        const hasColour = subs.some(n => /(colour|color|c\/l|\bcol\b)/i.test(n));
-        const hasMono = subs.some(n => /(monochrome|\bmono\b|black\s*and\s*white|b\/w)/i.test(n));
-        if (hasColour) printerType = 'colour';
-        else if (hasMono) printerType = 'monochrome';
-      } catch (e) {
-        printerType = null;
-      }
+      // Prefer rule-specific markers, then fall back to the service name.
+      const printerType = resolvePrinterUsageType({
+        ruleText: `${pr.customLabel || ''} ${selectionLabel}`,
+        selections: pr.selections,
+        serviceName: svc.name
+      });
 
       // validate printer if required
       let printerId = null;
@@ -2862,9 +2869,10 @@ exports.apiPayBulkDebtor = async (req, res) => {
           smsJobs.push({
             orderId: order.orderId,
             customer: order.customer,
-            amount: order.total,
+            amount: Number(outstanding.toFixed(2)),
             totalBeforeDiscount: order.totalBeforeDiscount ?? '',
-            discountAmount: order.discountAmount ?? ''
+            discountAmount: order.discountAmount ?? '',
+            outstanding: 0
           });
         }
       }
@@ -2889,7 +2897,8 @@ exports.apiPayBulkDebtor = async (req, res) => {
                 orderId: smsJob.orderId,
                 amount: smsJob.amount,
                 totalBeforeDiscount: smsJob.totalBeforeDiscount,
-                discountAmount: smsJob.discountAmount
+                discountAmount: smsJob.discountAmount,
+                outstanding: smsJob.outstanding
               }
             );
 

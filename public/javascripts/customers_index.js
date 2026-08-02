@@ -18,6 +18,111 @@ function initCustomersIndex() {
 
   if (!tableBody) return;
 
+  if (typeof window.__customersActionMenuCleanup === 'function') {
+    try { window.__customersActionMenuCleanup(); } catch (e) {}
+  }
+
+  let activeActionMenu = null;
+
+  function closeActionMenu() {
+    if (!activeActionMenu) return;
+    const state = activeActionMenu;
+    activeActionMenu = null;
+
+    state.toggle.setAttribute('aria-expanded', 'false');
+    state.menu.classList.remove('show', 'customer-actions-floating-menu');
+    state.menu.removeAttribute('data-placement');
+    ['top', 'left', 'right', 'bottom', 'visibility', 'max-height'].forEach(prop => {
+      state.menu.style.removeProperty(prop);
+    });
+
+    if (state.home && state.home.isConnected) state.home.appendChild(state.menu);
+    else state.menu.remove();
+  }
+
+  function positionActionMenu(toggle, menu) {
+    const gap = 6;
+    const edge = 8;
+    const toggleRect = toggle.getBoundingClientRect();
+
+    menu.style.visibility = 'hidden';
+    menu.classList.add('customer-actions-floating-menu', 'show');
+    document.body.appendChild(menu);
+
+    const menuRect = menu.getBoundingClientRect();
+    const availableBelow = Math.max(0, window.innerHeight - toggleRect.bottom - edge);
+    const availableAbove = Math.max(0, toggleRect.top - edge);
+    const openUp = availableBelow < menuRect.height && availableAbove > availableBelow;
+    const availableHeight = Math.max(80, openUp ? availableAbove - gap : availableBelow - gap);
+    const renderedHeight = Math.min(menuRect.height, availableHeight);
+    const top = openUp
+      ? Math.max(edge, toggleRect.top - renderedHeight - gap)
+      : Math.min(toggleRect.bottom + gap, window.innerHeight - renderedHeight - edge);
+    const left = Math.min(
+      Math.max(edge, toggleRect.right - menuRect.width),
+      Math.max(edge, window.innerWidth - menuRect.width - edge)
+    );
+
+    menu.dataset.placement = openUp ? 'top' : 'bottom';
+    menu.style.top = `${Math.round(top)}px`;
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.maxHeight = `${Math.floor(availableHeight)}px`;
+    menu.style.visibility = 'visible';
+    toggle.setAttribute('aria-expanded', 'true');
+  }
+
+  function toggleActionMenu(toggle) {
+    if (activeActionMenu && activeActionMenu.toggle === toggle) {
+      closeActionMenu();
+      return;
+    }
+    closeActionMenu();
+
+    const home = toggle.closest('.customer-actions-dropdown');
+    const menu = home ? home.querySelector('.customer-actions-menu') : null;
+    if (!home || !menu) return;
+
+    activeActionMenu = { toggle, menu, home };
+    positionActionMenu(toggle, menu);
+  }
+
+  function onActionMenuDocumentClick(event) {
+    const toggle = event.target.closest && event.target.closest('.customer-actions-toggle');
+    if (toggle && pageRoot.contains(toggle)) {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleActionMenu(toggle);
+      return;
+    }
+
+    if (activeActionMenu && activeActionMenu.menu.contains(event.target)) {
+      if (event.target.closest && event.target.closest('.dropdown-item')) {
+        setTimeout(closeActionMenu, 0);
+      }
+      return;
+    }
+
+    closeActionMenu();
+  }
+
+  function onActionMenuKeydown(event) {
+    if (event.key === 'Escape') closeActionMenu();
+  }
+
+  document.addEventListener('click', onActionMenuDocumentClick);
+  document.addEventListener('keydown', onActionMenuKeydown);
+  window.addEventListener('resize', closeActionMenu);
+  window.addEventListener('scroll', closeActionMenu, true);
+
+  window.__customersActionMenuCleanup = function () {
+    closeActionMenu();
+    document.removeEventListener('click', onActionMenuDocumentClick);
+    document.removeEventListener('keydown', onActionMenuKeydown);
+    window.removeEventListener('resize', closeActionMenu);
+    window.removeEventListener('scroll', closeActionMenu, true);
+    window.__customersActionMenuCleanup = null;
+  };
+
   let searchTimer = null;
   const SEARCH_DEBOUNCE = 220;
   let currentPage = 1;
@@ -60,6 +165,7 @@ function initCustomersIndex() {
   }
 
   async function fetchCustomers(q) {
+    closeActionMenu();
     const query = (q || '').toString().trim();
     const pageSize = getPageSize();
     tableBody.innerHTML = '<tr><td colspan="5" class="text-muted">Loading...</td></tr>';
@@ -107,16 +213,15 @@ function initCustomersIndex() {
           <td><span class="badge bg-secondary" style="color:#fff !important;">${escapeHtml(c.category || '')}</span></td>
           <td>${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '-'}</td>
           <td class="text-center">
-            <div class="dropdown">
+            <div class="dropdown customer-actions-dropdown">
               <button
-                class="btn btn-sm btn-outline-light-custom"
+                class="btn btn-sm btn-outline-light-custom customer-actions-toggle"
                 type="button"
-                data-bs-toggle="dropdown"
                 aria-expanded="false"
                 title="Actions">
                 <i class="bi bi-three-dots-vertical"></i>
               </button>
-              <ul class="dropdown-menu dropdown-menu-end">
+              <ul class="dropdown-menu dropdown-menu-end customer-actions-menu">
                 <li>
                   <a class="dropdown-item" href="${newJobUrl}" data-ajax="true">New Job</a>
                 </li>

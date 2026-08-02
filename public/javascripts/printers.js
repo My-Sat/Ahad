@@ -36,6 +36,8 @@
   const pdHeader = document.getElementById('printerDetailsHeader');
   const pdSummary = document.getElementById('printerDetailsSummary');
   const pdCountValue = document.getElementById('pd-count-value');
+  const pdMonoValue = document.getElementById('pd-mono-value');
+  const pdColourValue = document.getElementById('pd-colour-value');
   const pdRevValue = document.getElementById('pd-rev-value');
   const pdRecentLoading = document.getElementById('pd-recent-loading');
   const pdRecentList = document.getElementById('pd-recent-list');
@@ -64,9 +66,12 @@
     tr.setAttribute('data-mono-count', (typeof pr.monochromeCount !== 'undefined' && pr.monochromeCount !== null) ? pr.monochromeCount : 0);
     tr.setAttribute('data-colour-count', (typeof pr.colourCount !== 'undefined' && pr.colourCount !== null) ? pr.colourCount : 0);
 
-    // Build breakdown lines if values exist (server may supply 0 explicitly)
-    const monoExists = (typeof pr.monochromeCount !== 'undefined' && pr.monochromeCount !== null);
-    const colourExists = (typeof pr.colourCount !== 'undefined' && pr.colourCount !== null);
+    // Build the typed breakdown while keeping legacy/manual totals visible.
+    const totalCount = Number(pr.totalCount || 0);
+    const monoCount = Number(pr.monochromeCount || 0);
+    const colourCount = Number(pr.colourCount || 0);
+    const unclassifiedCount = Number((totalCount - monoCount - colourCount).toFixed(4));
+    const hasUsage = !!(totalCount || monoCount || colourCount);
 
     // collapse id (unique per printer)
     const collapseId = `printer-totals-${pr._id}`;
@@ -86,18 +91,19 @@
             <span class="total-label small text-muted-light me-2">Total:</span>
             <span class="total-value text-end"><strong class="text-white">${pr.totalCount || 0}</strong></span>
           </div>
-          ${ (monoExists || colourExists) ? `
+          ${ hasUsage ? `
             <button class="btn btn-sm btn-link expand-toggle position-absolute top-50 end-0 translate-middle-y" type="button" aria-expanded="false" aria-controls="${collapseId}" title="Show breakdown" data-bs-toggle="collapse" data-bs-target="#${collapseId}">
               <i class="bi bi-chevron-down text-white"></i>
             </button>
           ` : '' }
         </div>
 
-        ${ (monoExists || colourExists) ? `
+        ${ hasUsage ? `
           <div class="collapse mt-2" id="${collapseId}">
             <div class="card card-body p-2 dark-surface">
-              ${ monoExists ? `<div class="small mb-1 mono-value text-muted-light">Monochrome: ${escapeHtml(String(pr.monochromeCount || 0))}</div>` : '' }
-              ${ colourExists ? `<div class="small mb-0 colour-value text-muted-light">Colour: ${escapeHtml(String(pr.colourCount || 0))}</div>` : '' }
+              <div class="small mb-1 mono-value text-muted-light">Monochrome: ${escapeHtml(String(monoCount))}</div>
+              <div class="small mb-1 colour-value text-muted-light">Colour: ${escapeHtml(String(colourCount))}</div>
+              ${ unclassifiedCount ? `<div class="small mb-0 unclassified-value text-muted-light">Unclassified: ${escapeHtml(String(unclassifiedCount))}</div>` : '' }
             </div>
           </div>
         ` : '' }
@@ -444,9 +450,14 @@
   }
 
   // ---------- Fetch printer stats ----------
-  async function fetchPrinterStats(printerId, days = 30) {
+  async function fetchPrinterStats(printerId, days = 30, range = {}) {
     try {
-      const res = await fetch(`/admin/printers/${encodeURIComponent(printerId)}/stats?days=${encodeURIComponent(days)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+      const params = new URLSearchParams({ days: String(days) });
+      if (range.start && range.end) {
+        params.set('start', range.start);
+        params.set('end', range.end);
+      }
+      const res = await fetch(`/admin/printers/${encodeURIComponent(printerId)}/stats?${params.toString()}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
       if (!res.ok) {
         const j = await res.json().catch(()=>null);
         throw new Error((j && j.error) ? j.error : `Failed to fetch stats (${res.status})`);
@@ -460,34 +471,44 @@
     }
   }
 
-  // ---------- Render details modal (single value per container) ----------
+  // ---------- Render printer details and count-type breakdown ----------
   function renderPrinterDetailsModal(data, printerName, selectedRange) {
     try {
       if (pdHeader) pdHeader.textContent = `Printer: ${printerName || data.printerId || ''}`;
       if (pdSummary) pdSummary.style.display = '';
 
       // selectedRange: { mode: 'today'|'week'|'month'|'range', start?, end? }
-      let selCount = 0;
+      let selectedCounts = { monochrome: 0, colour: 0, total: 0 };
       let selRev = 0.0;
       const mode = selectedRange && selectedRange.mode ? selectedRange.mode : 'today';
 
       if (mode === 'today') {
-        selCount = (data.counts && data.counts.today) ? data.counts.today : 0;
+        selectedCounts = Object.assign(selectedCounts, data.countBreakdown && data.countBreakdown.today);
+        selectedCounts.total = Number(selectedCounts.total || (data.counts && data.counts.today) || 0);
         selRev = (data.revenue && typeof data.revenue.today !== 'undefined') ? Number(data.revenue.today) : 0;
       } else if (mode === 'week') {
-        selCount = (data.counts && data.counts.week) ? data.counts.week : 0;
+        selectedCounts = Object.assign(selectedCounts, data.countBreakdown && data.countBreakdown.week);
+        selectedCounts.total = Number(selectedCounts.total || (data.counts && data.counts.week) || 0);
         selRev = (data.revenue && typeof data.revenue.week !== 'undefined') ? Number(data.revenue.week) : 0;
       } else if (mode === 'month') {
-        selCount = (data.counts && data.counts.month) ? data.counts.month : 0;
+        selectedCounts = Object.assign(selectedCounts, data.countBreakdown && data.countBreakdown.month);
+        selectedCounts.total = Number(selectedCounts.total || (data.counts && data.counts.month) || 0);
         selRev = (data.revenue && typeof data.revenue.month !== 'undefined') ? Number(data.revenue.month) : 0;
       } else {
         // range — aggregate perDay array returned by server
         const perDay = data.perDay || [];
-        selCount = perDay.reduce((s, r) => s + (Number(r.count) || 0), 0);
+        selectedCounts = perDay.reduce((totals, row) => {
+          totals.monochrome += Number(row.monochrome || 0);
+          totals.colour += Number(row.colour || 0);
+          totals.total += Number(row.count || 0);
+          return totals;
+        }, { monochrome: 0, colour: 0, total: 0 });
         selRev = perDay.reduce((s, r) => s + (Number(r.revenue) || 0), 0);
       }
 
-      if (pdCountValue) pdCountValue.textContent = String(selCount || 0);
+      if (pdMonoValue) pdMonoValue.textContent = String(Number(selectedCounts.monochrome || 0));
+      if (pdColourValue) pdColourValue.textContent = String(Number(selectedCounts.colour || 0));
+      if (pdCountValue) pdCountValue.textContent = String(Number(selectedCounts.total || 0));
       if (pdRevValue) pdRevValue.textContent = Number(selRev || 0).toFixed(2);
 
       // Recent usages
@@ -562,7 +583,7 @@
     }
 
     try {
-      const data = await fetchPrinterStats(pid, days);
+      const data = await fetchPrinterStats(pid, days, { start, end });
       renderPrinterDetailsModal(data, pname || data.printerId, { mode, start, end });
     } catch (err) {
       console.error('openPrinterDetails err', err);

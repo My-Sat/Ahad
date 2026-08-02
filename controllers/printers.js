@@ -224,23 +224,36 @@ exports.stats = async (req, res) => {
     const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
 
     // --- Counts using PrinterUsage ---
-    const [countTodayAgg] = await PrinterUsage.aggregate([
-      { $match: { printer: printerId, createdAt: { $gte: startOfToday, $lte: endOfToday } } },
-      { $group: { _id: null, total: { $sum: '$count' } } }
-    ]);
-    const countToday = (countTodayAgg && countTodayAgg.total) ? countTodayAgg.total : 0;
+    async function countsForRange(rangeStart, rangeEnd) {
+      const [result] = await PrinterUsage.aggregate([
+        { $match: { printer: printerId, createdAt: { $gte: rangeStart, $lte: rangeEnd } } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$count' },
+            monochrome: {
+              $sum: { $cond: [{ $eq: ['$type', 'monochrome'] }, '$count', 0] }
+            },
+            colour: {
+              $sum: { $cond: [{ $eq: ['$type', 'colour'] }, '$count', 0] }
+            }
+          }
+        }
+      ]);
 
-    const [countWeekAgg] = await PrinterUsage.aggregate([
-      { $match: { printer: printerId, createdAt: { $gte: startOfWeek, $lte: endOfToday } } },
-      { $group: { _id: null, total: { $sum: '$count' } } }
-    ]);
-    const countWeek = (countWeekAgg && countWeekAgg.total) ? countWeekAgg.total : 0;
+      return {
+        monochrome: Number((result && result.monochrome) || 0),
+        colour: Number((result && result.colour) || 0),
+        // Keep unclassified/manual usage in the combined total for compatibility.
+        total: Number((result && result.total) || 0)
+      };
+    }
 
-    const [countMonthAgg] = await PrinterUsage.aggregate([
-      { $match: { printer: printerId, createdAt: { $gte: startOfMonth, $lte: endOfToday } } },
-      { $group: { _id: null, total: { $sum: '$count' } } }
+    const [countToday, countWeek, countMonth] = await Promise.all([
+      countsForRange(startOfToday, endOfToday),
+      countsForRange(startOfWeek, endOfToday),
+      countsForRange(startOfMonth, endOfToday)
     ]);
-    const countMonth = (countMonthAgg && countMonthAgg.total) ? countMonthAgg.total : 0;
 
     // --- Revenue using Orders: sum of item.subtotal for items referencing this printer ---
     // helper to sum items in date range
@@ -260,8 +273,27 @@ exports.stats = async (req, res) => {
     const revenueMonth = await revenueForRange(startOfMonth, endOfToday);
 
     // --- Per-day breakdown for last `days` days (count + revenue) ---
-    const startRange = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - (days - 1), 0, 0, 0, 0));
-    const endRange = endOfToday;
+    let startRange = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - (days - 1), 0, 0, 0, 0));
+    let endRange = endOfToday;
+    const requestedStart = String(req.query.start || '').trim();
+    const requestedEnd = String(req.query.end || '').trim();
+
+    if (requestedStart || requestedEnd) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(requestedStart) || !/^\d{4}-\d{2}-\d{2}$/.test(requestedEnd)) {
+        return res.status(400).json({ ok: false, error: 'A valid start and end date are required' });
+      }
+
+      startRange = new Date(`${requestedStart}T00:00:00.000Z`);
+      endRange = new Date(`${requestedEnd}T23:59:59.999Z`);
+      if (!Number.isFinite(startRange.getTime()) || !Number.isFinite(endRange.getTime()) || startRange > endRange) {
+        return res.status(400).json({ ok: false, error: 'Invalid printer statistics date range' });
+      }
+
+      const rangeDays = Math.floor((endRange - startRange) / 86400000) + 1;
+      if (rangeDays > 365) {
+        return res.status(400).json({ ok: false, error: 'Printer statistics are limited to a 365-day range' });
+      }
+    }
 
     // PrinterUsage per day
     const usageByDay = await PrinterUsage.aggregate([
@@ -271,10 +303,22 @@ exports.stats = async (req, res) => {
           y: { $year: '$createdAt' },
           m: { $month: '$createdAt' },
           d: { $dayOfMonth: '$createdAt' },
-          count: 1
+          count: 1,
+          type: 1
         }
       },
-      { $group: { _id: { y: '$y', m: '$m', d: '$d' }, total: { $sum: '$count' } } },
+      {
+        $group: {
+          _id: { y: '$y', m: '$m', d: '$d' },
+          total: { $sum: '$count' },
+          monochrome: {
+            $sum: { $cond: [{ $eq: ['$type', 'monochrome'] }, '$count', 0] }
+          },
+          colour: {
+            $sum: { $cond: [{ $eq: ['$type', 'colour'] }, '$count', 0] }
+          }
+        }
+      },
       { $sort: { '_id.y': 1, '_id.m': 1, '_id.d': 1 } }
     ]);
 
@@ -298,7 +342,13 @@ exports.stats = async (req, res) => {
     // create a map of dateKey -> values for easier combining
     function keyFromObj(o) { return `${o._id.y}-${String(o._id.m).padStart(2,'0')}-${String(o._id.d).padStart(2,'0')}`; }
     const usageMap = {};
-    usageByDay.forEach(u => { usageMap[keyFromObj(u)] = u.total; });
+    usageByDay.forEach(u => {
+      usageMap[keyFromObj(u)] = {
+        total: Number(u.total || 0),
+        monochrome: Number(u.monochrome || 0),
+        colour: Number(u.colour || 0)
+      };
+    });
     const revenueMap = {};
     ordersByDay.forEach(r => { revenueMap[keyFromObj(r)] = Number(r.totalRevenue); });
 
@@ -309,9 +359,12 @@ exports.stats = async (req, res) => {
       const m = dt.getUTCMonth() + 1;
       const d = dt.getUTCDate();
       const key = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const dayUsage = usageMap[key] || { total: 0, monochrome: 0, colour: 0 };
       perDay.push({
         date: key,
-        count: usageMap[key] || 0,
+        count: dayUsage.total,
+        monochrome: dayUsage.monochrome,
+        colour: dayUsage.colour,
         revenue: revenueMap[key] || 0
       });
     }
@@ -322,7 +375,8 @@ exports.stats = async (req, res) => {
     return res.json({
       ok: true,
       printerId: id,
-      counts: { today: countToday, week: countWeek, month: countMonth },
+      counts: { today: countToday.total, week: countWeek.total, month: countMonth.total },
+      countBreakdown: { today: countToday, week: countWeek, month: countMonth },
       revenue: { today: revenueToday, week: revenueWeek, month: revenueMonth },
       perDay,
       latestUsages

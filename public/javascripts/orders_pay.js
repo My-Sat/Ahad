@@ -49,7 +49,6 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
   const debtorsTable = document.getElementById('debtorsTable');
   const debtorsCount = document.getElementById('debtorsCount');
   const debtorsTotalDueEl = document.getElementById('debtorsTotalDue');
-  const debtorsTotalPaidEl = document.getElementById('debtorsTotalPaid');
   const debtorsTotalOutstandingEl = document.getElementById('debtorsTotalOutstanding');
   const fullPaymentModalEl = document.getElementById('fullPaymentConfirmModal');
   const fullPaymentModal = fullPaymentModalEl ? new bootstrap.Modal(fullPaymentModalEl) : null;
@@ -77,9 +76,8 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
   let _creditorsCache = [];
   let _creditorsLastQuery = '';
 
-  function setDebtorsSummary(totalDue, totalPaid, totalOutstanding) {
+  function setDebtorsSummary(totalDue, totalOutstanding) {
     if (debtorsTotalDueEl) debtorsTotalDueEl.textContent = formatCedi(totalDue || 0);
-    if (debtorsTotalPaidEl) debtorsTotalPaidEl.textContent = formatCedi(totalPaid || 0);
     if (debtorsTotalOutstandingEl) debtorsTotalOutstandingEl.textContent = formatCedi(totalOutstanding || 0);
   }
 
@@ -2678,7 +2676,7 @@ if (cashiersTable) {
   async function fetchDebtorsList(q = '') {
     if (!debtorsTable || !debtorsCount) return;
     debtorsCount.textContent = 'Loading...';
-    setDebtorsSummary(0, 0, 0);
+    setDebtorsSummary(0, 0);
     const tbody = debtorsTable.querySelector('tbody');
     if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="7">Loading...</td></tr>`;
     try {
@@ -2690,14 +2688,14 @@ if (cashiersTable) {
         const msg = (j && j.error) ? j.error : `Failed to fetch debtors (${res.status})`;
         if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="7">${escapeHtml(msg)}</td></tr>`;
         debtorsCount.textContent = '0 results';
-        setDebtorsSummary(0, 0, 0);
+        setDebtorsSummary(0, 0);
         return;
       }
       const j = await res.json().catch(()=>null);
       if (!j || !Array.isArray(j.debtors)) {
         if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="7">No debtors found.</td></tr>`;
         debtorsCount.textContent = '0 results';
-        setDebtorsSummary(0, 0, 0);
+        setDebtorsSummary(0, 0);
         return;
       }
       const rows = j.debtors;
@@ -2732,18 +2730,16 @@ if (cashiersTable) {
       if (!filtered.length) {
         if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="7">No debtors found.</td></tr>`;
         debtorsCount.textContent = '0 results';
-        setDebtorsSummary(0, 0, 0);
+        setDebtorsSummary(0, 0);
         return;
       }
 const summaryTotalDue = filtered.reduce((s, i) => s + Number(i.amountDue || 0), 0);
-const summaryTotalPaid = filtered.reduce((s, i) => s + Number(i.paidSoFar || 0), 0);
 const summaryTotalOutstanding = filtered.reduce(
   (s, i) => s + Number(i.outstanding || (i.amountDue - i.paidSoFar || 0)),
   0
 );
 setDebtorsSummary(
   Number(summaryTotalDue.toFixed(2)),
-  Number(summaryTotalPaid.toFixed(2)),
   Number(summaryTotalOutstanding.toFixed(2))
 );
 _debtorDebtPayloads = new Map();
@@ -2825,6 +2821,15 @@ Object.values(grouped).forEach(group => {
                   type="button"
                   data-order-id="${escapeHtml(d.orderId || '')}">
                   Update
+                </button>
+              </li>
+              <li>
+                <button
+                  class="dropdown-item pay-debtor-full"
+                  type="button"
+                  data-order-ids='${JSON.stringify([d.orderId])}'
+                  data-total="${out}">
+                  Pay All
                 </button>
               </li>
               ${accountUrl ? `<li><a class="dropdown-item debtor-account-link" href="${accountUrl}" data-ajax="true">Account</a></li>` : ''}
@@ -2926,11 +2931,32 @@ html += `
         <td class="text-end">GH₵ ${Number(d.paidSoFar || 0).toFixed(2)}</td>
         <td class="text-end"><span class="fw-semibold">${'GH₵ ' + out}</span></td>
         <td class="text-center">
-          <button class="btn btn-sm btn-outline-primary view-debtor-order"
-            type="button"
-            data-order-id="${escapeHtml(d.orderId || '')}">
-            Update
-          </button>
+          <div class="dropup d-inline-block">
+            <button class="btn btn-sm btn-outline-light-custom debtor-actions-menu"
+              type="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+              title="Actions">
+              <i class="bi bi-three-dots-vertical"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li>
+                <button class="dropdown-item view-debtor-order"
+                  type="button"
+                  data-order-id="${escapeHtml(d.orderId || '')}">
+                  Update
+                </button>
+              </li>
+              <li>
+                <button class="dropdown-item pay-debtor-full"
+                  type="button"
+                  data-order-ids='${JSON.stringify([d.orderId])}'
+                  data-total="${out}">
+                  Pay All
+                </button>
+              </li>
+            </ul>
+          </div>
         </td>
       </tr>
     `;
@@ -2957,7 +2983,7 @@ html += `
       console.error('fetch debtors err', err);
       if (tbody) tbody.innerHTML = `<tr><td class="text-muted" colspan="7">Network error while fetching debtors.</td></tr>`;
       debtorsCount.textContent = '0 results';
-      setDebtorsSummary(0, 0, 0);
+      setDebtorsSummary(0, 0);
     }
   }
 
@@ -3060,8 +3086,9 @@ if (debtorsTable) {
 
       // prepare modal UI
       if (fullPaymentConfirmText) {
-        fullPaymentConfirmText.textContent =
-          `Apply FULL payment of GH₵ ${fmt(total)} to ALL selected outstanding orders?`;
+        fullPaymentConfirmText.textContent = orderIds.length === 1
+          ? `Apply full payment of ${formatCedi(total)} to order ${orderIds[0]}?`
+          : `Apply full payment of ${formatCedi(total)} to all selected outstanding orders?`;
       }
 
       if (fullPaymentMethod) {

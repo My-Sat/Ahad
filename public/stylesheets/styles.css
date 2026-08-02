@@ -561,6 +561,24 @@ body > .cart-invoice-floating-menu:not(.show){
   display: none !important;
 }
 
+body > .customer-actions-floating-menu{
+  position: fixed !important;
+  z-index: 1085 !important;
+  margin: 0 !important;
+  transform: none !important;
+  filter: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-width: 10rem;
+  box-shadow: var(--shadow-md);
+}
+
+body > .customer-actions-floating-menu[data-placement="top"]{
+  transform-origin: bottom right;
+}
+
 /* nested dropdown (Orders -> Operations -> New Registration) */
 .dropdown-submenu{ position: relative; }
 .dropdown-submenu > .dropdown-menu{
@@ -630,6 +648,15 @@ body > .cart-invoice-floating-menu:not(.show){
 /* ---------------------------
    Modals
    --------------------------- */
+.modal-backdrop{
+  /* Keep the blocking layer above the fixed application header. */
+  z-index: 3090;
+}
+
+.modal{
+  z-index: 3100;
+}
+
 .modal-content{
   background: rgba(255,249,238,.96);
   border: 1px solid rgba(11,15,26,.14);
@@ -1048,6 +1075,25 @@ body > .cart-invoice-floating-menu:not(.show){
   display: inline-block;
   width: var(--printer-value-width);
   text-align: right;
+}
+
+.printer-count-metric{
+  padding: .65rem .55rem;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  text-align: center;
+}
+
+.printer-count-metric strong{
+  margin-top: .15rem;
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.printer-count-metric-total{
+  border-color: rgba(43,123,187,.35);
+  background: var(--accent-soft);
 }
 
 @media (max-width: 560px){

@@ -21,24 +21,33 @@ function categoryLabel(category) {
   return 'One-time';
 }
 
-function applyTemplate(template, ctx) {
+function templateValue(value) {
+  return value === undefined || value === null ? '' : String(value);
+}
+
+function templateMoney(value) {
+  if (value === undefined || value === null || value === '') return '';
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount.toFixed(2) : String(value);
+}
+
+function applyTemplate(template, ctx = {}) {
   // Very small safe templating:
   // {name}, {category}, {phone}, {orderId}, {amount}, {totalBeforeDiscount}, {discountAmount},
   // {outstanding}, {ordersCount}, {accBalance}
   let t = String(template || '');
-  t = t.replaceAll('{name}', ctx.name || '');
-  t = t.replaceAll('{category}', ctx.categoryLabel || '');
-  t = t.replaceAll('{phone}', ctx.phone || '');
+  t = t.replaceAll('{name}', templateValue(ctx.name));
+  t = t.replaceAll('{category}', templateValue(ctx.categoryLabel));
+  t = t.replaceAll('{phone}', templateValue(ctx.phone));
 
-  t = t.replaceAll('{orderId}', ctx.orderId || '');
-  t = t.replaceAll('{amount}', ctx.amount || '');
-  t = t.replaceAll('{totalBeforeDiscount}', ctx.totalBeforeDiscount || '');
-  t = t.replaceAll('{discountAmount}', ctx.discountAmount || '');
+  t = t.replaceAll('{orderId}', templateValue(ctx.orderId));
+  t = t.replaceAll('{amount}', templateValue(ctx.amount));
+  t = t.replaceAll('{totalBeforeDiscount}', templateValue(ctx.totalBeforeDiscount));
+  t = t.replaceAll('{discountAmount}', templateValue(ctx.discountAmount));
 
-  // ✅ NEW: debtors placeholders
-  t = t.replaceAll('{outstanding}', ctx.outstanding || '');
-  t = t.replaceAll('{ordersCount}', ctx.ordersCount || '');
-  t = t.replaceAll('{accBalance}', ctx.accBalance || '');
+  t = t.replaceAll('{outstanding}', templateValue(ctx.outstanding));
+  t = t.replaceAll('{ordersCount}', templateValue(ctx.ordersCount));
+  t = t.replaceAll('{accBalance}', templateValue(ctx.accBalance));
 
   return t.trim();
 }
@@ -59,22 +68,22 @@ function buildTemplateContext(customerDoc, orderCtx = null) {
       : (customerDoc?.firstName || customerDoc?.businessName || customerDoc?.phone || ''),
 
     orderId: orderCtx && orderCtx.orderId ? String(orderCtx.orderId) : '',
-    amount: (orderCtx && orderCtx.amount !== undefined && orderCtx.amount !== null) ? String(orderCtx.amount) : '',
+    amount: (orderCtx && orderCtx.amount !== undefined && orderCtx.amount !== null) ? templateMoney(orderCtx.amount) : '',
     totalBeforeDiscount: (orderCtx && orderCtx.totalBeforeDiscount !== undefined && orderCtx.totalBeforeDiscount !== null)
-      ? String(orderCtx.totalBeforeDiscount)
+      ? templateMoney(orderCtx.totalBeforeDiscount)
       : '',
     discountAmount: (orderCtx && orderCtx.discountAmount !== undefined && orderCtx.discountAmount !== null)
-      ? String(orderCtx.discountAmount)
+      ? templateMoney(orderCtx.discountAmount)
       : '',
 
     outstanding: (orderCtx && orderCtx.outstanding !== undefined && orderCtx.outstanding !== null)
-      ? String(orderCtx.outstanding)
+      ? templateMoney(orderCtx.outstanding)
       : '',
     ordersCount: (orderCtx && orderCtx.ordersCount !== undefined && orderCtx.ordersCount !== null)
       ? String(orderCtx.ordersCount)
       : '',
     accBalance: (customerDoc && customerDoc.accountBalance !== undefined && customerDoc.accountBalance !== null)
-      ? String(customerDoc.accountBalance)
+      ? templateMoney(customerDoc.accountBalance)
       : ''
   };
 }
@@ -355,6 +364,37 @@ exports.apiSendManual = async (req, res) => {
       }
     } else {
       customers = await Customer.find(q).select('_id phone firstName businessName category accountBalance').lean();
+
+      // Manual messages can use debt placeholders even when sent to all
+      // customers or a customer type. Build a per-customer order balance map
+      // instead of silently replacing those placeholders with blank text.
+      const needsDebtContext = /\{(?:outstanding|ordersCount)\}/.test(String(message || ''));
+      if (applyTpl && needsDebtContext && customers.length) {
+        const Order = require('../models/order');
+        const customerIds = customers.map(customer => customer._id).filter(Boolean);
+        const debtorGroups = await Order.aggregate([
+          { $match: { customer: { $in: customerIds } } },
+          { $addFields: { paidSoFar: { $sum: { $ifNull: ['$payments.amount', []] } } } },
+          { $addFields: { outstanding: { $subtract: [{ $ifNull: ['$total', 0] }, { $ifNull: ['$paidSoFar', 0] }] } } },
+          { $match: { outstanding: { $gt: 0 } } },
+          {
+            $group: {
+              _id: '$customer',
+              totalOutstanding: { $sum: '$outstanding' },
+              ordersCount: { $sum: 1 }
+            }
+          }
+        ]);
+
+        debtorExtraMap = {};
+        debtorGroups.forEach(group => {
+          if (!group || !group._id) return;
+          debtorExtraMap[String(group._id)] = {
+            outstanding: Number(group.totalOutstanding || 0).toFixed(2),
+            ordersCount: Number(group.ordersCount || 0)
+          };
+        });
+      }
     }
 
     const campaign = new MessageCampaign({
@@ -374,7 +414,7 @@ exports.apiSendManual = async (req, res) => {
       try {
         let content = message;
         if (applyTpl) {
-          const extra = (target === 'debtors' && debtorExtraMap)
+          const extra = debtorExtraMap
             ? (debtorExtraMap[String(c._id)] || { outstanding: '0.00', ordersCount: 0 })
             : null;
           const ctx = buildTemplateContext(

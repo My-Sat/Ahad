@@ -109,7 +109,7 @@ exports.apiUpdateCustomer = async (req, res) => {
     }
 
     const body = req.body || {};
-    const category = (body.category || '').toString();
+    const category = (body.category || '').toString().trim().toLowerCase();
     const phone = (body.phone || '').toString().trim();
 
     if (!phone) return res.status(400).json({ error: 'Phone is required' });
