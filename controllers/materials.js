@@ -69,12 +69,7 @@ function labelTokens(value) {
     .filter(Boolean);
 }
 
-function isPaperSizeUnit(value) {
-  const tokens = labelTokens(value);
-  return tokens.includes('paper') && tokens.some(token => token === 'size' || token === 'sizes');
-}
-
-function hasPaperSizeToken(value, size) {
+function hasMaterialSizeToken(value, size) {
   return labelTokens(value).includes(String(size || '').toLowerCase());
 }
 
@@ -90,13 +85,13 @@ function materialSelectionKey(selections) {
     .join('|');
 }
 
-function findPaperSizeSelection(material, size) {
+function findMaterialSizeSelection(material, size) {
+  // Unit labels are Admin-defined; A3/A4 semantics come from selected values.
   return (Array.isArray(material && material.selections) ? material.selections : []).find(selection => (
     selection
     && selection.unit
     && selection.subUnit
-    && isPaperSizeUnit(selection.unit.name)
-    && hasPaperSizeToken(selection.subUnit.name, size)
+    && hasMaterialSizeToken(selection.subUnit.nameNormalized || selection.subUnit.name, size)
   ));
 }
 
@@ -107,9 +102,9 @@ function a4MaterialName(sourceName) {
 }
 
 async function resolveA4TransferMaterial(sourceMaterial, session, createdBy) {
-  const a3Selection = findPaperSizeSelection(sourceMaterial, 'a3');
+  const a3Selection = findMaterialSizeSelection(sourceMaterial, 'a3');
   if (!a3Selection) {
-    const error = new Error('Convert is only available for materials whose Paper Size selection contains A3');
+    const error = new Error('Convert is only available for materials with an A3 sub-unit selection');
     error.statusCode = 400;
     throw error;
   }
@@ -126,13 +121,13 @@ async function resolveA4TransferMaterial(sourceMaterial, session, createdBy) {
 
   if (!a4SubUnit) {
     const candidates = await ServiceCostSubUnit.find({ unit: unitId }).session(session).lean();
-    const a4Candidates = candidates.filter(candidate => hasPaperSizeToken(candidate.name, 'a4'));
+    const a4Candidates = candidates.filter(candidate => hasMaterialSizeToken(candidate.nameNormalized || candidate.name, 'a4'));
     a4SubUnit = a4Candidates.find(candidate => String(candidate.nameNormalized || '').trim().toLowerCase() === 'a4')
       || (a4Candidates.length === 1 ? a4Candidates[0] : null);
   }
 
   if (!a4SubUnit) {
-    const error = new Error('No matching A4 sub-unit exists under the Paper Size unit');
+    const error = new Error('No matching A4 sub-unit exists under the same unit as the selected A3 value');
     error.statusCode = 409;
     throw error;
   }
@@ -735,7 +730,7 @@ exports.stockPage = async (req, res) => {
           used,
           remaining,
           stockUnits,
-          canConvertA3ToA4: !!findPaperSizeSelection(ss.material, 'a3'),
+          canConvertA3ToA4: !!findMaterialSizeSelection(ss.material, 'a3'),
           stockedDisplay: ss.material ? formatMaterialQuantity(stocked, ss.material, unitDisplayOpts) : String(stocked),
           usedDisplay: ss.material ? formatMaterialQuantity(used, ss.material, unitDisplayOpts) : String(used),
           remainingDisplay: ss.material ? formatMaterialQuantity(remaining, ss.material, unitDisplayOpts) : String(remaining),
