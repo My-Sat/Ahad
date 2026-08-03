@@ -24,6 +24,9 @@ const OrderItemSchema = new mongoose.Schema({
   largeFormatConsumedSquareFeet: { type: Number, default: 0 },
   // human-friendly label for the selected combination (e.g. "Paper Size: A4 + Paper Type: Standard")
   selectionLabel: { type: String, required: true },
+  // Preserve both labels when Admin supplied an invoice-facing description.
+  priceRuleLabel: { type: String, trim: true, default: '' },
+  invoiceLabelOverride: { type: String, trim: true, maxlength: 120, default: '' },
   // price per unit (the unit price you assigned for that selection)
   unitPrice: { type: Number, required: true },
   // optional multiplier (raw user input, e.g., number of pages)
@@ -31,7 +34,13 @@ const OrderItemSchema = new mongoose.Schema({
   // the effective quantity used for pricing (e.g. ceil(pages/2) for F/B). Stored so clients can show exactly what server used.
   effectiveQty: { type: Number, default: 1 },
   factor: { type: Number, default: 1 }, 
-  // computed line subtotal (unitPrice * effectiveQty)
+  // Admin discount reduces the configured unit price before quantity multipliers.
+  grossSubtotal: { type: Number, default: 0, min: 0 },
+  unitDiscountAmount: { type: Number, default: 0, min: 0 },
+  discountedUnitPrice: { type: Number, default: null, min: 0 },
+  // Total saving across this line after multiplying the unit discount.
+  lineDiscountAmount: { type: Number, default: 0, min: 0 },
+  // computed net line subtotal (grossSubtotal - lineDiscountAmount)
   subtotal: { type: Number, required: true },
   // optional flags stored per-item (backwards compat)
   fb: { type: Boolean, default: false },
@@ -64,8 +73,9 @@ const OrderSchema = new mongoose.Schema({
   items: [OrderItemSchema],
   // Optional operator note / job type label set at order creation.
   jobNote: { type: String, trim: true, default: '' },
-    // --- Discounts snapshot (applied at creation time) ---
+  // --- Discounts snapshot (applied at creation time) ---
   totalBeforeDiscount: { type: Number, default: 0 },
+  lineDiscountTotal: { type: Number, default: 0 },
   discountAmount: { type: Number, default: 0 },
   discountBreakdown: {
     // e.g. { scope:'customer_type', mode:'percent', value:10, computed: 5.20, label:'Customer Type: artist' }

@@ -31,17 +31,23 @@ block content
                 small.text-muted-light.d-block.mt-2 Lookup existing customers, register a new one, or click Lookup with empty field for walk-in.
 
             .card.mb-3.dark-surface#selectedSecretaryCustomerCard(style='border:1px solid rgba(255,255,255,.08);display:none;')
-              .card-body.dark-card-body.py-2.text-center
-                div.small.text-muted-light.mb-1 Selected
-                strong#selectedSecretaryCustomerName(style='color:#21BCFF;')
-                strong#selectedSecretaryCustomerPhone.text-muted-light.ms-3
-                strong#selectedSecretaryCustomerCategory.text-muted-light.ms-3
-                .mt-2
-                  button.btn.btn-sm.btn-outline-light-custom#secretaryClearSelectionBtn(type='button') Clear selection
+              .card-body.dark-card-body.py-2
+                .d-flex.align-items-center.gap-3.flex-nowrap
+                  span.small.text-muted-light.flex-shrink-0 Selected
+                  .d-flex.align-items-center.gap-3.flex-grow-1(style='min-width:0;overflow:hidden;')
+                    strong.text-truncate#selectedSecretaryCustomerName(style='color:#21BCFF;min-width:0;')
+                    strong.text-muted-light.text-nowrap#selectedSecretaryCustomerPhone
+                    strong.text-muted-light.text-nowrap#selectedSecretaryCustomerCategory
+                  button.btn.btn-sm.btn-outline-light-custom.flex-shrink-0#secretaryClearSelectionBtn(type='button') Clear selection
 
             .card.mb-3.dark-surface(style='border:1px solid rgba(255,255,255,.08);')
               .card-body.dark-card-body.py-2
                 h6.text-white.mb-2 Assign Service Category(s)
+                ul.nav.nav-pills.gap-2.mb-3#secretaryCategoryTabs(role='tablist', aria-label='Service category type')
+                  li.nav-item(role='presentation')
+                    button.nav-link.active#secretaryDigitalCategoriesTab(type='button', role='tab', data-category-group='digital', aria-selected='true') Digital Categories
+                  li.nav-item(role='presentation')
+                    button.nav-link#secretaryLargeFormatCategoriesTab(type='button', role='tab', data-category-group='large_format', aria-selected='false') Large Format Categories
                 .row.g-2#secretaryCategoriesBox
                   .col-12
                     span.text-muted-light Loading categories...

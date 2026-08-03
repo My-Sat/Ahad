@@ -548,6 +548,74 @@ function invoicePayload(inv) {
   };
 }
 
+function isAdminUser(user) {
+  return Boolean(user && user.role && String(user.role).toLowerCase() === 'admin');
+}
+
+async function accessibleCartInvoiceFilter(user, baseFilter) {
+  const base = baseFilter || {};
+  if (isAdminUser(user)) return base;
+
+  // New invoices carry a role snapshot. For older invoices, infer the role from
+  // the creator so pre-existing Admin invoices are not exposed.
+  const adminUserIds = await User.find({ role: 'admin' }).distinct('_id');
+  const legacyCreatorFilter = adminUserIds.length
+    ? { createdBy: { $nin: adminUserIds } }
+    : {};
+
+  return {
+    $and: [
+      base,
+      {
+        $or: [
+          { createdByRole: { $in: ['clerk', 'cashier', 'secretary'] } },
+          {
+            $and: [
+              {
+                $or: [
+                  { createdByRole: { $exists: false } },
+                  { createdByRole: null }
+                ]
+              },
+              legacyCreatorFilter
+            ]
+          }
+        ]
+      }
+    ]
+  };
+}
+
+function invoiceLineDiscountKey(line) {
+  if (!line || typeof line !== 'object') return '';
+  return [
+    String(line.serviceId || line.service || ''),
+    String(line.priceRuleId || line.priceRule || ''),
+    String(line.pricingMode || '')
+  ].join('|');
+}
+
+function approvedInvoiceDiscountQueues(invoice) {
+  const queues = new Map();
+  if (!invoice || !invoice.lineDiscountsApproved || !Array.isArray(invoice.cart)) return queues;
+
+  invoice.cart.forEach(line => {
+    const key = invoiceLineDiscountKey(line);
+    const amount = Number(line && line.unitDiscountAmount || 0);
+    if (!key || !Number.isFinite(amount) || amount <= 0) return;
+    if (!queues.has(key)) queues.set(key, []);
+    queues.get(key).push(amount);
+  });
+
+  return queues;
+}
+
+function takeApprovedInvoiceDiscount(queues, line) {
+  const queue = queues.get(invoiceLineDiscountKey(line));
+  if (!queue || !queue.length) return 0;
+  return Number(queue.shift() || 0);
+}
+
 function currentUtcDayKey() {
   const d = new Date();
   const y = d.getUTCFullYear();
@@ -908,38 +976,34 @@ exports.payPage = async (req, res) => {
 exports.apiSaveCartInvoice = async (req, res) => {
   try {
     const body = req.body || {};
+    const isAdmin = isAdminUser(req.user);
     const rawCart = Array.isArray(body.cart) ? body.cart.slice(0, 100) : [];
-    const cart = rawCart.map(line => {
+    const cleanedCart = rawCart.map(line => {
       if (!line || typeof line !== 'object' || Array.isArray(line)) return line;
       const clean = Object.assign({}, line);
       const invoiceLabelOverride = String(clean.invoiceLabelOverride || '').trim().replace(/\s+/g, ' ').slice(0, 120);
-      if (invoiceLabelOverride) clean.invoiceLabelOverride = invoiceLabelOverride;
+      if (isAdmin && invoiceLabelOverride) clean.invoiceLabelOverride = invoiceLabelOverride;
       else delete clean.invoiceLabelOverride;
       return clean;
     });
-    if (!cart.length) return res.status(400).json({ error: 'Invoice cart is empty' });
+    if (!cleanedCart.length) return res.status(400).json({ error: 'Invoice cart is empty' });
 
     const invoiceId = String(body.invoiceId || '').trim();
     const submissionId = String(body.submissionId || '').trim();
     const jobNote = String(body.jobNote || '').trim().slice(0, 140);
-    const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
-    const manualDiscount = isAdmin && body.manualDiscount && typeof body.manualDiscount === 'object' ? body.manualDiscount : null;
-    const manualTax = isAdmin && body.manualTax && typeof body.manualTax === 'object' ? body.manualTax : null;
-    const totals = body.totals && typeof body.totals === 'object' ? Object.assign({}, body.totals) : {};
-    if (!isAdmin) {
-      const baseTotal = Number(cart.reduce((sum, item) => sum + Number(item && item.subtotal || 0), 0).toFixed(2));
-      totals.adjustmentAmount = 0;
-      totals.taxAmount = 0;
-      totals.tax = null;
-      totals.taxableTotal = baseTotal;
-      totals.finalTotal = baseTotal;
-    }
 
     let invoice = null;
     let source = null;
 
-    if (invoiceId && mongoose.Types.ObjectId.isValid(invoiceId)) {
-      invoice = await CartInvoice.findOne({ _id: new mongoose.Types.ObjectId(invoiceId), status: 'open' });
+    if (invoiceId) {
+      if (!mongoose.Types.ObjectId.isValid(invoiceId)) {
+        return res.status(400).json({ error: 'Invalid invoice id' });
+      }
+      const invoiceFilter = await accessibleCartInvoiceFilter(req.user, {
+        _id: new mongoose.Types.ObjectId(invoiceId),
+        status: 'open'
+      });
+      invoice = await CartInvoice.findOne(invoiceFilter);
       if (!invoice) return res.status(404).json({ error: 'Open invoice not found' });
     } else {
       if (!submissionId || !mongoose.Types.ObjectId.isValid(submissionId)) {
@@ -957,6 +1021,46 @@ exports.apiSaveCartInvoice = async (req, res) => {
       if (!source) return res.status(409).json({ error: 'Selected submission is no longer available. Refresh and try again.' });
     }
 
+    const approvedDiscounts = isAdmin ? new Map() : approvedInvoiceDiscountQueues(invoice);
+    const cart = cleanedCart.map(line => {
+      if (!line || typeof line !== 'object' || Array.isArray(line)) return line;
+      const clean = Object.assign({}, line);
+      const originalUnitPrice = Number(clean.unitPrice || 0);
+      const grossSubtotal = Number(clean.grossSubtotal || (Number(clean.subtotal || 0) + Number(clean.lineDiscountAmount || 0)));
+      const requestedUnitDiscount = isAdmin
+        ? Number(clean.unitDiscountAmount || 0)
+        : takeApprovedInvoiceDiscount(approvedDiscounts, clean);
+      const safeGrossSubtotal = Number.isFinite(grossSubtotal) && grossSubtotal >= 0 ? Number(grossSubtotal.toFixed(2)) : 0;
+      const safeUnitDiscount = Number.isFinite(requestedUnitDiscount) && requestedUnitDiscount > 0 && requestedUnitDiscount <= originalUnitPrice
+        ? Number(requestedUnitDiscount.toFixed(2))
+        : 0;
+      const discountedUnitPrice = Number(Math.max(0, originalUnitPrice - safeUnitDiscount).toFixed(2));
+      const pricingQuantity = originalUnitPrice > 0 ? safeGrossSubtotal / originalUnitPrice : 0;
+      const lineDiscountAmount = Number((safeUnitDiscount * pricingQuantity).toFixed(2));
+      clean.grossSubtotal = safeGrossSubtotal;
+      clean.unitDiscountAmount = safeUnitDiscount;
+      clean.discountedUnitPrice = discountedUnitPrice;
+      clean.lineDiscountAmount = lineDiscountAmount;
+      clean.subtotal = Number((discountedUnitPrice * pricingQuantity).toFixed(2));
+      return clean;
+    });
+
+    const manualDiscount = isAdmin && body.manualDiscount && typeof body.manualDiscount === 'object'
+      ? body.manualDiscount
+      : null;
+    const manualTax = isAdmin && body.manualTax && typeof body.manualTax === 'object'
+      ? body.manualTax
+      : null;
+    const totals = body.totals && typeof body.totals === 'object' ? Object.assign({}, body.totals) : {};
+    if (!isAdmin) {
+      const baseTotal = Number(cart.reduce((sum, item) => sum + Number(item && item.subtotal || 0), 0).toFixed(2));
+      totals.adjustmentAmount = 0;
+      totals.taxAmount = 0;
+      totals.tax = null;
+      totals.taxableTotal = baseTotal;
+      totals.finalTotal = baseTotal;
+    }
+
     if (!invoice) {
       const customerDoc = source && source.customer && typeof source.customer === 'object' ? source.customer : null;
       const customerName = customerDoc
@@ -972,11 +1076,15 @@ exports.apiSaveCartInvoice = async (req, res) => {
         sourceSubmission: source._id,
         categories: (source.categories || []).map(c => ({ id: c._id, name: c.name || '' })),
         createdBy: req.user?._id || null,
-        createdByName: req.user?.name || req.user?.username || ''
+        createdByName: req.user?.name || req.user?.username || '',
+        createdByRole: req.user && req.user.role ? String(req.user.role).toLowerCase() : null
       });
     }
 
     invoice.cart = cart;
+    invoice.lineDiscountsApproved = isAdmin
+      ? cart.some(line => Number(line && line.unitDiscountAmount || 0) > 0)
+      : Boolean(invoice.lineDiscountsApproved && cart.some(line => Number(line && line.unitDiscountAmount || 0) > 0));
     invoice.manualDiscount = manualDiscount;
     invoice.manualTax = manualTax;
     invoice.jobNote = jobNote;
@@ -995,24 +1103,25 @@ exports.apiListCartInvoices = async (req, res) => {
   try {
     const qRaw = String(req.query.q || '').trim();
     const invoiceId = String(req.query.invoiceId || '').trim();
-    const filter = {};
+    const baseFilter = {};
 
     if (invoiceId) {
       if (!mongoose.Types.ObjectId.isValid(invoiceId)) return res.status(400).json({ error: 'Invalid invoice id' });
-      filter._id = new mongoose.Types.ObjectId(invoiceId);
+      baseFilter._id = new mongoose.Types.ObjectId(invoiceId);
     } else if (qRaw) {
       const safe = qRaw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regex = new RegExp(safe, 'i');
-      filter.$or = [
+      baseFilter.$or = [
         { invoiceNo: regex },
         { customerName: regex },
         { customerPhone: regex }
       ];
-      filter.status = { $ne: 'cancelled' };
+      baseFilter.status = { $ne: 'cancelled' };
     } else {
-      filter.status = 'open';
+      baseFilter.status = 'open';
     }
 
+    const filter = await accessibleCartInvoiceFilter(req.user, baseFilter);
     const rows = await CartInvoice.find(filter)
       .sort({ updatedAt: -1 })
       .limit(invoiceId ? 1 : 20)
@@ -1032,10 +1141,11 @@ exports.apiRemoveCartInvoice = async (req, res) => {
       return res.status(400).json({ error: 'Invalid invoice id' });
     }
 
-    const invoice = await CartInvoice.findOne({
+    const filter = await accessibleCartInvoiceFilter(req.user, {
       _id: new mongoose.Types.ObjectId(id),
       status: 'open'
     });
+    const invoice = await CartInvoice.findOne(filter);
 
     if (!invoice) return res.status(404).json({ error: 'Open invoice not found' });
 
@@ -1083,6 +1193,10 @@ const largeFormatUnit = String(it.largeFormatUnit || it.measurementUnit || 'feet
   ? 'inches'
   : 'feet';
 const largeFormatQty = Math.max(1, Math.floor(Number(it.largeFormatQty || it.quantity || factor || 1)));
+const unitDiscountAmount = it.unitDiscountAmount === undefined || it.unitDiscountAmount === null || String(it.unitDiscountAmount).trim() === ''
+  ? 0
+  : Number(it.unitDiscountAmount);
+const invoiceLabelOverride = String(it.invoiceLabelOverride || '').trim().replace(/\s+/g, ' ').slice(0, 120);
 
 return {
   serviceId: it.serviceId,
@@ -1098,6 +1212,8 @@ return {
   booklet,
   printerId: it.printerId || null,
   spoiled,
+  unitDiscountAmount,
+  invoiceLabelOverride,
   outsourced: it.outsourced === true || it.outsourced === 'true' || it.outsourced === 1 || it.outsourced === '1',
   outsourcedArtistId: it.outsourcedArtistId || null,
   outsourcedArtistName: it.outsourcedArtistName || '',
@@ -1108,14 +1224,19 @@ return {
 
     const submissionId = String(req.body && req.body.submissionId ? req.body.submissionId : '').trim();
     const invoiceId = String(req.body && req.body.invoiceId ? req.body.invoiceId : '').trim();
+    const isAdminActor = isAdminUser(req.user);
     let invoice = null;
     let submission = null;
 
-    if (invoiceId && mongoose.Types.ObjectId.isValid(invoiceId)) {
-      invoice = await CartInvoice.findOne({
+    if (invoiceId) {
+      if (!mongoose.Types.ObjectId.isValid(invoiceId)) {
+        return res.status(400).json({ error: 'Invalid invoice id' });
+      }
+      const invoiceFilter = await accessibleCartInvoiceFilter(req.user, {
         _id: new mongoose.Types.ObjectId(invoiceId),
         status: 'open'
-      }).lean();
+      });
+      invoice = await CartInvoice.findOne(invoiceFilter).lean();
 
       if (!invoice) {
         return res.status(409).json({ error: 'Selected invoice is no longer available. Refresh and try again.' });
@@ -1143,6 +1264,10 @@ return {
         return res.status(409).json({ error: 'Selected submission is no longer available. Refresh and try again.' });
       }
     }
+
+    const approvedInvoiceDiscounts = isAdminActor
+      ? new Map()
+      : approvedInvoiceDiscountQueues(invoice);
 
     const allowedCategoryIds = new Set((submission.categories || []).map(id => String(id && id._id ? id._id : id)));
     if (!allowedCategoryIds.size) {
@@ -1236,7 +1361,8 @@ return {
 
     const builtItems = [];
     let total = 0;
-    const canMarkOutsourced = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
+    let lineDiscountTotal = 0;
+    const canMarkOutsourced = isAdminActor;
 
     for (const it of items) {
       const svc = serviceMap.get(String(it.serviceId));
@@ -1388,6 +1514,10 @@ return {
           pages: squareFeetEach,
           effectiveQty: squareFeetTotal,
           factor: quantity,
+          grossSubtotal: subtotal,
+          unitDiscountAmount: 0,
+          discountedUnitPrice: amountPerSquareFeet,
+          lineDiscountAmount: 0,
           subtotal,
           spoiled: 0,
           fb: false,
@@ -1436,9 +1566,26 @@ return {
         : (usedFB ? Math.ceil(pages / 2) : pages);
 
       // APPLY pricing factor HERE
-      const subtotal = Number(
-        (unitPrice * effectiveQtyForPrice * pricingFactor).toFixed(2)
+      const pricingQuantity = effectiveQtyForPrice * pricingFactor;
+      const grossSubtotal = Number(
+        (unitPrice * pricingQuantity).toFixed(2)
       );
+      let unitDiscountAmount = 0;
+      const requestedUnitDiscount = isAdminActor
+        ? Number(it.unitDiscountAmount)
+        : takeApprovedInvoiceDiscount(approvedInvoiceDiscounts, it);
+      if (isAdminActor || requestedUnitDiscount > 0) {
+        if (!isFinite(requestedUnitDiscount) || requestedUnitDiscount < 0) {
+          return res.status(400).json({ error: 'Enter a valid price rule discount amount.' });
+        }
+        unitDiscountAmount = Number(requestedUnitDiscount.toFixed(2));
+        if (unitDiscountAmount > unitPrice) {
+          return res.status(400).json({ error: `Unit discount cannot exceed the price rule price of ${unitPrice.toFixed(2)}.` });
+        }
+      }
+      const discountedUnitPrice = Number((unitPrice - unitDiscountAmount).toFixed(2));
+      const lineDiscountAmount = Number((unitDiscountAmount * pricingQuantity).toFixed(2));
+      const subtotal = Number((discountedUnitPrice * pricingQuantity).toFixed(2));
 
       // Build human-friendly selection label (append print mode suffix)
       const baseLabel = (pr.customLabel && String(pr.customLabel).trim()) || ((pr.selections || []).map(s => {
@@ -1447,6 +1594,8 @@ return {
         return `${u}: ${su}`;
       }).join(' + '));
       const selectionLabel = baseLabel + (usedBooklet ? ' (Booklet)' : (usedFB ? ' (F/B)' : ''));
+      const invoiceLabelOverride = isAdminActor ? String(it.invoiceLabelOverride || '').trim().replace(/\s+/g, ' ').slice(0, 120) : '';
+      const displaySelectionLabel = invoiceLabelOverride || selectionLabel;
 
       // store selections as unit/subUnit objectIds (not populated objects)
       const selectionsForOrder = (pr.selections || []).map(s => ({
@@ -1500,11 +1649,17 @@ return {
         service: it.serviceId,
         printer: printerId, // may be null
         selections: selectionsForOrder,
-        selectionLabel,
+        selectionLabel: displaySelectionLabel,
+        priceRuleLabel: selectionLabel,
+        invoiceLabelOverride,
         unitPrice,
         pages,               // raw pages entered by user (kept for material/printer logic)
         effectiveQty: effectiveQtyForPrice, // server-authoritative quantity used for pricing (e.g. ceil(pages/2) when F/B)
         factor: pricingFactor,             // NEW: quantity multiplier for printer-required services
+        grossSubtotal,
+        unitDiscountAmount,
+        discountedUnitPrice,
+        lineDiscountAmount,
         subtotal,            // computed using effectiveQty (server authoritative)
         spoiled: isOutSourcedLine ? 0 : (Number(it.spoiled) || 0),
         fb: usedFB,  // booklet also runs as F/B for price selection
@@ -1518,6 +1673,7 @@ return {
         outsourcedTotal
       });
       total += subtotal;
+      lineDiscountTotal += lineDiscountAmount;
     }
     total = Number(total.toFixed(2));
 
@@ -1530,6 +1686,7 @@ return {
       orderId: makeOrderId(),
       items: builtItems,
       jobNote,
+      lineDiscountTotal: Number(lineDiscountTotal.toFixed(2)),
       total
     });
 

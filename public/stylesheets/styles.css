@@ -389,6 +389,14 @@ body.app-bg .content-card .btn.btn-primary{
   border-color: rgba(43,123,187,.60) !important;
 }
 
+/* Registration category tabs use the same light-blue treatment as primary actions. */
+#secretaryCategoryTabs.nav-pills .nav-link.active,
+#secretaryCategoryTabs.nav-pills .show > .nav-link{
+  background: rgba(182,220,255,.96) !important;
+  border-color: rgba(43,123,187,.40) !important;
+  color: var(--text) !important;
+}
+
 /* Secondary */
 .btn.btn-secondary{
   background: rgba(255,249,238,.90) !important;

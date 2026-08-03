@@ -14,6 +14,7 @@
     const submitBtn = document.getElementById('secretarySubmitBtn');
     const refreshBtn = document.getElementById('refreshRegistrationsBtn');
     const categoriesBox = document.getElementById('secretaryCategoriesBox');
+    const categoryTabs = document.getElementById('secretaryCategoryTabs');
     const pendingTableBody = document.querySelector('#pendingRegistrationsTable tbody');
     const pendingCount = document.getElementById('pendingRegistrationsCount');
 
@@ -36,6 +37,8 @@
 
     let selected = null; // { mode:'customer'|'walkin', customer? }
     let categories = [];
+    let activeCategoryGroup = 'digital';
+    const selectedCategoryIdSet = new Set();
     let suggestionsBox = null;
     let taTimer = null;
 
@@ -109,7 +112,40 @@
     }
 
     function selectedCategoryIds() {
-      return Array.from(document.querySelectorAll('.secretary-cat-check:checked')).map(el => el.value);
+      return Array.from(selectedCategoryIdSet);
+    }
+
+    function categoryBelongsToGroup(category, group) {
+      const groups = Array.isArray(category && category.categoryGroups)
+        ? category.categoryGroups.map(value => String(value || '').toLowerCase())
+        : ['digital'];
+      return groups.includes(group);
+    }
+
+    function renderCategories() {
+      if (!categoriesBox) return;
+      const visibleCategories = categories.filter(category => categoryBelongsToGroup(category, activeCategoryGroup));
+      categoriesBox.innerHTML = '';
+
+      if (!visibleCategories.length) {
+        const label = activeCategoryGroup === 'large_format' ? 'Large Format' : 'Digital';
+        categoriesBox.innerHTML = `<div class="col-12"><span class="text-muted-light">No ${label} categories available.</span></div>`;
+        return;
+      }
+
+      visibleCategories.forEach(cat => {
+        const id = String(cat._id || '');
+        const inputId = `secCat_${activeCategoryGroup}_${id}`;
+        const col = document.createElement('div');
+        col.className = 'col-12 col-md-4';
+        col.innerHTML = `
+          <div class="form-check">
+            <input class="form-check-input secretary-cat-check" type="checkbox" value="${escapeHtml(id)}" id="${escapeHtml(inputId)}" ${selectedCategoryIdSet.has(id) ? 'checked' : ''}>
+            <label class="form-check-label" for="${escapeHtml(inputId)}">${escapeHtml(categoryDisplayName(cat.name))}</label>
+          </div>
+        `;
+        categoriesBox.appendChild(col);
+      });
     }
 
     async function loadCategories() {
@@ -124,18 +160,11 @@
           categoriesBox.innerHTML = '<div class="col-12"><span class="text-muted-light">No visible service categories.</span></div>';
           return;
         }
-        categoriesBox.innerHTML = '';
-        categories.forEach(cat => {
-          const col = document.createElement('div');
-          col.className = 'col-12 col-md-4';
-          col.innerHTML = `
-            <div class="form-check">
-              <input class="form-check-input secretary-cat-check" type="checkbox" value="${escapeHtml(cat._id)}" id="secCat_${escapeHtml(cat._id)}">
-              <label class="form-check-label" for="secCat_${escapeHtml(cat._id)}">${escapeHtml(categoryDisplayName(cat.name))}</label>
-            </div>
-          `;
-          categoriesBox.appendChild(col);
+        const validIds = new Set(categories.map(category => String(category._id || '')));
+        selectedCategoryIdSet.forEach(id => {
+          if (!validIds.has(id)) selectedCategoryIdSet.delete(id);
         });
+        renderCategories();
       } catch (err) {
         categoriesBox.innerHTML = '<div class="col-12"><span class="text-danger">Failed to load categories.</span></div>';
       }
@@ -313,7 +342,8 @@
           return;
         }
         clearSelected();
-        document.querySelectorAll('.secretary-cat-check:checked').forEach(el => { el.checked = false; });
+        selectedCategoryIdSet.clear();
+        renderCategories();
         if (lookupInput) lookupInput.value = '';
         await loadPending();
         showAlert('Submitted to Jobs');
@@ -412,6 +442,31 @@
 
     if (submitBtn) {
       submitBtn.addEventListener('click', submitRegistration);
+    }
+
+    if (categoriesBox) {
+      categoriesBox.addEventListener('change', function (ev) {
+        const checkbox = ev.target.closest('.secretary-cat-check');
+        if (!checkbox) return;
+        const id = String(checkbox.value || '').trim();
+        if (!id) return;
+        if (checkbox.checked) selectedCategoryIdSet.add(id);
+        else selectedCategoryIdSet.delete(id);
+      });
+    }
+
+    if (categoryTabs) {
+      categoryTabs.addEventListener('click', function (ev) {
+        const tab = ev.target.closest('[data-category-group]');
+        if (!tab) return;
+        activeCategoryGroup = String(tab.dataset.categoryGroup || 'digital') === 'large_format' ? 'large_format' : 'digital';
+        categoryTabs.querySelectorAll('[data-category-group]').forEach(button => {
+          const isActive = String(button.dataset.categoryGroup || '') === activeCategoryGroup;
+          button.classList.toggle('active', isActive);
+          button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        renderCategories();
+      });
     }
 
     if (refreshBtn) {

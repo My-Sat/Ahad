@@ -1227,6 +1227,7 @@ function discountAppliedLabel(order) {
               <div class="text-end ms-3" style="min-width:200px;">
                 <div>${escapeHtml(qtyText)}</div>
                 <div>Unit: ${formatCedi(row.unit)}</div>
+                ${Number(row.unitDiscountAmount || 0) > 0 ? `<div class="text-success">Unit discount: - ${formatCedi(row.unitDiscountAmount)}</div>` : ''}
                 <div>Subtotal: ${formatCedi(row.subtotal)}</div>
               </div>
             </div>
@@ -1538,6 +1539,7 @@ function discountAppliedLabel(order) {
 
   function receiptItemData(it) {
     const rawLabel = it && it.selectionLabel ? String(it.selectionLabel) : '';
+    const invoiceLabel = it && it.invoiceLabelOverride ? String(it.invoiceLabelOverride).trim() : '';
     const isLargeFormat = String((it && it.pricingMode) || '').toLowerCase() === 'large_format';
     if (isLargeFormat) {
       const length = Number((it && it.largeFormatLength) || 0);
@@ -1547,17 +1549,19 @@ function discountAppliedLabel(order) {
       const squareFeet = Number((it && it.largeFormatSquareFeet) || (it && it.effectiveQty) || 0);
       return {
         serviceName: (it && it.serviceName) || 'Large Format',
-        selectionLabel: rawLabel || `${length} x ${breadth} ${unitName}`,
+        selectionLabel: invoiceLabel || rawLabel || `${length} x ${breadth} ${unitName}`,
         qtyLabel: 'QTY',
         qty,
         pagesLabel: 'Size',
         pages: `${length} x ${breadth} ${unitName} / ${Number(squareFeet || 0).toFixed(2)} sq ft`,
         unit: Number((it && it.unitPrice) || 0),
+        unitDiscountAmount: 0,
+        lineDiscountAmount: 0,
         subtotal: Number((it && it.subtotal) || 0)
       };
     }
-    let selLabel = subUnitsOnlyFromLabel(rawLabel);
-    if (!selLabel && it && Array.isArray(it.selections) && it.selections.length) {
+    let selLabel = invoiceLabel || subUnitsOnlyFromLabel(rawLabel);
+    if (!invoiceLabel && !selLabel && it && Array.isArray(it.selections) && it.selections.length) {
       selLabel = it.selections.map(s => {
         if (s.subUnit && typeof s.subUnit === 'object' && s.subUnit.name) return s.subUnit.name;
         if (s.subUnit && typeof s.subUnit === 'string') return s.subUnit;
@@ -1578,7 +1582,13 @@ function discountAppliedLabel(order) {
     const usesFactorPricing = !!(it && (it.printer || Number(it.outsourcedTotal || 0) > 0 || factor > 1));
     const displayQty = usesFactorPricing ? (baseSheets * factor) : baseSheets;
     const displayPages = usesFactorPricing ? Math.max(0, Math.floor(rawPages * factor)) : null;
-    const unit = Number((it && it.unitPrice) || 0);
+    const originalUnit = Number((it && it.unitPrice) || 0);
+    const unitDiscountAmount = Number((it && it.unitDiscountAmount) || 0);
+    const unit = Number(
+      (it && it.discountedUnitPrice !== undefined && it.discountedUnitPrice !== null)
+        ? it.discountedUnitPrice
+        : Math.max(0, originalUnit - unitDiscountAmount)
+    );
     const subtotal = Number(
       (it && (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))))
         ? Number(it.subtotal)
@@ -1592,6 +1602,8 @@ function discountAppliedLabel(order) {
       qty: displayQty,
       pages: displayPages,
       unit,
+      unitDiscountAmount,
+      lineDiscountAmount: Number((it && it.lineDiscountAmount) || 0),
       subtotal
     };
   }
@@ -1674,6 +1686,7 @@ function discountAppliedLabel(order) {
             <td class="text-center">${itemNo}</td>
             <td>
               <div class="receipt-muted">${escapeHtml(row.selectionLabel)}</div>
+              ${Number(row.unitDiscountAmount || 0) > 0 ? `<div class="receipt-muted">Unit discount: - ${formatCedi(row.unitDiscountAmount)}</div>` : ''}
             </td>
             <td>${escapeHtml(qtyText)}</td>
             <td class="text-end">${formatCedi(row.unit)}</td>

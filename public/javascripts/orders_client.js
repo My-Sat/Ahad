@@ -274,7 +274,7 @@
   // ---------- internal state ----------
   let prices = []; // loaded price rules for selected service or book preview
   let cart = [];   // cart lines: either normal item or book line
-                   // normal: { isBook:false, serviceId, serviceName, priceRuleId, selectionLabel, invoiceLabelOverride, unitPrice, pages, pagesOriginal, subtotal, fb, printerId, spoiled, outsourced, outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount, outsourcedTotal }
+                   // normal: { isBook:false, serviceId, serviceName, priceRuleId, selectionLabel, invoiceLabelOverride, unitPrice, unitDiscountAmount, discountedUnitPrice, pages, pagesOriginal, grossSubtotal, lineDiscountAmount, subtotal, fb, printerId, spoiled, outsourced, outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount, outsourcedTotal }
                    // large : { isBook:false, isLargeFormat:true, serviceId, serviceName, largeFormatLength, largeFormatBreadth, largeFormatUnit, largeFormatQty, largeFormatSquareFeet, unitPrice, subtotal, printerId }
                    // book  : { isBook:true, bookId, bookName, unitPrice, qty, subtotal, bookItems: [ { serviceId, priceRuleId, pagesOriginal, fb, booklet, printerId, spoiled, unitPrice, subtotal, selectionLabel } ] }
   let serviceRequiresPrinter = false;
@@ -1394,27 +1394,41 @@ function renderPrices(bookMode = false) {
   const outsourcedMode = isOutsourcedModeEnabled();
   const shouldUseOwnPrinter = serviceRequiresPrinter && !outsourcedMode;
   let sharedControls = null;
-  if (allowSharedRuleInputs) {
+  if (allowSharedRuleInputs || window._isAdmin || serviceRequiresPrinter) {
     sharedControls = document.createElement('div');
     sharedControls.className = 'd-flex align-items-center gap-3 flex-wrap mb-2 px-2 py-2 rounded-3';
     sharedControls.style.background = 'rgba(255,255,255,.06)';
     sharedControls.style.border = '1px solid rgba(255,255,255,.10)';
     sharedControls.innerHTML = `
       <span class="small text-muted-light me-1">Use one entry for all loaded rules:</span>
-      ${serviceRequiresPrinter ? `
+      ${allowSharedRuleInputs && serviceRequiresPrinter ? `
         <label class="form-check form-check-inline small mb-0">
           <input class="form-check-input same-pages-toggle" type="checkbox">
           <span class="form-check-label">Use Same Pages</span>
         </label>
       ` : ''}
-      <label class="form-check form-check-inline small mb-0">
-        <input class="form-check-input same-qty-toggle" type="checkbox">
-        <span class="form-check-label">Use Same QTY</span>
-      </label>
-      ${shouldUseOwnPrinter ? `
+      ${allowSharedRuleInputs ? `
+        <label class="form-check form-check-inline small mb-0">
+          <input class="form-check-input same-qty-toggle" type="checkbox">
+          <span class="form-check-label">Use Same QTY</span>
+        </label>
+      ` : ''}
+      ${allowSharedRuleInputs && shouldUseOwnPrinter ? `
         <label class="form-check form-check-inline small mb-0">
           <input class="form-check-input same-printer-toggle" type="checkbox">
           <span class="form-check-label">Use Same Printer</span>
+        </label>
+      ` : ''}
+      ${serviceRequiresPrinter ? `
+        <label class="form-check form-check-inline small mb-0">
+          <input class="form-check-input same-face-toggle" type="checkbox">
+          <span class="form-check-label">Use Same Face</span>
+        </label>
+      ` : ''}
+      ${window._isAdmin ? `
+        <label class="form-check form-check-inline small mb-0">
+          <input class="form-check-input same-discount-toggle" type="checkbox">
+          <span class="form-check-label">Use Same Discount</span>
         </label>
       ` : ''}
     `;
@@ -1449,6 +1463,8 @@ function renderPrices(bookMode = false) {
       if (target.classList.contains('same-pages-toggle')) syncFromFirstFilled('.pages-input');
       if (target.classList.contains('same-qty-toggle')) syncFromFirstFilled(qtySyncSelector);
       if (target.classList.contains('same-printer-toggle')) syncFromFirstFilled('.printer-select');
+      if (target.classList.contains('same-face-toggle')) syncFromFirstFilled('.print-mode-select');
+      if (target.classList.contains('same-discount-toggle')) syncFromFirstFilled('.rule-discount-input');
     });
   }
 
@@ -1461,6 +1477,9 @@ function renderPrices(bookMode = false) {
     if (target.matches(qtySyncSelector) && sharedToggleChecked('.same-qty-toggle')) {
       syncRuleInputs(qtySyncSelector, target.value, target);
     }
+    if (target.classList.contains('rule-discount-input') && sharedToggleChecked('.same-discount-toggle')) {
+      syncRuleInputs('.rule-discount-input', target.value, target);
+    }
   });
 
   container.addEventListener('change', function (e) {
@@ -1469,11 +1488,17 @@ function renderPrices(bookMode = false) {
     if (shouldUseOwnPrinter && target.classList.contains('printer-select') && sharedToggleChecked('.same-printer-toggle')) {
       syncRuleInputs('.printer-select', target.value, target);
     }
+    if (serviceRequiresPrinter && target.classList.contains('print-mode-select') && sharedToggleChecked('.same-face-toggle')) {
+      syncRuleInputs('.print-mode-select', target.value, target);
+    }
     if (serviceRequiresPrinter && target.classList.contains('pages-input') && sharedToggleChecked('.same-pages-toggle')) {
       syncRuleInputs('.pages-input', target.value, target);
     }
     if (target.matches(qtySyncSelector) && sharedToggleChecked('.same-qty-toggle')) {
       syncRuleInputs(qtySyncSelector, target.value, target);
+    }
+    if (target.classList.contains('rule-discount-input') && sharedToggleChecked('.same-discount-toggle')) {
+      syncRuleInputs('.rule-discount-input', target.value, target);
     }
   });
 
@@ -1519,9 +1544,20 @@ function renderPrices(bookMode = false) {
       invoiceNoteInput.maxLength = 120;
       invoiceNoteInput.className = 'form-control form-control-sm form-control-dark invoice-label-override-input';
       invoiceNoteInput.placeholder = 'Invoice note';
-      invoiceNoteInput.title = 'Admin-only invoice label. Used in cart and invoices only; orders keep the original price rule name.';
+      invoiceNoteInput.title = 'Admin-only invoice label. Used in the cart, invoice, order details, payment details, and receipt.';
       invoiceNoteInput.style.width = '130px';
       mid.appendChild(invoiceNoteInput);
+
+      const discountInput = document.createElement('input');
+      discountInput.type = 'number';
+      discountInput.min = '0';
+      discountInput.step = '0.01';
+      discountInput.className = 'form-control form-control-sm form-control-dark rule-discount-input';
+      discountInput.placeholder = 'Unit discount';
+      discountInput.title = 'Admin-only amount deducted from the price rule unit price before QTY and pages are calculated';
+      discountInput.setAttribute('aria-label', 'Price rule unit discount amount');
+      discountInput.style.width = '118px';
+      mid.appendChild(discountInput);
     }
 
     const input = document.createElement('input');
@@ -2019,7 +2055,8 @@ function addToCart({
   outsourcedArtistId,
   outsourcedArtistName,
   outsourcedQty,
-  outsourcedAmount
+  outsourcedAmount,
+  unitDiscountAmount
 }) {
   const origPages = Number(pages) || 1;
   const factorVal = Number(factor) && Number(factor) > 0 ? Number(factor) : 1;
@@ -2041,6 +2078,24 @@ function addToCart({
       (serviceRequiresPrinter ? factorVal : 1)
     ).toFixed(2)
   );
+  const grossSubtotal = subtotal;
+  const requestedUnitDiscount = window._isAdmin
+    ? Number(Number(unitDiscountAmount || 0).toFixed(2))
+    : 0;
+  if (!isFinite(requestedUnitDiscount) || requestedUnitDiscount < 0) {
+    showAlertModal('Enter a valid discount amount.', 'Price rule discount');
+    return false;
+  }
+  const originalUnitPrice = Number(unitPrice || 0);
+  if (requestedUnitDiscount > originalUnitPrice) {
+    showAlertModal(`Unit discount cannot exceed the price rule price of GH\u20B5 ${formatMoney(originalUnitPrice)}.`, 'Price rule discount');
+    return false;
+  }
+  const appliedUnitDiscount = Number(Math.max(0, requestedUnitDiscount).toFixed(2));
+  const discountedUnitPrice = Number((originalUnitPrice - appliedUnitDiscount).toFixed(2));
+  const pricingQuantity = effectiveQty * (serviceRequiresPrinter ? factorVal : 1);
+  const lineDiscountAmount = Number((appliedUnitDiscount * pricingQuantity).toFixed(2));
+  const netSubtotal = Number((discountedUnitPrice * pricingQuantity).toFixed(2));
   const outQty = Math.max(0, Math.floor(Number(outsourcedQty || 0)));
   const outAmount = Math.max(0, Number(outsourcedAmount || 0));
   const outsourcedTotal = Number((outQty > 0 && outAmount > 0 ? outQty * outAmount : 0).toFixed(2));
@@ -2064,7 +2119,11 @@ function addToCart({
     factor: serviceRequiresPrinter ? factorVal : null,
     usesFactorPricing: !!serviceRequiresPrinter,
 
-    subtotal,
+    grossSubtotal,
+    unitDiscountAmount: appliedUnitDiscount,
+    discountedUnitPrice,
+    lineDiscountAmount,
+    subtotal: netSubtotal,
     fb: fbEnabled,
     booklet: bookletEnabled,
     printerId: printerId || null,
@@ -2079,6 +2138,7 @@ function addToCart({
   });
 
   renderCart();
+  return true;
 }
 
 function addLargeFormatToCart({
@@ -2216,7 +2276,10 @@ function addLargeFormatToCart({
           ? `<br/><small class="text-info">Out-Sourced: ${escapeHtml(it.outsourcedArtistName || 'Artist')} | ${it.isLargeFormat ? 'SQ FT' : 'QTY'} ${escapeHtml(String(it.outsourcedQty || 0))} | GH₵ ${escapeHtml(formatMoney(it.outsourcedAmount || 0))} = GH₵ ${escapeHtml(formatMoney(it.outsourcedTotal || 0))}</small>`
           : '';
         const bookletMeta = it.booklet ? '<br/><small class="text-info">Booklet</small>' : '';
-        displayLabel = `<div class="${toneClass}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(cartDisplaySelectionLabel(it) || '')}${bookletMeta}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
+        const lineDiscountMeta = Number(it.unitDiscountAmount || 0) > 0
+          ? `<br/><small class="text-success">Unit discount: - GH\u20B5 ${escapeHtml(formatMoney(it.unitDiscountAmount))} | Rate: GH\u20B5 ${escapeHtml(formatMoney(it.discountedUnitPrice))}</small>`
+          : '';
+        displayLabel = `<div class="${toneClass}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(cartDisplaySelectionLabel(it) || '')}${bookletMeta}${lineDiscountMeta}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
       }
 
       let qtyCell = '';
@@ -2257,7 +2320,7 @@ function addLargeFormatToCart({
         <td class="text-center">${escapeHtml(pagesCell)}</td>
         <td class="text-center">${escapeHtml(qtyCell)}</td>
         <td class="text-center">${escapeHtml(factorCell)}</td>
-        <td class="text-end">GH₵ ${formatMoney(it.unitPrice)}</td>
+        <td class="text-end">GH₵ ${formatMoney(it.discountedUnitPrice !== undefined && it.discountedUnitPrice !== null ? it.discountedUnitPrice : it.unitPrice)}</td>
         <td class="text-end">GH₵ ${formatMoney(it.subtotal)}</td>
         <td class="text-center"><button class="btn btn-sm btn-outline-danger remove-cart-btn" type="button">Remove</button></td>
       `;
@@ -2362,6 +2425,7 @@ function addLargeFormatToCart({
       : '';
     const noteParts = [];
     if (it && it.booklet) noteParts.push('Booklet');
+    if (it && Number(it.unitDiscountAmount || 0) > 0) noteParts.push(`Unit discount: - GH\u20B5 ${formatMoney(it.unitDiscountAmount)}`);
     if (it && it.spoiled && Number(it.spoiled) > 0) noteParts.push(`Spoiled: ${Number(it.spoiled)}`);
 
     return {
@@ -2370,7 +2434,7 @@ function addLargeFormatToCart({
       pages: usesFactorPricing ? String(totalPages || (it && it.pagesOriginal) || '') : '',
       qty: usesFactorPricing ? String(f) : String((it && it.pages) || ''),
       sheets: sheets === '' ? '' : String(sheets),
-      unitPrice: Number((it && it.unitPrice) || 0),
+      unitPrice: Number((it && (it.discountedUnitPrice !== undefined && it.discountedUnitPrice !== null ? it.discountedUnitPrice : it.unitPrice)) || 0),
       subtotal: Number((it && it.subtotal) || 0),
       note: noteParts.join(' | ')
     };
@@ -3502,6 +3566,14 @@ function addLargeFormatToCart({
     const invoiceLabelOverride = window._isAdmin && invoiceLabelOverrideInput
       ? cleanInvoiceLabelOverride(invoiceLabelOverrideInput.value)
       : '';
+    const lineDiscountInput = row ? row.querySelector('.rule-discount-input') : null;
+    const unitDiscountAmount = window._isAdmin && lineDiscountInput && String(lineDiscountInput.value || '').trim() !== ''
+      ? Number(lineDiscountInput.value)
+      : 0;
+    if (!isFinite(unitDiscountAmount) || unitDiscountAmount < 0) {
+      showAlertModal('Enter a valid discount amount.', 'Price rule discount');
+      return;
+    }
 
     let factor = 1;
     if (serviceRequiresPrinter) {
@@ -3645,9 +3717,10 @@ function addLargeFormatToCart({
 
 
     // If a book preview item (bookMode) has __bookItem metadata, add either an underlying item or treat specially.
+    let addedToCart = false;
     if (priceObj.__bookItem) {
       // Treat this as adding the underlying item as a normal cart item (keeps behavior intuitive)
-      addToCart({
+      addedToCart = addToCart({
         serviceId: priceObj.__bookItem.serviceId,
         serviceName: '', // not always available in preview; the server will reconcile names for display
         priceRuleId: priceObj.__bookItem.priceRuleId,
@@ -3664,7 +3737,8 @@ function addLargeFormatToCart({
         outsourcedArtistId,
         outsourcedArtistName,
         outsourcedQty,
-        outsourcedAmount
+        outsourcedAmount,
+        unitDiscountAmount
       });
     } else {
       // Normal service price add
@@ -3675,8 +3749,9 @@ function addLargeFormatToCart({
         chosenPrice = Number(priceObj.price2);
       }
       const effectiveServiceId = priceObj.serviceId || serviceId;
-      addToCart({ serviceId: effectiveServiceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), invoiceLabelOverride, unitPrice: chosenPrice, pages, factor, fb: fbChecked, booklet: bookletChecked, printerId: selectedPrinterId, spoiled: outsourcedMode ? 0 : spoiled, tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || ''), outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount });
+      addedToCart = addToCart({ serviceId: effectiveServiceId, serviceName, priceRuleId: prId, label: subUnitsOnlyFromLabel(priceObj.selectionLabel || ''), invoiceLabelOverride, unitPrice: chosenPrice, pages, factor, fb: fbChecked, booklet: bookletChecked, printerId: selectedPrinterId, spoiled: outsourcedMode ? 0 : spoiled, tone: priceObj.__tone || serviceToneFromText(priceObj.selectionLabel || ''), outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount, unitDiscountAmount });
     }
+    if (!addedToCart) return;
 
     // clear inputs
     try {
@@ -3696,6 +3771,7 @@ function addLargeFormatToCart({
       if (outArtistId) outArtistId.value = '';
       if (outArtistName) outArtistName.value = '';
       if (invoiceLabelOverrideInput) invoiceLabelOverrideInput.value = '';
+      if (lineDiscountInput) lineDiscountInput.value = '';
     } catch (err) {
       console.warn('Failed to clear inputs after Apply', err);
     }
@@ -3847,8 +3923,8 @@ async function placeOrderFlow() {
         if (!savedInvoice) return;
       }
 
-    // Build payload items from IDs/quantities only. Invoice label overrides stay
-    // client/invoice-only; the server rebuilds order labels from price rules.
+    // Build the server-authoritative order payload. Admin invoice labels are sent
+    // separately so the server can retain the original price-rule label too.
     const items = [];
 
     cart.forEach(line => {
@@ -3916,6 +3992,8 @@ async function placeOrderFlow() {
           booklet: !!line.booklet,
           printerId: line.printerId || null,
           spoiled: line.spoiled || 0,
+          unitDiscountAmount: window._isAdmin ? Number(line.unitDiscountAmount || 0) : 0,
+          invoiceLabelOverride: window._isAdmin ? cleanInvoiceLabelOverride(line.invoiceLabelOverride) : '',
           outsourcedArtistId: line.outsourcedArtistId || '',
           outsourcedArtistName: line.outsourcedArtistName || '',
           outsourcedQty: line.outsourcedQty || 0,
@@ -4491,8 +4569,9 @@ function renderOrdersList(orders) {
 
         o.items.forEach(it => {
           const rawLabel = it.selectionLabel || '';
+          const invoiceLabel = String(it.invoiceLabelOverride || '').trim();
           const isLargeFormat = String((it && it.pricingMode) || '').toLowerCase() === 'large_format';
-          const selLabel = subUnitsOnlyFromLabel(rawLabel) || (it.selections && it.selections.length ? it.selections.map(s => (s.subUnit ? (s.subUnit.name || String(s.subUnit)) : '')).join(', ') : '(no label)');
+          const selLabel = invoiceLabel || subUnitsOnlyFromLabel(rawLabel) || (it.selections && it.selections.length ? it.selections.map(s => (s.subUnit ? (s.subUnit.name || String(s.subUnit)) : '')).join(', ') : '(no label)');
           const isBooklet = (it.booklet === true) || (typeof rawLabel === 'string' && rawLabel.includes('(Booklet)'));
           const isFb = isBooklet || (it.fb === true) || (typeof rawLabel === 'string' && rawLabel.includes('(F/B)'));
           const cleanLabel = selLabel.replace(/\s*\((F\/B|Booklet)\)\s*$/i, '').trim();
@@ -4516,11 +4595,17 @@ function renderOrdersList(orders) {
           } else {
             detailsHtml = `QTY: ${escapeHtml(String(rawPages))}`;
           }
-          const unitPrice = (typeof it.unitPrice === 'number' || !isNaN(Number(it.unitPrice))) ? formatMoney(it.unitPrice) : (it.unitPrice || '');
+          const displayedUnitPrice = it.discountedUnitPrice !== undefined && it.discountedUnitPrice !== null
+            ? it.discountedUnitPrice
+            : it.unitPrice;
+          const unitPrice = (typeof displayedUnitPrice === 'number' || !isNaN(Number(displayedUnitPrice))) ? formatMoney(displayedUnitPrice) : (displayedUnitPrice || '');
           const subtotal = (typeof it.subtotal === 'number' || !isNaN(Number(it.subtotal))) ? formatMoney(it.subtotal) : (it.subtotal || '');
           const printerStr = it.printer ? escapeHtml(String(it.printer)) : '-';
 
-          const labelHtml = `<div>${escapeHtml(cleanLabel)}${isBooklet ? ' <span class="badge bg-info text-dark ms-2">Booklet</span>' : (isFb ? ' <span class="badge bg-secondary ms-2">F/B</span>' : '')}</div>`;
+          const lineDiscountHtml = Number(it.unitDiscountAmount || 0) > 0
+            ? `<small class="text-success d-block">Unit discount: - GH\u20B5 ${formatMoney(it.unitDiscountAmount)}</small>`
+            : '';
+          const labelHtml = `<div>${escapeHtml(cleanLabel)}${isBooklet ? ' <span class="badge bg-info text-dark ms-2">Booklet</span>' : (isFb ? ' <span class="badge bg-secondary ms-2">F/B</span>' : '')}${lineDiscountHtml}</div>`;
 
           html += `<tr>
             <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;">${labelHtml}</td>

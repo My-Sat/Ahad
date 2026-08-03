@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Customer = require('../models/customer');
+const Service = require('../models/service');
 const ServiceCategory = require('../models/service_category');
 const RegistrationSubmission = require('../models/registration_submission');
 
@@ -59,8 +60,29 @@ exports.apiCategories = async function apiCategories(req, res) {
     const role = String(req.user?.role || '').toLowerCase();
     const isAdmin = role === 'admin';
     const q = isAdmin ? {} : { showInOrders: true };
-    const categories = (await ServiceCategory.find(q).sort({ name: 1 }).lean())
-      .map(c => ServiceCategory.withSystemFlags ? ServiceCategory.withSystemFlags(c) : c);
+    const categoryDocs = await ServiceCategory.find(q).sort({ name: 1 }).lean();
+    const categoryIds = categoryDocs.map(category => category._id);
+    const services = categoryIds.length
+      ? await Service.find({ category: { $in: categoryIds } }).select('category pricingMode').lean()
+      : [];
+    const modesByCategory = new Map();
+
+    services.forEach(service => {
+      if (!service || !service.category) return;
+      const id = String(service.category);
+      const modes = modesByCategory.get(id) || new Set();
+      modes.add(String(service.pricingMode || 'price_rules').toLowerCase() === 'large_format' ? 'large_format' : 'digital');
+      modesByCategory.set(id, modes);
+    });
+
+    const categories = categoryDocs.map(category => {
+      const result = ServiceCategory.withSystemFlags ? ServiceCategory.withSystemFlags(category) : Object.assign({}, category);
+      const modes = modesByCategory.get(String(category._id)) || new Set(['digital']);
+      result.categoryGroups = [];
+      if (modes.has('digital')) result.categoryGroups.push('digital');
+      if (modes.has('large_format')) result.categoryGroups.push('large_format');
+      return result;
+    });
     return res.json({ ok: true, categories });
   } catch (err) {
     console.error('registrations.apiCategories error', err);

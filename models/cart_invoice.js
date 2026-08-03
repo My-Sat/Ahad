@@ -12,6 +12,7 @@ const CartInvoiceSchema = new mongoose.Schema({
     name: { type: String, trim: true, default: '' }
   }],
   cart: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  lineDiscountsApproved: { type: Boolean, default: false },
   manualDiscount: { type: mongoose.Schema.Types.Mixed, default: null },
   manualTax: { type: mongoose.Schema.Types.Mixed, default: null },
   jobNote: { type: String, trim: true, default: '' },
@@ -19,6 +20,12 @@ const CartInvoiceSchema = new mongoose.Schema({
   status: { type: String, enum: ['open', 'converted', 'cancelled'], default: 'open', index: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
   createdByName: { type: String, trim: true, default: '' },
+  createdByRole: {
+    type: String,
+    enum: ['admin', 'clerk', 'cashier', 'secretary'],
+    default: null,
+    index: true
+  },
   convertedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   convertedOrderId: { type: String, trim: true, default: '', index: true },
   convertedAt: { type: Date, default: null }
