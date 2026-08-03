@@ -53,7 +53,7 @@ block content
             .card.dark-surface
               .card-body.dark-card-body
                 h6.mb-2.text-white Price rules for selected service
-                p.text-muted-light.small Select a rule and configure Qty/Pages, Print Mode, printer (if required), then click Add to include it.
+                p.text-muted-light.small Select a rule and configure QTY, unit discount, Pages, Print Mode, and printer where required, then click Add. Discount is deducted before Pages and QTY are multiplied.
                 #pricesList
                   p.text-muted-light Select a service to load price rules.
 
@@ -67,13 +67,14 @@ block content
                   thead
                     tr
                       th Selection
+                      th.text-center Pages
                       th.text-center QTY
                       th.text-end Unit
                       th.text-end Subtotal
                       th.text-center Actions
                   tbody#bookItemsTbody
                     tr
-                      td.text-muted-light(colspan='5') No items added yet.
+                      td.text-muted-light(colspan='6') No items added yet.
 
                 p.text-muted-light.small.mt-2 After saving, this service will be available in the Orders page Compound Service dropdown.
 
@@ -97,7 +98,7 @@ block content
       let printers = [];
       let serviceRequiresPrinter = false;
       let prices = [];
-      let bookItems = []; // { priceRuleId, selectionLabel, unitPrice, pagesOriginal, pagesEffective, fb, booklet, printerId, spoiled, subtotal }
+      let bookItems = []; // price-rule snapshots, including fixed unit discounts and net subtotals
 
       function escapeHtml(s) { if (s === undefined || s === null) return ''; return String(s).replace(/[&<>"'`=\/]/g, function (c){ return '&#'+c.charCodeAt(0)+';'; }); }
       function formatMoney(n) { return (Number(n)||0).toFixed(2); }
@@ -231,24 +232,80 @@ block content
         }
         const container = document.createElement('div');
         container.className = 'list-group';
+        const wrapper = document.createElement('div');
+        const sharedControls = document.createElement('div');
+        sharedControls.className = 'd-flex align-items-center gap-2 flex-wrap mb-2 px-2 py-2 rounded-3';
+        sharedControls.style.background = 'rgba(255,255,255,.06)';
+        sharedControls.style.border = '1px solid rgba(255,255,255,.10)';
+        sharedControls.innerHTML = `
+          <label class="form-check form-check-inline small mb-0">
+            <input class="form-check-input same-discount-toggle" type="checkbox">
+            <span class="form-check-label">Use Same Discount</span>
+          </label>
+        `;
+        wrapper.appendChild(sharedControls);
+        wrapper.appendChild(container);
+
+        const sameDiscountToggle = sharedControls.querySelector('.same-discount-toggle');
+        sameDiscountToggle.addEventListener('change', function () {
+          if (!this.checked) return;
+          const first = Array.from(container.querySelectorAll('.discount-input'))
+            .find(input => String(input.value || '').trim() !== '');
+          if (!first) return;
+          container.querySelectorAll('.discount-input').forEach(input => { input.value = first.value; });
+        });
+        container.addEventListener('input', function (event) {
+          const target = event.target;
+          if (!sameDiscountToggle.checked || !target || !target.classList.contains('discount-input')) return;
+          container.querySelectorAll('.discount-input').forEach(input => {
+            if (input !== target) input.value = target.value;
+          });
+        });
         prices.forEach(p=>{
           const row = document.createElement('div');
-          row.className = 'list-group-item d-flex align-items-center gap-3 flex-nowrap';
+          row.className = 'list-group-item d-flex align-items-center gap-3 flex-wrap';
 
           const left = document.createElement('div');
           left.className = 'flex-grow-1 text-truncate';
           left.innerHTML = '<strong class="d-inline-block text-truncate" style="max-width:420px;">'+escapeHtml(subUnitsOnlyFromLabel(p.selectionLabel||''))+'</strong>';
 
           const mid = document.createElement('div');
-          mid.className = 'd-flex align-items-center gap-2 flex-nowrap';
+          mid.className = 'd-flex align-items-center gap-2 flex-wrap';
 
-          const input = document.createElement('input');
-          input.type = 'number';
-          input.min = '1';
-          input.className = 'form-control form-control-sm pages-input';
-          input.placeholder = serviceRequiresPrinter ? 'Pages' : 'Qty';
-          input.style.width = '90px';
-          mid.appendChild(input);
+          const quantityInput = document.createElement('input');
+          quantityInput.type = 'number';
+          quantityInput.min = '1';
+          quantityInput.step = '1';
+          quantityInput.value = '1';
+          quantityInput.className = 'form-control form-control-sm quantity-input';
+          quantityInput.placeholder = 'QTY';
+          quantityInput.setAttribute('aria-label', 'Quantity');
+          quantityInput.style.width = '82px';
+          mid.appendChild(quantityInput);
+
+          const discountInput = document.createElement('input');
+          discountInput.type = 'number';
+          discountInput.min = '0';
+          discountInput.step = '0.01';
+          discountInput.className = 'form-control form-control-sm discount-input';
+          discountInput.placeholder = 'Unit discount';
+          discountInput.title = 'Amount deducted from this price rule before Pages and QTY are multiplied';
+          discountInput.setAttribute('aria-label', 'Price rule unit discount amount');
+          discountInput.style.width = '118px';
+          mid.appendChild(discountInput);
+
+          if (serviceRequiresPrinter) {
+            const pagesInput = document.createElement('input');
+            pagesInput.type = 'number';
+            pagesInput.min = '1';
+            pagesInput.step = '1';
+            pagesInput.value = '1';
+            pagesInput.className = 'form-control form-control-sm pages-input';
+            pagesInput.placeholder = 'Pages';
+            pagesInput.setAttribute('aria-label', 'Pages per item');
+            pagesInput.style.width = '86px';
+            mid.appendChild(pagesInput);
+          }
 
           // Compact print mode selector for printer-required services.
           let printModeSelect = null;
@@ -320,7 +377,7 @@ block content
         });
 
         pricesList.innerHTML = '';
-        pricesList.appendChild(container);
+        pricesList.appendChild(wrapper);
       }
 
       async function loadPricesForService(serviceId) {
@@ -355,8 +412,27 @@ block content
         if (!btn) return;
         const prId = btn.dataset.prId;
         const row = btn.closest('.list-group-item');
+        const quantityInput = row ? row.querySelector('.quantity-input') : null;
+        const quantity = quantityInput && quantityInput.value ? Math.floor(Number(quantityInput.value)) : 1;
+        const discountInput = row ? row.querySelector('.discount-input') : null;
+        const unitDiscountAmount = discountInput && String(discountInput.value || '').trim() !== ''
+          ? Number(discountInput.value)
+          : 0;
         const pagesInput = row ? row.querySelector('.pages-input') : null;
-        const pages = pagesInput && pagesInput.value ? Number(pagesInput.value) : 1;
+        const pages = pagesInput && pagesInput.value ? Math.floor(Number(pagesInput.value)) : 1;
+
+        if (!Number.isFinite(quantity) || quantity < 1) {
+          showInlineAlert('Enter a valid QTY of at least 1.', 'Invalid quantity');
+          return;
+        }
+        if (!Number.isFinite(pages) || pages < 1) {
+          showInlineAlert('Enter valid Pages of at least 1.', 'Invalid pages');
+          return;
+        }
+        if (!Number.isFinite(unitDiscountAmount) || unitDiscountAmount < 0) {
+          showInlineAlert('Enter a valid discount amount.', 'Price rule discount');
+          return;
+        }
 
         const printModeSelect = row ? row.querySelector('.print-mode-select') : null;
         const printMode = String(printModeSelect ? printModeSelect.value : 'single').toLowerCase();
@@ -388,7 +464,16 @@ block content
         const origPages = Number(pages) || 1;
         const effectiveQty = computeEffectiveQty(origPages, fbChecked, bookletChecked);
         const chosenPrice = (fbChecked && priceObj.price2 !== null && priceObj.price2 !== undefined) ? Number(priceObj.price2) : Number(priceObj.unitPrice);
-        const subtotal = Number((chosenPrice * effectiveQty).toFixed(2));
+        if (unitDiscountAmount > chosenPrice) {
+          showInlineAlert(`Unit discount cannot exceed the selected price of GH\u20B5 ${formatMoney(chosenPrice)}.`, 'Price rule discount');
+          return;
+        }
+        const appliedUnitDiscount = Number(unitDiscountAmount.toFixed(2));
+        const discountedUnitPrice = Number((chosenPrice - appliedUnitDiscount).toFixed(2));
+        const pricingQuantity = effectiveQty * quantity;
+        const grossSubtotal = Number((chosenPrice * pricingQuantity).toFixed(2));
+        const lineDiscountAmount = Number((appliedUnitDiscount * pricingQuantity).toFixed(2));
+        const subtotal = Number((discountedUnitPrice * pricingQuantity).toFixed(2));
 
         const label = subUnitsOnlyFromLabel(priceObj.selectionLabel || '');
         // store pagesEffective alongside pagesOriginal so preview can use it
@@ -396,8 +481,13 @@ block content
           priceRuleId: prId,
           selectionLabel: label,
           unitPrice: chosenPrice,
+          unitDiscountAmount: appliedUnitDiscount,
+          discountedUnitPrice,
+          grossSubtotal,
+          lineDiscountAmount,
           pagesOriginal: origPages,
           pagesEffective: effectiveQty,
+          quantity,
           fb: !!fbChecked,
           booklet: bookletChecked,
           printerId: selectedPrinterId,
@@ -407,13 +497,13 @@ block content
 
         renderBookItems();
         // clear inputs
-        try { if (pagesInput) pagesInput.value = ''; if (printModeSelect) printModeSelect.value = 'single'; const printerSelect = row ? row.querySelector('.printer-select') : null; if (printerSelect) printerSelect.selectedIndex = 0; if (spoiledInput) spoiledInput.value = ''; } catch(e){}
+        try { if (quantityInput) quantityInput.value = '1'; if (discountInput) discountInput.value = ''; if (pagesInput) pagesInput.value = '1'; if (printModeSelect) printModeSelect.value = 'single'; const printerSelect = row ? row.querySelector('.printer-select') : null; if (printerSelect) printerSelect.selectedIndex = 0; if (spoiledInput) spoiledInput.value = ''; } catch(e){}
       });
 
       function renderBookItems() {
         bookItemsTbody.innerHTML = '';
         if (!bookItems.length) {
-          bookItemsTbody.innerHTML = '<tr><td class="text-muted-light" colspan="5">No items added yet.</td></tr>';
+          bookItemsTbody.innerHTML = '<tr><td class="text-muted-light" colspan="6">No items added yet.</td></tr>';
           bookUnitPriceEl.textContent = 'GH₵ 0.00';
           return;
         }
@@ -423,17 +513,29 @@ block content
           const tr = document.createElement('tr');
           tr.dataset.idx = idx;
 
-          // display the effective pages as the main QTY; if different, show original in parentheses
+          // Pages are per component; QTY multiplies the resulting component cost.
           const displayQty = (typeof it.pagesEffective !== 'undefined' && it.pagesEffective !== null) ? Number(it.pagesEffective) : Number(it.pagesOriginal || 1);
           const orig = Number(it.pagesOriginal || 1);
-          const qtyHtml = (orig !== displayQty) ? `${escapeHtml(String(displayQty))} <small class="text-muted-light">(orig ${escapeHtml(String(orig))})</small>` : `${escapeHtml(String(displayQty))}`;
+          const pagesHtml = it.printerId
+            ? ((orig !== displayQty) ? `${escapeHtml(String(orig))} <small class="text-muted-light">(${escapeHtml(String(displayQty))} sheets)</small>` : escapeHtml(String(orig)))
+            : '-';
+          const quantity = Math.max(1, Math.floor(Number(it.quantity) || 1));
+          const unitDiscountAmount = Number(it.unitDiscountAmount || 0);
+          const displayedUnitPrice = it.discountedUnitPrice !== undefined && it.discountedUnitPrice !== null
+            ? Number(it.discountedUnitPrice)
+            : Number(Math.max(0, Number(it.unitPrice || 0) - unitDiscountAmount).toFixed(2));
+          const discountHtml = unitDiscountAmount > 0
+            ? `<div class="small text-success">Unit discount: - GH\u20B5 ${formatMoney(unitDiscountAmount)}</div>`
+            : '';
 
           tr.innerHTML = `
             <td>
               <div class="small text-muted-light">${escapeHtml(it.selectionLabel)}${it.booklet ? ' <span class="badge bg-info text-dark ms-1">Booklet</span>' : (it.fb ? ' <span class="badge bg-secondary ms-1">F/B</span>' : '')}</div>
+              ${discountHtml}
             </td>
-            <td class="text-center">${qtyHtml}</td>
-            <td class="text-end">GH₵ ${formatMoney(it.unitPrice)}</td>
+            <td class="text-center">${pagesHtml}</td>
+            <td class="text-center">${escapeHtml(String(quantity))}</td>
+            <td class="text-end">GH₵ ${formatMoney(displayedUnitPrice)}</td>
             <td class="text-end">GH₵ ${formatMoney(it.subtotal)}</td>
             <td class="text-center"><button class="btn btn-sm btn-outline-danger remove-book-item-btn" type="button">Remove</button></td>
           `;
@@ -467,8 +569,15 @@ block content
               priceRuleId: it.priceRule,
               selectionLabel: it.selectionLabel,
               unitPrice: it.unitPrice,
+              unitDiscountAmount: Number(it.unitDiscountAmount || 0),
+              discountedUnitPrice: it.discountedUnitPrice !== undefined && it.discountedUnitPrice !== null
+                ? Number(it.discountedUnitPrice)
+                : Number(Math.max(0, Number(it.unitPrice || 0) - Number(it.unitDiscountAmount || 0)).toFixed(2)),
+              grossSubtotal: Number(it.grossSubtotal || (Number(it.subtotal || 0) + Number(it.lineDiscountAmount || 0))),
+              lineDiscountAmount: Number(it.lineDiscountAmount || 0),
               pagesOriginal: orig,
               pagesEffective: eff,
+              quantity: Math.max(1, Math.floor(Number(it.quantity) || 1)),
               fb,
               booklet,
               printerId: it.printer || null,
@@ -521,10 +630,12 @@ block content
           items: bookItems.map(it => ({
             priceRuleId: it.priceRuleId,
             pages: it.pagesOriginal,
+            quantity: Math.max(1, Math.floor(Number(it.quantity) || 1)),
             fb: !!it.fb,
             booklet: !!it.booklet,
             printerId: it.printerId || null,
-            spoiled: it.spoiled || 0
+            spoiled: it.spoiled || 0,
+            unitDiscountAmount: Number(it.unitDiscountAmount || 0)
           }))
         };
 

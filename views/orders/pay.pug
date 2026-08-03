@@ -24,7 +24,7 @@ block content
 
             .d-flex.justify-content-between.align-items-center.mb-3
               h4.mb-0.text-white Pay Order
-              .d-flex.gap-2
+              .d-flex.gap-2.flex-wrap.justify-content-end
                 // Orders (existing style) kept for parity with job order page
                 button.btn.btn-outline-light-custom.btn-sm#openOrdersExplorerBtn(type='button', title='View orders')
                   i.bi.bi-list-check.me-1
@@ -40,6 +40,9 @@ block content
 
                 // Admin-only tools
                 if currentUser && currentUser.role && currentUser.role.toLowerCase() === 'admin'
+                  button.btn.btn-outline-light-custom.btn-sm#openDailyCashiersBtn(type='button', title="View today's payments by cashier")
+                    i.bi.bi-cash-stack.me-1
+                    | Daily Cash
                   button.btn.btn-outline-light-custom.btn-sm#openCashiersBtn(type='button', title='Cashiers')
                     i.bi.bi-people.me-1
                     | Receive Payments
@@ -171,6 +174,54 @@ block content
               tbody
                 tr
                   td.text-muted(colspan='4') Loading...
+        .modal-footer
+          button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
+
+  // Admin daily cashier totals (full day; unaffected by collection/close)
+  .modal.fade(id='dailyCashiersModal', tabindex='-1', aria-labelledby='dailyCashiersModalLabel', aria-hidden='true')
+    .modal-dialog.modal-xl.modal-dialog-centered.modal-dialog-scrollable
+      .modal-content.dark-surface
+        .modal-header
+          .d-flex.flex-column
+            h5.modal-title(id='dailyCashiersModalLabel') Today's Cash by Cashier
+            small.text-muted-light Full-day payments recorded by Cashiers and Admins.
+          button.btn-close(type='button', data-bs-dismiss='modal', aria-label='Close')
+        .modal-body.dark-card-body
+          .d-flex.justify-content-between.align-items-center.flex-wrap.gap-2.mb-3
+            small.text-muted-light#dailyCashiersUpdated Loading today's totals...
+            button.btn.btn-outline-light-custom.btn-sm#dailyCashiersRefreshBtn(type='button')
+              i.bi.bi-arrow-repeat.me-1
+              | Refresh
+
+          .row.g-2.mb-3
+            .col-12.col-md-4
+              .card.border-1.dark-surface.h-100
+                .card-body.py-2.dark-card-body
+                  .small.text-muted-light Overall Total
+                  strong.text-success#dailyCashiersOverallTotal GH₵ 0.00
+            .col-6.col-md-4
+              .card.border-1.dark-surface.h-100
+                .card-body.py-2.dark-card-body
+                  .small.text-muted-light Cashiers
+                  strong#dailyCashiersCashierTotal GH₵ 0.00
+            .col-6.col-md-4
+              .card.border-1.dark-surface.h-100
+                .card-body.py-2.dark-card-body
+                  .small.text-muted-light Admins
+                  strong#dailyCashiersAdminTotal GH₵ 0.00
+
+          .table-responsive
+            table.table.table-sm.table-hover#dailyCashiersTable
+              thead
+                tr
+                  th Cashier / Admin
+                  th Role
+                  th.text-center Payments
+                  th Last Payment
+                  th.text-end Today's Cash
+              tbody
+                tr
+                  td.text-muted-light(colspan='5') Loading...
         .modal-footer
           button.btn.btn-secondary(type='button', data-bs-dismiss='modal') Close
 

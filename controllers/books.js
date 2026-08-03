@@ -34,8 +34,8 @@ function bookletSheetsFromPages(pages) {
 
 /**
  * Compute effective unit price & subtotal for an item spec:
- * itemSpec: { priceRuleId, pages (number), fb (bool), booklet (bool), spoiled (int) }
- * Returns { unitPrice, effectiveQty, subtotal, selectionLabel, serviceId }
+ * itemSpec: { priceRuleId, pages, quantity, fb, booklet, spoiled, unitDiscountAmount }
+ * Returns the server-authoritative gross price, unit discount and net subtotal.
  */
 async function computeItemSnapshot(itemSpec) {
   if (!itemSpec || !itemSpec.priceRuleId) throw new Error('Missing priceRuleId');
@@ -57,16 +57,40 @@ async function computeItemSnapshot(itemSpec) {
   }
 
   const pages = Number(itemSpec.pages || 1) || 1;
+  const quantity = Math.max(1, Math.floor(Number(itemSpec.quantity) || 1));
   const effectiveQty = booklet ? bookletSheetsFromPages(pages) : (wantFb ? Math.ceil(pages / 2) : pages);
-  const spoiled = itemSpec.spoiled !== undefined && itemSpec.spoiled !== null ? Math.max(0, Math.floor(Number(itemSpec.spoiled) || 0)) : 0;
-  const totalCount = Math.max(0, effectiveQty) + Math.max(0, spoiled);
-  const subtotal = Number((unitPrice * effectiveQty).toFixed(2));
+  const pricingQty = effectiveQty * quantity;
+  const rawDiscount = itemSpec.unitDiscountAmount === undefined || itemSpec.unitDiscountAmount === null || String(itemSpec.unitDiscountAmount).trim() === ''
+    ? 0
+    : Number(itemSpec.unitDiscountAmount);
+  if (!Number.isFinite(rawDiscount) || rawDiscount < 0) {
+    const err = new Error('Enter a valid price rule discount amount.');
+    err.code = 'INVALID_UNIT_DISCOUNT';
+    throw err;
+  }
+  const unitDiscountAmount = Number(rawDiscount.toFixed(2));
+  if (unitDiscountAmount > unitPrice) {
+    const err = new Error(`Unit discount cannot exceed the selected price of ${unitPrice.toFixed(2)}.`);
+    err.code = 'INVALID_UNIT_DISCOUNT';
+    throw err;
+  }
+
+  const discountedUnitPrice = Number((unitPrice - unitDiscountAmount).toFixed(2));
+  const grossSubtotal = Number((unitPrice * pricingQty).toFixed(2));
+  const lineDiscountAmount = Number((unitDiscountAmount * pricingQty).toFixed(2));
+  const subtotal = Number((discountedUnitPrice * pricingQty).toFixed(2));
 
   const selectionLabel = buildSelectionLabelFromPrice(pr);
 
   return {
     unitPrice,
     effectiveQty,
+    pricingQty,
+    quantity,
+    unitDiscountAmount,
+    discountedUnitPrice,
+    grossSubtotal,
+    lineDiscountAmount,
     subtotal,
     selectionLabel,
     serviceId: pr.service || null,
@@ -169,29 +193,45 @@ exports.get = async (req, res) => {
     const book = await Book.findById(id).lean();
     if (!book) return res.status(404).json({ ok: false, error: 'Book not found' });
 
-    // ensure items have selectionLabel/unitPrice/subtotal (in case older books miss them)
+    // Legacy non-printer items stored QTY in `pages`; printer items used pages literally.
     const items = [];
     for (const it of (book.items || [])) {
+      const hasStoredQuantity = it.quantity !== undefined && it.quantity !== null;
+      const quantity = hasStoredQuantity
+        ? Math.max(1, Math.floor(Number(it.quantity) || 1))
+        : (it.printer ? 1 : Math.max(1, Math.floor(Number(it.pages) || 1)));
+      const pages = hasStoredQuantity || it.printer
+        ? Math.max(1, Math.floor(Number(it.pages) || 1))
+        : 1;
+
       if (it.priceRule && (!it.unitPrice || !it.subtotal || !it.selectionLabel)) {
         try {
           const snap = await computeItemSnapshot({
             priceRuleId: it.priceRule,
-            pages: it.pages,
+            pages,
+            quantity,
             fb: it.fb,
             booklet: it.booklet,
+            unitDiscountAmount: it.unitDiscountAmount,
             spoiled: it.spoiled
           });
           items.push(Object.assign({}, it, {
+            pages,
+            quantity,
             unitPrice: snap.unitPrice,
+            unitDiscountAmount: snap.unitDiscountAmount,
+            discountedUnitPrice: snap.discountedUnitPrice,
+            grossSubtotal: snap.grossSubtotal,
+            lineDiscountAmount: snap.lineDiscountAmount,
             subtotal: snap.subtotal,
             selectionLabel: snap.selectionLabel
           }));
         } catch (e) {
           // if compute fails for a saved book item, preserve what's stored
-          items.push(it);
+          items.push(Object.assign({}, it, { pages, quantity }));
         }
       } else {
-        items.push(it);
+        items.push(Object.assign({}, it, { pages, quantity }));
       }
     }
 
@@ -205,9 +245,9 @@ exports.get = async (req, res) => {
 
 /**
  * POST /books
- * Body: { name, items: [ { priceRuleId, pages, fb, booklet, printerId, spoiled } ] }
+ * Body: { name, items: [ { priceRuleId, pages, quantity, fb, booklet, printerId, spoiled, unitDiscountAmount } ] }
  * Computes per-item unitPrice & subtotal using ServicePrice server authoritative logic,
- * stores book with snapshots: service, priceRule, pages, fb, booklet, printer, spoiled, unitPrice, subtotal, selectionLabel
+ * stores book with snapshots: service, priceRule, pages, quantity, fb, booklet, printer, spoiled, unitPrice, subtotal, selectionLabel
  */
 exports.create = async (req, res) => {
   try {
@@ -234,23 +274,37 @@ exports.create = async (req, res) => {
       }
       // pages default to 1
       const pages = Math.max(1, Math.floor(Number(it.pages || 1)));
+      const quantity = Math.max(1, Math.floor(Number(it.quantity || 1)));
       const booklet = isTruthyFlag(it.booklet);
       const fb = booklet || isTruthyFlag(it.fb);
       const spoiled = it.spoiled !== undefined && it.spoiled !== null ? Math.max(0, Math.floor(Number(it.spoiled) || 0)) : 0;
       const printer = (it.printerId && ObjectId.isValid(it.printerId)) ? new ObjectId(it.printerId) : null;
 
       // compute snapshot using service_price authoritative logic
-      const snap = await computeItemSnapshot({ priceRuleId: it.priceRuleId, pages, fb, booklet, spoiled });
+      const snap = await computeItemSnapshot({
+        priceRuleId: it.priceRuleId,
+        pages,
+        quantity,
+        fb,
+        booklet,
+        spoiled,
+        unitDiscountAmount: it.unitDiscountAmount
+      });
 
       const itemRecord = {
         service: snap.serviceId || null,
         priceRule: new ObjectId(it.priceRuleId),
         pages,
+        quantity,
         fb,
         booklet,
         printer: printer,
         spoiled,
         unitPrice: snap.unitPrice,
+        unitDiscountAmount: snap.unitDiscountAmount,
+        discountedUnitPrice: snap.discountedUnitPrice,
+        grossSubtotal: snap.grossSubtotal,
+        lineDiscountAmount: snap.lineDiscountAmount,
         subtotal: snap.subtotal,
         selectionLabel: snap.selectionLabel
       };
@@ -271,11 +325,14 @@ exports.create = async (req, res) => {
 
     return res.json({ ok: true, bookId: bookDoc._id, unitPrice: bookDoc.unitPrice });
   } catch (err) {
-    console.error('books.create error', err);
     // duplicate key (name) handling
     if (err && err.code === 11000) {
       return res.status(400).json({ ok: false, error: 'Book name already exists' });
     }
+    if (err && err.code === 'INVALID_UNIT_DISCOUNT') {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
+    console.error('books.create error', err);
     return res.status(500).json({ ok: false, error: 'Error creating book' });
   }
 };
@@ -313,6 +370,7 @@ exports.update = async (req, res) => {
       }
 
       const pages = Math.max(1, Math.floor(Number(it.pages || 1)));
+      const quantity = Math.max(1, Math.floor(Number(it.quantity || 1)));
       const booklet = isTruthyFlag(it.booklet);
       const fb = booklet || isTruthyFlag(it.fb);
       const spoiled = Math.max(0, Math.floor(Number(it.spoiled || 0)));
@@ -323,20 +381,27 @@ exports.update = async (req, res) => {
       const snap = await computeItemSnapshot({
         priceRuleId: it.priceRuleId,
         pages,
+        quantity,
         fb,
         booklet,
-        spoiled
+        spoiled,
+        unitDiscountAmount: it.unitDiscountAmount
       });
 
       itemsOut.push({
         service: snap.serviceId || null,
         priceRule: new ObjectId(it.priceRuleId),
         pages,
+        quantity,
         fb,
         booklet,
         printer,
         spoiled,
         unitPrice: snap.unitPrice,
+        unitDiscountAmount: snap.unitDiscountAmount,
+        discountedUnitPrice: snap.discountedUnitPrice,
+        grossSubtotal: snap.grossSubtotal,
+        lineDiscountAmount: snap.lineDiscountAmount,
         subtotal: snap.subtotal,
         selectionLabel: snap.selectionLabel
       });
@@ -361,10 +426,13 @@ exports.update = async (req, res) => {
 
     return res.json({ ok: true });
   } catch (err) {
-    console.error('books.update error', err);
-    if (err.code === 11000) {
+    if (err && err.code === 11000) {
       return res.status(400).json({ ok: false, error: 'Book name already exists' });
     }
+    if (err && err.code === 'INVALID_UNIT_DISCOUNT') {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
+    console.error('books.update error', err);
     return res.status(500).json({ ok: false, error: 'Error updating book' });
   }
 };

@@ -22,6 +22,15 @@ function initOrdersPay() {
   const applyManualDiscountBtn = document.getElementById('applyManualDiscountBtn');
 
   const openCashiersBtn = document.getElementById('openCashiersBtn');
+const openDailyCashiersBtn = document.getElementById('openDailyCashiersBtn');
+const dailyCashiersModalEl = document.getElementById('dailyCashiersModal');
+const dailyCashiersModal = (window.bootstrap && dailyCashiersModalEl) ? new bootstrap.Modal(dailyCashiersModalEl) : null;
+const dailyCashiersTable = document.getElementById('dailyCashiersTable');
+const dailyCashiersUpdated = document.getElementById('dailyCashiersUpdated');
+const dailyCashiersRefreshBtn = document.getElementById('dailyCashiersRefreshBtn');
+const dailyCashiersOverallTotal = document.getElementById('dailyCashiersOverallTotal');
+const dailyCashiersCashierTotal = document.getElementById('dailyCashiersCashierTotal');
+const dailyCashiersAdminTotal = document.getElementById('dailyCashiersAdminTotal');
 const cashiersModalEl = document.getElementById('cashiersModal');
 const cashiersModal = (window.bootstrap && cashiersModalEl) ? new bootstrap.Modal(cashiersModalEl) : null;
 const cashiersTable = document.getElementById('cashiersTable');
@@ -405,6 +414,9 @@ const cashiersShowAllBtn = document.getElementById('cashiersShowAllBtn');
       j.orders.forEach(o => {
         const id = String(o.orderId || '').trim();
         if (!id) return;
+        // Payment records are shared database state, so a payment made by a
+        // cashier removes the ID from every user's dropdown.
+        if (o.paymentProcessed === true) return;
         if (suppressedTodayOrderIds.has(id)) return;
         const name = String(o.name || '').trim();
         const showName = name && name.toLowerCase() !== 'walk-in';
@@ -2270,6 +2282,89 @@ function renderCashiersStatus(rows) {
     }).join('');
 }
 
+let dailyCashiersRefreshTimer = null;
+
+function setDailyCashiersTotals(payload) {
+  if (dailyCashiersOverallTotal) dailyCashiersOverallTotal.textContent = formatCedi(payload && payload.total || 0);
+  if (dailyCashiersCashierTotal) dailyCashiersCashierTotal.textContent = formatCedi(payload && payload.cashierTotal || 0);
+  if (dailyCashiersAdminTotal) dailyCashiersAdminTotal.textContent = formatCedi(payload && payload.adminTotal || 0);
+}
+
+function renderDailyCashiers(payload) {
+  if (!dailyCashiersTable) return;
+  const tbody = dailyCashiersTable.querySelector('tbody');
+  const rows = payload && Array.isArray(payload.rows) ? payload.rows : [];
+  setDailyCashiersTotals(payload || {});
+
+  if (dailyCashiersUpdated) {
+    const generatedAt = payload && payload.generatedAt ? new Date(payload.generatedAt) : new Date();
+    dailyCashiersUpdated.textContent = `Updated ${generatedAt.toLocaleTimeString()} · ${rows.length} active payment taker${rows.length === 1 ? '' : 's'}`;
+  }
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td class="text-muted-light" colspan="5">No Cashier or Admin has received a payment today.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(row => {
+    const role = String(row.role || '').toLowerCase();
+    const roleLabel = role === 'admin' ? 'Admin' : 'Cashier';
+    const roleClass = role === 'admin' ? 'bg-primary' : 'bg-info text-dark';
+    const lastPayment = row.lastPaymentAt
+      ? new Date(row.lastPaymentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : '-';
+    return `<tr>
+      <td><strong>${escapeHtml(row.name || '')}</strong></td>
+      <td><span class="badge ${roleClass}">${roleLabel}</span></td>
+      <td class="text-center">${escapeHtml(String(Number(row.paymentsCount || 0)))}</td>
+      <td>${escapeHtml(lastPayment)}</td>
+      <td class="text-end text-success"><strong>${formatCedi(row.total || 0)}</strong></td>
+    </tr>`;
+  }).join('');
+}
+
+async function fetchDailyCashiersTotals() {
+  if (!dailyCashiersTable) return;
+  const tbody = dailyCashiersTable.querySelector('tbody');
+  if (dailyCashiersRefreshBtn) dailyCashiersRefreshBtn.disabled = true;
+  if (dailyCashiersUpdated) dailyCashiersUpdated.textContent = 'Refreshing today\'s totals...';
+
+  try {
+    const res = await fetch('/cashiers/daily-totals', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || !payload || !payload.ok) {
+      throw new Error(payload && payload.error ? payload.error : 'Unable to load daily cashier totals');
+    }
+    renderDailyCashiers(payload);
+  } catch (err) {
+    if (dailyCashiersUpdated) dailyCashiersUpdated.textContent = 'Unable to refresh totals';
+    if (tbody) tbody.innerHTML = `<tr><td class="text-danger" colspan="5">${escapeHtml(err.message || 'Unable to load daily cashier totals')}</td></tr>`;
+  } finally {
+    if (dailyCashiersRefreshBtn) dailyCashiersRefreshBtn.disabled = false;
+  }
+}
+
+function startDailyCashiersRefresh() {
+  if (dailyCashiersRefreshTimer) clearInterval(dailyCashiersRefreshTimer);
+  dailyCashiersRefreshTimer = setInterval(function () {
+    if (!dailyCashiersModalEl || !dailyCashiersModalEl.isConnected) {
+      stopDailyCashiersRefresh();
+      return;
+    }
+    fetchDailyCashiersTotals();
+  }, 15000);
+}
+
+function stopDailyCashiersRefresh() {
+  if (!dailyCashiersRefreshTimer) return;
+  clearInterval(dailyCashiersRefreshTimer);
+  dailyCashiersRefreshTimer = null;
+}
+
   // -------------------------
   // Cashier self-status UI (for logged-in cashiers)
   // - fetches /cashiers/my-status and updates #myCashierStatusContainer
@@ -2654,6 +2749,22 @@ function showReceiveModal(cashierId, cashierName) {
 }
 
 // bind openCashiersBtn
+if (openDailyCashiersBtn) {
+  openDailyCashiersBtn.addEventListener('click', function () {
+    if (dailyCashiersModal) dailyCashiersModal.show();
+    fetchDailyCashiersTotals();
+    startDailyCashiersRefresh();
+  });
+}
+
+if (dailyCashiersRefreshBtn) {
+  dailyCashiersRefreshBtn.addEventListener('click', fetchDailyCashiersTotals);
+}
+
+if (dailyCashiersModalEl) {
+  dailyCashiersModalEl.addEventListener('hidden.bs.modal', stopDailyCashiersRefresh);
+}
+
 if (openCashiersBtn) {
   openCashiersBtn.addEventListener('click', function () {
     if (cashiersModal) cashiersModal.show();

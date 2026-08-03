@@ -17,6 +17,10 @@ function round2(n) {
   return Number((Number(n || 0)).toFixed(2));
 }
 
+function isAdmin(user) {
+  return !!(user && String(user.role || '').toLowerCase() === 'admin');
+}
+
 function cashBookKindFromPayment(payment) {
   const method = String(payment?.method || '').toLowerCase();
   const meta = payment?.meta || {};
@@ -292,6 +296,118 @@ exports.my_status = async (req, res) => {
   } catch (err) {
     console.error('GET /cashiers/my-status error', err);
     return res.status(500).json({ error: 'Unable to fetch your cashier status' });
+  }
+};
+
+/**
+ * GET /cashiers/daily-totals
+ * Admin-only full-day payment totals grouped by the cashier/Admin who recorded them.
+ * Unlike collection status, these totals do not reset when cash is received/closed.
+ */
+exports.daily_totals = async (req, res) => {
+  try {
+    if (!isAdmin(req.user)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { start } = dayRangeForIso(null);
+    const rangeEnd = new Date();
+    const paymentRows = await Order.aggregate([
+      {
+        $match: {
+          payments: {
+            $elemMatch: {
+              recordedBy: { $ne: null },
+              method: { $in: ['cash', 'momo', 'cheque', 'bank'] },
+              createdAt: { $gte: start, $lte: rangeEnd }
+            }
+          }
+        }
+      },
+      { $unwind: '$payments' },
+      {
+        $match: {
+          'payments.recordedBy': { $ne: null },
+          'payments.method': { $in: ['cash', 'momo', 'cheque', 'bank'] },
+          'payments.createdAt': { $gte: start, $lte: rangeEnd }
+        }
+      },
+      {
+        $project: {
+          recordedBy: '$payments.recordedBy',
+          recordedByName: '$payments.recordedByName',
+          createdAt: '$payments.createdAt',
+          receivedAmount: {
+            $convert: {
+              input: { $ifNull: ['$payments.meta.receivedAmount', '$payments.amount'] },
+              to: 'double',
+              onError: 0,
+              onNull: 0
+            }
+          }
+        }
+      },
+      { $match: { receivedAmount: { $gt: 0 } } },
+      {
+        $group: {
+          _id: '$recordedBy',
+          total: { $sum: '$receivedAmount' },
+          paymentsCount: { $sum: 1 },
+          lastPaymentAt: { $max: '$createdAt' },
+          recordedByName: { $last: '$recordedByName' }
+        }
+      },
+      { $sort: { total: -1, recordedByName: 1 } }
+    ]);
+
+    const userIds = paymentRows.map(row => row._id).filter(Boolean);
+    const users = userIds.length
+      ? await User.find({
+        _id: { $in: userIds },
+        role: { $in: ['cashier', 'admin'] }
+      }).select('_id name username role').lean()
+      : [];
+    const userMap = new Map(users.map(user => [String(user._id), user]));
+
+    const rows = paymentRows.reduce((out, paymentRow) => {
+      const user = userMap.get(String(paymentRow._id));
+      if (!user) return out;
+      const total = round2(paymentRow.total);
+      if (total <= 0) return out;
+      out.push({
+        userId: String(user._id),
+        name: user.name || user.username || paymentRow.recordedByName || String(user._id),
+        role: String(user.role || '').toLowerCase(),
+        total,
+        paymentsCount: Math.max(0, Number(paymentRow.paymentsCount || 0)),
+        lastPaymentAt: paymentRow.lastPaymentAt || null
+      });
+      return out;
+    }, []);
+
+    rows.sort((a, b) => (b.total - a.total) || a.name.localeCompare(b.name));
+    const cashierTotal = round2(rows
+      .filter(row => row.role === 'cashier')
+      .reduce((sum, row) => sum + row.total, 0));
+    const adminTotal = round2(rows
+      .filter(row => row.role === 'admin')
+      .reduce((sum, row) => sum + row.total, 0));
+    const total = round2(cashierTotal + adminTotal);
+
+    return res.json({
+      ok: true,
+      date: start.toISOString(),
+      from: start,
+      to: rangeEnd,
+      total,
+      cashierTotal,
+      adminTotal,
+      rows,
+      generatedAt: new Date()
+    });
+  } catch (err) {
+    console.error('GET /cashiers/daily-totals error', err);
+    return res.status(500).json({ error: 'Unable to fetch daily cashier totals' });
   }
 };
 

@@ -1197,6 +1197,11 @@ const unitDiscountAmount = it.unitDiscountAmount === undefined || it.unitDiscoun
   ? 0
   : Number(it.unitDiscountAmount);
 const invoiceLabelOverride = String(it.invoiceLabelOverride || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+const compoundServiceId = String(it.compoundServiceId || '').trim();
+const rawCompoundItemIndex = it.compoundItemIndex;
+const compoundItemIndex = rawCompoundItemIndex !== undefined && rawCompoundItemIndex !== null && String(rawCompoundItemIndex).trim() !== ''
+  ? Math.floor(Number(rawCompoundItemIndex))
+  : null;
 
 return {
   serviceId: it.serviceId,
@@ -1214,6 +1219,8 @@ return {
   spoiled,
   unitDiscountAmount,
   invoiceLabelOverride,
+  compoundServiceId,
+  compoundItemIndex: Number.isInteger(compoundItemIndex) && compoundItemIndex >= 0 ? compoundItemIndex : null,
   outsourced: it.outsourced === true || it.outsourced === 'true' || it.outsourced === 1 || it.outsourced === '1',
   outsourcedArtistId: it.outsourcedArtistId || null,
   outsourcedArtistName: it.outsourcedArtistName || '',
@@ -1288,6 +1295,9 @@ return {
     const itemPriceRuleIdStrings = Array.from(new Set(items
       .map(it => String(it.priceRuleId || '').trim())
       .filter(id => mongoose.Types.ObjectId.isValid(id))));
+    const compoundBookIdStrings = Array.from(new Set(items
+      .map(it => String(it.compoundServiceId || '').trim())
+      .filter(id => mongoose.Types.ObjectId.isValid(id))));
     const itemPrinterIdStrings = Array.from(new Set(
       items
         .map(it => String(it.printerId || '').trim())
@@ -1318,11 +1328,18 @@ return {
       allowedCategoryObjectIds.length
         ? Book.find({
           category: { $in: allowedCategoryObjectIds },
-          'items.service': { $in: itemServiceIdStrings.map(id => new mongoose.Types.ObjectId(id)) },
-          ...(itemPriceRuleIdStrings.length
-            ? { 'items.priceRule': { $in: itemPriceRuleIdStrings.map(id => new mongoose.Types.ObjectId(id)) } }
-            : {})
-        }).select('items.service items.priceRule').lean()
+          $or: [
+            ...(compoundBookIdStrings.length
+              ? [{ _id: { $in: compoundBookIdStrings.map(id => new mongoose.Types.ObjectId(id)) } }]
+              : []),
+            {
+              'items.service': { $in: itemServiceIdStrings.map(id => new mongoose.Types.ObjectId(id)) },
+              ...(itemPriceRuleIdStrings.length
+                ? { 'items.priceRule': { $in: itemPriceRuleIdStrings.map(id => new mongoose.Types.ObjectId(id)) } }
+                : {})
+            }
+          ]
+        }).select('_id items.service items.priceRule items.unitDiscountAmount').lean()
         : Promise.resolve([])
     ]);
 
@@ -1330,6 +1347,7 @@ return {
     const serviceMap = new Map(services.map(svc => [String(svc._id), svc]));
     const printerMap = new Map(printers.map(prn => [String(prn._id), prn]));
     const outsourcedArtistMap = new Map(outsourcedArtists.map(artist => [String(artist._id), artist]));
+    const compoundBookMap = new Map((compoundBooks || []).map(book => [String(book._id), book]));
     const compoundAllowedPairs = new Set();
     (compoundBooks || []).forEach(book => {
       (book.items || []).forEach(item => {
@@ -1338,6 +1356,22 @@ return {
         }
       });
     });
+
+    function trustedCompoundItemFor(orderItem) {
+      const bookId = String(orderItem && orderItem.compoundServiceId || '').trim();
+      const rawItemIndex = orderItem && orderItem.compoundItemIndex;
+      if (rawItemIndex === undefined || rawItemIndex === null || String(rawItemIndex).trim() === '') return null;
+      const itemIndex = Number(rawItemIndex);
+      if (!bookId || !Number.isInteger(itemIndex) || itemIndex < 0) return null;
+
+      const book = compoundBookMap.get(bookId);
+      const item = book && Array.isArray(book.items) ? book.items[itemIndex] : null;
+      if (!item || !item.service || !item.priceRule) return null;
+      if (String(item.service) !== String(orderItem.serviceId) || String(item.priceRule) !== String(orderItem.priceRuleId)) {
+        return null;
+      }
+      return item;
+    }
 
     const submissionCustomerId = submission && submission.customer
       ? String(submission.customer._id || submission.customer)
@@ -1365,6 +1399,7 @@ return {
     const canMarkOutsourced = isAdminActor;
 
     for (const it of items) {
+      const trustedCompoundItem = trustedCompoundItemFor(it);
       const svc = serviceMap.get(String(it.serviceId));
       if (!svc) {
         return res.status(404).json({ error: `Service ${it.serviceId} not found` });
@@ -1382,9 +1417,9 @@ return {
       // when a book is placed, its underlying services may belong to other categories.
       // In that case, allow the item if it belongs to a Book that is in an allowed category.
       if (!isAuthorizedByCategory && allowedCategoryObjectIds.length) {
-        isAuthorizedByCategory = it.priceRuleId
+        isAuthorizedByCategory = !!trustedCompoundItem || (it.priceRuleId
           ? compoundAllowedPairs.has(`${String(it.serviceId)}:${String(it.priceRuleId)}`)
-          : false;
+          : false);
       }
 
       if (!isAuthorizedByCategory) {
@@ -1571,10 +1606,12 @@ return {
         (unitPrice * pricingQuantity).toFixed(2)
       );
       let unitDiscountAmount = 0;
-      const requestedUnitDiscount = isAdminActor
-        ? Number(it.unitDiscountAmount)
-        : takeApprovedInvoiceDiscount(approvedInvoiceDiscounts, it);
-      if (isAdminActor || requestedUnitDiscount > 0) {
+      const requestedUnitDiscount = trustedCompoundItem
+        ? Number(trustedCompoundItem.unitDiscountAmount || 0)
+        : (isAdminActor
+          ? Number(it.unitDiscountAmount)
+          : takeApprovedInvoiceDiscount(approvedInvoiceDiscounts, it));
+      if (isAdminActor || trustedCompoundItem || requestedUnitDiscount > 0) {
         if (!isFinite(requestedUnitDiscount) || requestedUnitDiscount < 0) {
           return res.status(400).json({ error: 'Enter a valid price rule discount amount.' });
         }
@@ -3543,6 +3580,8 @@ const out = orders.map(o => {
     if (ts < start || ts > end) return sum;
     return sum + amt;
   }, 0);
+  const paymentProcessed = String(o.status || '').toLowerCase() === 'paid'
+    || (o.payments || []).some(payment => Number(payment && payment.amount || 0) > 0);
   const outsourcedTotal = (o.items || []).reduce((sum, item) => {
     return sum + Number(item && item.outsourcedTotal ? item.outsourcedTotal : 0);
   }, 0);
@@ -3581,6 +3620,7 @@ const out = orders.map(o => {
     outsourcedTotal: Number(outsourcedTotal.toFixed(2)),
     isOutsourced: outsourcedTotal > 0,
     paidInRange: Number(paidInRange.toFixed(2)),
+    paymentProcessed,
     outsourcedDetails,
     status: o.status,
     createdAt: o.createdAt

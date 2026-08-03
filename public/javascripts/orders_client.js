@@ -276,7 +276,7 @@
   let cart = [];   // cart lines: either normal item or book line
                    // normal: { isBook:false, serviceId, serviceName, priceRuleId, selectionLabel, invoiceLabelOverride, unitPrice, unitDiscountAmount, discountedUnitPrice, pages, pagesOriginal, grossSubtotal, lineDiscountAmount, subtotal, fb, printerId, spoiled, outsourced, outsourcedArtistId, outsourcedArtistName, outsourcedQty, outsourcedAmount, outsourcedTotal }
                    // large : { isBook:false, isLargeFormat:true, serviceId, serviceName, largeFormatLength, largeFormatBreadth, largeFormatUnit, largeFormatQty, largeFormatSquareFeet, unitPrice, subtotal, printerId }
-                   // book  : { isBook:true, bookId, bookName, unitPrice, qty, subtotal, bookItems: [ { serviceId, priceRuleId, pagesOriginal, fb, booklet, printerId, spoiled, unitPrice, subtotal, selectionLabel } ] }
+                   // book  : { isBook:true, bookId, bookName, unitPrice, qty, subtotal, bookItems: [ { serviceId, priceRuleId, pagesOriginal, quantity, fb, booklet, printerId, spoiled, unitPrice, subtotal, selectionLabel } ] }
   let serviceRequiresPrinter = false;
   let printers = []; // list of printers for the currently loaded service
   let books = [];    // list of available books (basic metadata)
@@ -1557,6 +1557,9 @@ function renderPrices(bookMode = false) {
       discountInput.title = 'Admin-only amount deducted from the price rule unit price before QTY and pages are calculated';
       discountInput.setAttribute('aria-label', 'Price rule unit discount amount');
       discountInput.style.width = '118px';
+      if (p.__bookItem && Number(p.__bookItem.unitDiscountAmount || 0) > 0) {
+        discountInput.value = String(Number(p.__bookItem.unitDiscountAmount));
+      }
       mid.appendChild(discountInput);
     }
 
@@ -1970,13 +1973,17 @@ function renderLargeFormatInputs(serviceId, largeFormat) {
         unitPrice: Number(bi.unitPrice || 0),
         price2: null,
         __bookItem: {
+          compoundServiceId: book._id,
+          compoundItemIndex: idx,
           serviceId: bi.service,
           priceRuleId: bi.priceRule,
           pages: bi.pages,
+          quantity: Math.max(1, Math.floor(Number(bi.quantity) || 1)),
           fb: !!bi.fb,
           booklet: !!bi.booklet,
           printer: bi.printer || null,
           spoiled: bi.spoiled || 0,
+          unitDiscountAmount: Number(bi.unitDiscountAmount || 0),
           subtotal: Number(bi.subtotal || 0)
         }
       }));
@@ -2007,15 +2014,24 @@ function renderLargeFormatInputs(serviceId, largeFormat) {
       const subtotal = Number((unitPrice * quantity).toFixed(2));
 
       // prepare internal bookItems snapshot (used for expansion at order time)
-      const bookItems = (book.items || []).map(it => ({
+      const bookItems = (book.items || []).map((it, index) => ({
+        compoundServiceId: book._id,
+        compoundItemIndex: index,
         serviceId: it.service,
         priceRuleId: it.priceRule,
         pagesOriginal: Number(it.pages || 1),
+        quantity: Math.max(1, Math.floor(Number(it.quantity) || 1)),
         fb: !!it.fb,
         booklet: !!it.booklet,
         printerId: it.printer || null,
         spoiled: Number(it.spoiled || 0),
         unitPrice: Number(it.unitPrice || 0),
+        unitDiscountAmount: Number(it.unitDiscountAmount || 0),
+        discountedUnitPrice: it.discountedUnitPrice !== undefined && it.discountedUnitPrice !== null
+          ? Number(it.discountedUnitPrice)
+          : Number(Math.max(0, Number(it.unitPrice || 0) - Number(it.unitDiscountAmount || 0)).toFixed(2)),
+        grossSubtotal: Number(it.grossSubtotal || (Number(it.subtotal || 0) + Number(it.lineDiscountAmount || 0))),
+        lineDiscountAmount: Number(it.lineDiscountAmount || 0),
         subtotal: Number(it.subtotal || 0),
         selectionLabel: it.selectionLabel || ''
       }));
@@ -2056,7 +2072,9 @@ function addToCart({
   outsourcedArtistName,
   outsourcedQty,
   outsourcedAmount,
-  unitDiscountAmount
+  unitDiscountAmount,
+  compoundServiceId,
+  compoundItemIndex
 }) {
   const origPages = Number(pages) || 1;
   const factorVal = Number(factor) && Number(factor) > 0 ? Number(factor) : 1;
@@ -2105,6 +2123,10 @@ function addToCart({
     serviceId,
     serviceName,
     priceRuleId,
+    compoundServiceId: compoundServiceId || null,
+    compoundItemIndex: compoundItemIndex !== undefined && compoundItemIndex !== null && String(compoundItemIndex).trim() !== '' && Number.isInteger(Number(compoundItemIndex))
+      ? Number(compoundItemIndex)
+      : null,
     selectionLabel: label,
     invoiceLabelOverride: cleanInvoiceLabelOverride(invoiceLabelOverride),
     unitPrice: Number(unitPrice),
@@ -3721,6 +3743,8 @@ function addLargeFormatToCart({
     if (priceObj.__bookItem) {
       // Treat this as adding the underlying item as a normal cart item (keeps behavior intuitive)
       addedToCart = addToCart({
+        compoundServiceId: priceObj.__bookItem.compoundServiceId,
+        compoundItemIndex: priceObj.__bookItem.compoundItemIndex,
         serviceId: priceObj.__bookItem.serviceId,
         serviceName: '', // not always available in preview; the server will reconcile names for display
         priceRuleId: priceObj.__bookItem.priceRuleId,
@@ -3738,7 +3762,7 @@ function addLargeFormatToCart({
         outsourcedArtistName,
         outsourcedQty,
         outsourcedAmount,
-        unitDiscountAmount
+        unitDiscountAmount: Number(priceObj.__bookItem.unitDiscountAmount || unitDiscountAmount || 0)
       });
     } else {
       // Normal service price add
@@ -3937,20 +3961,27 @@ async function placeOrderFlow() {
               : Number(bi.pagesOriginal || bi.pages || 1));
 
           const bookQty = Math.max(1, Math.floor(Number(line.qty || 1)));
+          const componentQty = Math.max(1, Math.floor(Number(bi.quantity || 1)));
+          const combinedQty = componentQty * bookQty;
           const printerBound = !!bi.printerId;
           // Printer-bound components keep their per-copy pages so booklet/F/B
-          // rounding happens per compound service, then QTY multiplies the result.
-          const pagesToSend = printerBound ? rawPages : (rawPages * bookQty);
+          // rounding happens per component, then component and cart QTY multiply it.
+          const pagesToSend = printerBound ? rawPages : (rawPages * combinedQty);
 
           items.push({
+            compoundServiceId: bi.compoundServiceId || line.bookId,
+            compoundItemIndex: bi.compoundItemIndex !== undefined && bi.compoundItemIndex !== null && String(bi.compoundItemIndex).trim() !== '' && Number.isInteger(Number(bi.compoundItemIndex))
+              ? Number(bi.compoundItemIndex)
+              : null,
             serviceId: bi.serviceId,
             priceRuleId: bi.priceRuleId,
             pages: pagesToSend,
-            factor: printerBound ? bookQty : (bi.factor || undefined),
+            factor: printerBound ? combinedQty : undefined,
             fb: !!bi.fb,
             booklet: !!(line.booklet || bi.booklet),
             printerId: bi.printerId || null,
             spoiled: bi.spoiled || 0,
+            unitDiscountAmount: Number(bi.unitDiscountAmount || 0),
             outsourcedArtistId: line.outsourcedArtistId || '',
             outsourcedArtistName: line.outsourcedArtistName || '',
             outsourcedQty: line.outsourcedQty || 0,
@@ -3984,6 +4015,8 @@ async function placeOrderFlow() {
             : Number(line.pages || 1);
 
         items.push({
+          compoundServiceId: line.compoundServiceId || null,
+          compoundItemIndex: line.compoundItemIndex,
           serviceId: line.serviceId,
           priceRuleId: line.priceRuleId,
           pages: rawPages,

@@ -4,6 +4,7 @@ const cashiers = require('../controllers/cashiers');
 
 // get cashier status for date
 router.get('/status', cashiers.getCashiers);
+router.get('/daily-totals', cashiers.daily_totals);
 router.get('/my-status', cashiers.my_status);
 router.get('/my-cash-breakdown', cashiers.my_cash_breakdown);
 //post cashier collection
