@@ -2320,16 +2320,15 @@ function addLargeFormatToCart({
   // printer service:
   // - QTY column shows factor (copies)
   // - Sheets column should be effective sheets = effectiveQty * factor
-  // - Pages column shows total raw pages = pages entered * QTY
+  // - Pages column shows the pages entered for one copy; QTY is displayed separately
   const f = it.factor ? Number(it.factor) : 1;
   const qtyFactor = isNaN(f) ? 1 : f;
   const effectiveQty = Number(it.pages) || 0;           // this is already "effectiveQty" (FB aware)
   const sheets = Math.max(0, Math.floor(effectiveQty * qtyFactor));
-  const totalPages = Math.max(0, Math.floor((Number(it.pagesOriginal) || 0) * qtyFactor));
 
   qtyCell = String(qtyFactor);
   factorCell = String(sheets);                          // ✅ Sheets
-  pagesCell = String(totalPages || it.pagesOriginal || ''); // entered pages × QTY
+  pagesCell = String(it.pagesOriginal || '');
 } else {
         // normal service
         qtyCell = String(it.pages);
@@ -2442,9 +2441,6 @@ function addLargeFormatToCart({
     const f = usesFactorPricing ? (Number(it.factor || 1) || 1) : 1;
     const effectiveQty = Number((it && it.pages) || 0) || 0;
     const sheets = usesFactorPricing ? Math.max(0, Math.floor(effectiveQty * f)) : '';
-    const totalPages = usesFactorPricing
-      ? Math.max(0, Math.floor((Number((it && it.pagesOriginal) || 0) || 0) * f))
-      : '';
     const noteParts = [];
     if (it && it.booklet) noteParts.push('Booklet');
     if (it && Number(it.unitDiscountAmount || 0) > 0) noteParts.push(`Unit discount: - GH\u20B5 ${formatMoney(it.unitDiscountAmount)}`);
@@ -2453,7 +2449,7 @@ function addLargeFormatToCart({
     return {
       description: cartDisplaySelectionLabel(it) || '',
       service: (it && it.serviceName) || '',
-      pages: usesFactorPricing ? String(totalPages || (it && it.pagesOriginal) || '') : '',
+      pages: usesFactorPricing ? String((it && it.pagesOriginal) || '') : '',
       qty: usesFactorPricing ? String(f) : String((it && it.pages) || ''),
       sheets: sheets === '' ? '' : String(sheets),
       unitPrice: Number((it && (it.discountedUnitPrice !== undefined && it.discountedUnitPrice !== null ? it.discountedUnitPrice : it.unitPrice)) || 0),
@@ -4622,9 +4618,8 @@ function renderOrdersList(orders) {
             const sqFt = Number((it && it.largeFormatSquareFeet) || (it && it.effectiveQty) || 0);
             detailsHtml = `QTY: ${escapeHtml(String(lfQty))}<br><small>${escapeHtml(formatCompactNumber(sqFt))} sq ft</small>`;
           } else if (usesFactorPricing) {
-            const totalPages = Math.max(0, Math.floor(rawPages * factor));
             const totalSheets = Math.max(0, Math.floor((Number(effectiveQty) || 0) * factor));
-            detailsHtml = `Pages: ${escapeHtml(String(totalPages))}<br><small>QTY: ${escapeHtml(String(factor))} | Sheets: ${escapeHtml(String(totalSheets))}</small>`;
+            detailsHtml = `Pages: ${escapeHtml(String(rawPages))}<br><small>QTY: ${escapeHtml(String(factor))} | Sheets: ${escapeHtml(String(totalSheets))}</small>`;
           } else {
             detailsHtml = `QTY: ${escapeHtml(String(rawPages))}`;
           }

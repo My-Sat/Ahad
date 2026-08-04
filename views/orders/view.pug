@@ -80,7 +80,6 @@ block content
             -     var factor = Number(it.factor || 1)
             -     if (isNaN(factor) || factor < 1) factor = 1
             -     var usesFactorPricing = !!(it.printer || Number(it.outsourcedTotal || 0) > 0 || factor > 1)
-            -     var totalPages = usesFactorPricing ? Math.floor(rawPages * factor) : rawPages
             -     var sheets = usesFactorPricing ? (qty * factor) : qty
             -     if (isNaN(sheets) || sheets < 0) sheets = 0
             -     var qtyLabel = usesFactorPricing ? 'Sheets' : 'QTY'
@@ -101,7 +100,7 @@ block content
             -       orderItemGroupMap[serviceKey] = { title: serviceTitle, items: [], subtotal: 0 }
             -       orderItemGroups.push(orderItemGroupMap[serviceKey])
             -     }
-            -     orderItemGroupMap[serviceKey].items.push({ item: it, label: subs, qtyLabel: qtyLabel, sheets: sheets, rawPages: rawPages, totalPages: totalPages, factor: factor, usesFactorPricing: usesFactorPricing, subtotal: subtotal, isLargeFormat: isLargeFormat, largeSize: largeSize, largeSqft: largeSqft })
+            -     orderItemGroupMap[serviceKey].items.push({ item: it, label: subs, qtyLabel: qtyLabel, sheets: sheets, rawPages: rawPages, factor: factor, usesFactorPricing: usesFactorPricing, subtotal: subtotal, isLargeFormat: isLargeFormat, largeSize: largeSize, largeSqft: largeSqft })
             -     orderItemGroupMap[serviceKey].subtotal += subtotal
             -   }
             -   for (var gi = 0; gi < orderItemGroups.length; gi++) {
@@ -131,7 +130,7 @@ block content
                           div Size: #{row.largeSize}
                           div Sq ft: #{Number(row.largeSqft || 0).toFixed(2)}
                         else if row.usesFactorPricing
-                          div Pages: #{row.totalPages}
+                          div Pages: #{row.rawPages}
                         if !row.isLargeFormat && row.usesFactorPricing && row.factor > 1
                           div QTY x#{row.factor}
                         - var displayedUnitPrice = (typeof it.discountedUnitPrice !== 'undefined' && it.discountedUnitPrice !== null) ? Number(it.discountedUnitPrice) : Number(it.unitPrice || 0)

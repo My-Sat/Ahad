@@ -1593,7 +1593,8 @@ function discountAppliedLabel(order) {
     const factor = Math.max(1, Math.floor(Number((it && it.factor) || 1)));
     const usesFactorPricing = !!(it && (it.printer || Number(it.outsourcedTotal || 0) > 0 || factor > 1));
     const displayQty = usesFactorPricing ? (baseSheets * factor) : baseSheets;
-    const displayPages = usesFactorPricing ? Math.max(0, Math.floor(rawPages * factor)) : null;
+    // Pages is the entered per-copy figure; quantity/effective sheets remain separate.
+    const displayPages = usesFactorPricing ? rawPages : null;
     const originalUnit = Number((it && it.unitPrice) || 0);
     const unitDiscountAmount = Number((it && it.unitDiscountAmount) || 0);
     const unit = Number(
