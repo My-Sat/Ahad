@@ -95,12 +95,23 @@ block content
             -     }
             -     var subtotal = Number(it.subtotal || 0)
             -     var serviceTitle = String(it.serviceName || 'Service').trim() || 'Service'
+            -     var printTone = 'other'
+            -     if (!isLargeFormat) {
+            -       var storedTone = String(it.printerType || it.tone || '').toLowerCase()
+            -       if (storedTone === 'colour' || storedTone === 'color') printTone = 'color'
+            -       else if (storedTone === 'monochrome' || storedTone === 'mono' || storedTone === 'bw') printTone = 'bw'
+            -       else {
+            -         var toneText = String((it.priceRuleLabel || '') + ' ' + rawLabel + ' ' + serviceTitle).toLowerCase()
+            -         if (/(b\/w|black\s*and\s*white|monochrome|\bmono\b|\bbw\b)/i.test(toneText)) printTone = 'bw'
+            -         else if (/(colour|color|c\/l|\bcol\b)/i.test(toneText)) printTone = 'color'
+            -       }
+            -     }
             -     var serviceKey = serviceTitle.toLowerCase()
             -     if (!orderItemGroupMap[serviceKey]) {
             -       orderItemGroupMap[serviceKey] = { title: serviceTitle, items: [], subtotal: 0 }
             -       orderItemGroups.push(orderItemGroupMap[serviceKey])
             -     }
-            -     orderItemGroupMap[serviceKey].items.push({ item: it, label: subs, qtyLabel: qtyLabel, sheets: sheets, rawPages: rawPages, factor: factor, usesFactorPricing: usesFactorPricing, subtotal: subtotal, isLargeFormat: isLargeFormat, largeSize: largeSize, largeSqft: largeSqft })
+            -     orderItemGroupMap[serviceKey].items.push({ item: it, label: subs, qtyLabel: qtyLabel, sheets: sheets, rawPages: rawPages, factor: factor, usesFactorPricing: usesFactorPricing, subtotal: subtotal, isLargeFormat: isLargeFormat, largeSize: largeSize, largeSqft: largeSqft, printTone: printTone })
             -     orderItemGroupMap[serviceKey].subtotal += subtotal
             -   }
             -   for (var gi = 0; gi < orderItemGroups.length; gi++) {
@@ -117,11 +128,15 @@ block content
                     .list-group-item.d-flex.justify-content-between.align-items-center
                       .me-2(style='min-width:0;flex:1;')
                         div(style='white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:480px;')
-                          span.text-white #{row.label}
+                          if row.printTone === 'color'
+                            span.badge.rounded-pill.print-tone-badge.print-tone-badge-color Color
+                          else if row.printTone === 'bw'
+                            span.badge.rounded-pill.print-tone-badge.print-tone-badge-bw B/W
+                          if it.fb && !it.booklet
+                            span.badge.rounded-pill.print-mode-badge.print-mode-badge-fb(class=(row.printTone === 'color' || row.printTone === 'bw') ? 'ms-2' : '', style='display:inline-flex!important;align-items:center;justify-content:center;background-color:#475569!important;color:#fff!important;border:1px solid #334155!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;') F/B
+                          span.text-white(class=(row.printTone === 'color' || row.printTone === 'bw' || (it.fb && !it.booklet)) ? 'ms-2' : '') #{row.label}
                           if it.booklet
                             span.badge.bg-info.text-dark.ms-2 Booklet
-                          else if it.fb
-                            span.badge.bg-secondary.ms-2 F/B
                         if it.spoiled
                           span.text-danger.ms-2 Spoiled: #{it.spoiled}
                       .text-end(style='min-width:200px;')

@@ -977,6 +977,38 @@ function discountAppliedLabel(order) {
     return subs.join(', ');
   }
 
+  function serviceToneFromText(text) {
+    const value = String(text || '').toLowerCase();
+    if (/(b\/w|black\s*and\s*white|monochrome|\bmono\b|\bbw\b)/i.test(value)) return 'bw';
+    if (/(colour|color|c\/l|\bcol\b)/i.test(value)) return 'color';
+    return 'other';
+  }
+
+  function orderItemPrintTone(item) {
+    if (!item || String(item.pricingMode || '').toLowerCase() === 'large_format') return 'other';
+    const stored = String(item.printerType || item.tone || '').toLowerCase();
+    if (stored === 'colour' || stored === 'color') return 'color';
+    if (stored === 'monochrome' || stored === 'mono' || stored === 'bw') return 'bw';
+    return serviceToneFromText(`${item.priceRuleLabel || ''} ${item.selectionLabel || ''} ${item.serviceName || ''}`);
+  }
+
+  function printToneBadgeHtml(tone) {
+    if (tone === 'color') {
+      return '<span class="badge rounded-pill print-tone-badge print-tone-badge-color flex-shrink-0" title="Color printing">Color</span>';
+    }
+    if (tone === 'bw') {
+      return '<span class="badge rounded-pill print-tone-badge print-tone-badge-bw flex-shrink-0" title="Black and white printing">B/W</span>';
+    }
+    return '';
+  }
+
+  function printModeBadgeHtml(mode) {
+    if (String(mode || '').toLowerCase() === 'fb') {
+      return '<span class="badge rounded-pill print-mode-badge print-mode-badge-fb flex-shrink-0" style="display:inline-flex!important;align-items:center;justify-content:center;background-color:#475569!important;color:#fff!important;border:1px solid #334155!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;" title="Front and back printing">F/B</span>';
+    }
+    return '';
+  }
+
   // -------------------------
   // Modal helpers (create lazily)
   // -------------------------
@@ -1231,9 +1263,11 @@ function discountAppliedLabel(order) {
           itemsHtml += `
             <div class="list-group-item d-flex align-items-start justify-content-between" style="padding:0.5rem 0.75rem;">
               <div style="flex:1;min-width:0;">
-                <span style="display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:520px;">
-                  ${escapeHtml(row.selectionLabel)}
-                </span>
+                <div class="d-flex align-items-center gap-2">
+                  ${printToneBadgeHtml(row.tone)}
+                  ${printModeBadgeHtml(row.fb ? 'fb' : '')}
+                  <span style="display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:520px;">${escapeHtml(row.selectionLabel)}</span>
+                </div>
               </div>
 
               <div class="text-end ms-3" style="min-width:200px;">
@@ -1569,6 +1603,8 @@ function discountAppliedLabel(order) {
         unit: Number((it && it.unitPrice) || 0),
         unitDiscountAmount: 0,
         lineDiscountAmount: 0,
+        tone: 'other',
+        fb: false,
         subtotal: Number((it && it.subtotal) || 0)
       };
     }
@@ -1617,6 +1653,8 @@ function discountAppliedLabel(order) {
       unit,
       unitDiscountAmount,
       lineDiscountAmount: Number((it && it.lineDiscountAmount) || 0),
+      tone: orderItemPrintTone(it),
+      fb: !!(isFb && !isBooklet),
       subtotal
     };
   }
@@ -1698,7 +1736,7 @@ function discountAppliedLabel(order) {
           <tr>
             <td class="text-center">${itemNo}</td>
             <td>
-              <div class="receipt-muted">${escapeHtml(row.selectionLabel)}</div>
+              <div class="receipt-muted receipt-selection">${printToneBadgeHtml(row.tone)}${printModeBadgeHtml(row.fb ? 'fb' : '')}<span>${escapeHtml(row.selectionLabel)}</span></div>
               ${Number(row.unitDiscountAmount || 0) > 0 ? `<div class="receipt-muted">Unit discount: - ${formatCedi(row.unitDiscountAmount)}</div>` : ''}
             </td>
             <td>${escapeHtml(qtyText)}</td>
@@ -1825,6 +1863,12 @@ function discountAppliedLabel(order) {
         .text-center { text-align: center; }
         .text-end { text-align: right; }
         .receipt-muted { color: #4b5563; font-size: 8.4px; }
+        .receipt-selection { display: flex; align-items: center; gap: 4px; }
+        .print-tone-badge { display: inline-block; flex: 0 0 auto; color: #fff !important; border-radius: 999px; padding: 1px 4px; font-size: 6.8px; font-weight: 700; line-height: 1.15; }
+        .print-tone-badge-color { background: #c62828 !important; border: 1px solid #991b1b; }
+        .print-tone-badge-bw { background: #111827 !important; border: 1px solid #000; }
+        .print-mode-badge { display: inline-block; flex: 0 0 auto; color: #fff !important; border-radius: 999px; padding: 1px 4px; font-size: 6.8px; font-weight: 700; line-height: 1.15; }
+        .print-mode-badge-fb { background: #475569 !important; border: 1px solid #334155; }
         .receipt-items-table thead { display: none; }
         .receipt-items-table,
         .receipt-items-table tbody,

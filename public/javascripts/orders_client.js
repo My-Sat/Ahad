@@ -318,6 +318,39 @@ let outsourcedOrderDetailsByKey = Object.create(null);
     return fallback;
   }
 
+  function priceRuleToneBadgeHtml(tone) {
+    const normalized = String(tone || '').toLowerCase();
+    if (normalized === 'color') {
+      return '<span class="badge rounded-pill print-tone-badge print-tone-badge-color flex-shrink-0" title="Color printing">Color</span>';
+    }
+    if (normalized === 'bw') {
+      return '<span class="badge rounded-pill print-tone-badge print-tone-badge-bw flex-shrink-0" title="Black and white printing">B/W</span>';
+    }
+    return '';
+  }
+
+  function printModeBadgeHtml(mode) {
+    if (String(mode || '').toLowerCase() === 'fb') {
+      return '<span class="badge rounded-pill print-mode-badge print-mode-badge-fb flex-shrink-0" style="display:inline-flex!important;align-items:center;justify-content:center;background-color:#475569!important;color:#fff!important;border:1px solid #334155!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;" title="Front and back printing">F/B</span>';
+    }
+    return '';
+  }
+
+  function itemUsesExplicitFb(item) {
+    if (!item) return false;
+    const labelText = `${item.priceRuleLabel || ''} ${item.selectionLabel || ''}`;
+    const isBooklet = item.booklet === true || /\bbooklet\b/i.test(labelText);
+    return !isBooklet && (item.fb === true || /(?:\(|\b)f\/b(?:\)|\b)/i.test(labelText));
+  }
+
+  function orderItemPrintTone(item) {
+    if (!item || String(item.pricingMode || '').toLowerCase() === 'large_format') return 'other';
+    const stored = String(item.printerType || item.tone || '').toLowerCase();
+    if (stored === 'colour' || stored === 'color') return 'color';
+    if (stored === 'monochrome' || stored === 'mono' || stored === 'bw') return 'bw';
+    return serviceToneFromText(`${item.priceRuleLabel || ''} ${item.selectionLabel || ''} ${item.serviceName || ''}`);
+  }
+
   function canonicalServiceName(name) {
     let s = String(name || '');
     s = s.replace(/\b(color|colour|b\/w|black\s*and\s*white|monochrome)\b/ig, '');
@@ -1505,10 +1538,7 @@ function renderPrices(bookMode = false) {
   prices.forEach(p => {
     const row = document.createElement('div');
     row.className = 'list-group-item d-flex align-items-center gap-3 flex-nowrap';
-    const isColorRule = (p && p.__tone === 'color');
-    const isBwRule = (p && p.__tone === 'bw');
-    const toneClass = isColorRule ? 'text-danger' : (isBwRule ? 'text-dark' : '');
-    const tonePriceClass = isColorRule ? 'text-danger' : (isBwRule ? 'text-dark' : 'text-white');
+    const toneBadge = priceRuleToneBadgeHtml(p && p.__tone);
 
     // left: label (only subunits)
     const left = document.createElement('div');
@@ -1516,7 +1546,8 @@ function renderPrices(bookMode = false) {
     left.style.minWidth = '220px';
     const subOnly = subUnitsOnlyFromLabel(p.selectionLabel || '');
     const label = document.createElement('div');
-    label.innerHTML = `<strong class="d-inline-block text-truncate ${toneClass}" style="max-width:420px;">${escapeHtml(subOnly)}</strong>`;
+    label.className = 'd-flex align-items-center gap-2 min-width-0';
+    label.innerHTML = `${toneBadge}<strong class="d-inline-block text-truncate" style="max-width:420px;">${escapeHtml(subOnly)}</strong>`;
     left.appendChild(label);
 
     const hasBackPrice = (p.price2 !== null && p.price2 !== undefined && !isNaN(Number(p.price2)));
@@ -1525,9 +1556,9 @@ function renderPrices(bookMode = false) {
     const priceLine = document.createElement('div');
     priceLine.className = 'small text-muted-light mt-1';
     if (hasBackPrice) {
-      priceLine.innerHTML = `Front: <strong class="${tonePriceClass}">GH₵ ${formatMoney(frontPrice)}</strong> <span class="mx-1">|</span> F/B: <strong class="${tonePriceClass}">GH₵ ${formatMoney(backPrice)}</strong>`;
+      priceLine.innerHTML = `Front: <strong class="text-white">GH₵ ${formatMoney(frontPrice)}</strong> <span class="mx-1">|</span> F/B: <strong class="text-white">GH₵ ${formatMoney(backPrice)}</strong>`;
     } else {
-      priceLine.innerHTML = `Price: <strong class="${tonePriceClass}">GH₵ ${formatMoney(frontPrice)}</strong>`;
+      priceLine.innerHTML = `Price: <strong class="text-white">GH₵ ${formatMoney(frontPrice)}</strong>`;
     }
     left.appendChild(priceLine);
 
@@ -1972,6 +2003,7 @@ function renderLargeFormatInputs(serviceId, largeFormat) {
         selectionLabel: bi.selectionLabel || '',
         unitPrice: Number(bi.unitPrice || 0),
         price2: null,
+        __tone: resolvePriceRuleTone(bi, serviceToneIndex[String(bi.service)] || 'other'),
         __bookItem: {
           compoundServiceId: book._id,
           compoundItemIndex: idx,
@@ -2293,7 +2325,8 @@ function addLargeFormatToCart({
       if (it.isBook) {
         displayLabel = `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.bookName)}</div>`;
       } else {
-        const toneClass = (it.tone === 'color') ? 'text-danger' : '';
+        const toneBadge = priceRuleToneBadgeHtml(it.tone || serviceToneFromText(it.selectionLabel || ''));
+        const fbBadge = printModeBadgeHtml(itemUsesExplicitFb(it) ? 'fb' : '');
         const outsourcedMeta = (Number(it.outsourcedTotal || 0) > 0)
           ? `<br/><small class="text-info">Out-Sourced: ${escapeHtml(it.outsourcedArtistName || 'Artist')} | ${it.isLargeFormat ? 'SQ FT' : 'QTY'} ${escapeHtml(String(it.outsourcedQty || 0))} | GH₵ ${escapeHtml(formatMoney(it.outsourcedAmount || 0))} = GH₵ ${escapeHtml(formatMoney(it.outsourcedTotal || 0))}</small>`
           : '';
@@ -2301,7 +2334,7 @@ function addLargeFormatToCart({
         const lineDiscountMeta = Number(it.unitDiscountAmount || 0) > 0
           ? `<br/><small class="text-success">Unit discount: - GH\u20B5 ${escapeHtml(formatMoney(it.unitDiscountAmount))} | Rate: GH\u20B5 ${escapeHtml(formatMoney(it.discountedUnitPrice))}</small>`
           : '';
-        displayLabel = `<div class="${toneClass}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(cartDisplaySelectionLabel(it) || '')}${bookletMeta}${lineDiscountMeta}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
+        displayLabel = `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;"><span class="d-inline-flex align-items-center gap-2">${toneBadge}${fbBadge}<span>${escapeHtml(cartDisplaySelectionLabel(it) || '')}</span></span>${bookletMeta}${lineDiscountMeta}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
       }
 
       let qtyCell = '';
@@ -2433,6 +2466,8 @@ function addLargeFormatToCart({
         sheets: `${formatCompactNumber(it.largeFormatSquareFeet || 0)} sq ft`,
         unitPrice: Number((it && it.unitPrice) || 0),
         subtotal: Number((it && it.subtotal) || 0),
+        tone: 'other',
+        fb: false,
         note: ''
       };
     }
@@ -2454,6 +2489,8 @@ function addLargeFormatToCart({
       sheets: sheets === '' ? '' : String(sheets),
       unitPrice: Number((it && (it.discountedUnitPrice !== undefined && it.discountedUnitPrice !== null ? it.discountedUnitPrice : it.unitPrice)) || 0),
       subtotal: Number((it && it.subtotal) || 0),
+      tone: orderItemPrintTone(it),
+      fb: itemUsesExplicitFb(it),
       note: noteParts.join(' | ')
     };
   }
@@ -2528,11 +2565,13 @@ function addLargeFormatToCart({
     const rows = groups.map(group => {
       const itemRows = group.items.map(line => {
         rowNo += 1;
+        const toneBadge = priceRuleToneBadgeHtml(line.tone);
+        const fbBadge = printModeBadgeHtml(line.fb ? 'fb' : '');
         return `
           <tr>
             <td>${rowNo}</td>
             <td>
-              <div>${escapeHtml(line.description || '')}</div>
+              <div class="invoice-selection">${toneBadge}${fbBadge}<span>${escapeHtml(line.description || '')}</span></div>
               ${line.note ? `<div class="muted">${escapeHtml(line.note)}</div>` : ''}
             </td>
             <td>${escapeHtml(line.pages || '')}</td>
@@ -2583,6 +2622,12 @@ function addLargeFormatToCart({
     .right { text-align: right; white-space: nowrap; }
     .invoice-service-header td { background: #eef2ff; border-top: 1px solid #c7d2fe; border-bottom: 1px solid #c7d2fe; padding-top: 9px; padding-bottom: 9px; }
     .invoice-service-subtotal td { background: #fafafa; border-bottom: 2px solid #d1d5db; }
+    .invoice-selection { display: flex; align-items: center; gap: 6px; }
+    .print-tone-badge { display: inline-block; flex: 0 0 auto; color: #fff !important; border-radius: 999px; padding: 2px 6px; font-size: 8px; font-weight: 700; line-height: 1.2; }
+    .print-tone-badge-color { background: #c62828 !important; border: 1px solid #991b1b; }
+    .print-tone-badge-bw { background: #111827 !important; border: 1px solid #000; }
+    .print-mode-badge { display: inline-block; flex: 0 0 auto; color: #fff !important; border-radius: 999px; padding: 2px 6px; font-size: 8px; font-weight: 700; line-height: 1.2; }
+    .print-mode-badge-fb { background: #475569 !important; border: 1px solid #334155; }
     .totals { margin-left: auto; width: 310px; margin-top: 16px; }
     .totals div { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; }
     .totals .grand { font-weight: 700; font-size: 15px; border-bottom: 2px solid #111; }
@@ -2863,13 +2908,21 @@ function addLargeFormatToCart({
       group.items.forEach(line => {
         rowNo += 1;
         const selection = String(line.description || '').trim() || 'Selection';
-        const wrappedSelection = wrapPdfLine(selection, 38);
+        const tone = line.tone === 'color' || line.tone === 'bw' ? line.tone : '';
+        const fb = !!line.fb;
+        const badgeColumns = (tone ? 6 : 0) + (fb ? 5 : 0);
+        const wrappedSelection = wrapPdfLine(selection, 38 - badgeColumns);
         const first = wrappedSelection.shift() || '';
-        lines.push(
-          `${String(rowNo).padEnd(3)} ${pad(first, 38)} ${pad(line.pages || '-', 4)} ${pad(line.qty || '-', 4)} ${pad(line.sheets || '-', 5)} ${money(line.unitPrice).padStart(10)} ${money(line.subtotal).padStart(12)}`
-        );
+        const firstSelection = (tone || fb)
+          ? `${' '.repeat(badgeColumns)}${pad(first, 38 - badgeColumns)}`
+          : pad(first, 38);
+        lines.push({
+          text: `${String(rowNo).padEnd(3)} ${firstSelection} ${pad(line.pages || '-', 4)} ${pad(line.qty || '-', 4)} ${pad(line.sheets || '-', 5)} ${money(line.unitPrice).padStart(10)} ${money(line.subtotal).padStart(12)}`,
+          tone,
+          fb
+        });
         wrappedSelection.forEach(extra => {
-          lines.push(`    ${pad(extra, 38)}`);
+          lines.push(`    ${tone ? ' '.repeat(badgeColumns) : ''}${pad(extra, 38 - badgeColumns)}`);
         });
         if (line.note) {
           wrapPdfLine(line.note.replace(/GH\u20B5/g, 'GHS'), 84).forEach(noteLine => {
@@ -2894,21 +2947,24 @@ function addLargeFormatToCart({
     totalLine('TOTAL', totals.finalTotal);
 
     const wrapped = [];
-    lines.forEach(line => {
-      const cleanLine = sanitizePdfText(line);
+    lines.forEach(entry => {
+      const sourceLine = entry && typeof entry === 'object' ? entry.text : entry;
+      const entryTone = entry && typeof entry === 'object' ? entry.tone : '';
+      const entryFb = !!(entry && typeof entry === 'object' && entry.fb);
+      const cleanLine = sanitizePdfText(sourceLine);
       // Table rows are pre-padded for Courier; wrapping every line would collapse
       // the spacing and make headers drift away from their columns.
       if (cleanLine.length <= 92) {
-        wrapped.push(cleanLine);
+        wrapped.push({ text: cleanLine, tone: entryTone, fb: entryFb });
       } else {
-        wrapPdfLine(cleanLine, 92).forEach(w => wrapped.push(w));
+        wrapPdfLine(cleanLine, 92).forEach((w, index) => wrapped.push({ text: w, tone: index === 0 ? entryTone : '', fb: index === 0 && entryFb }));
       }
     });
 
     const pageSize = logo ? 38 : 42;
     const pages = [];
     for (let i = 0; i < wrapped.length; i += pageSize) pages.push(wrapped.slice(i, i + pageSize));
-    if (!pages.length) pages.push(['Invoice']);
+    if (!pages.length) pages.push([{ text: 'Invoice', tone: '' }]);
 
     const objects = [];
     const addObj = body => {
@@ -3007,12 +3063,45 @@ function addLargeFormatToCart({
 
     pages.forEach((pageLines, pageIndex) => {
       const commands = buildPdfHeaderCommands();
-      commands.push('BT', '/F1 10 Tf', '50 724 Td');
-      pageLines.forEach((line, idx) => {
-        if (idx > 0) commands.push('0 -14 Td');
-        commands.push(`(${pdfEscape(line)}) Tj`);
+      pageLines.forEach((entry, idx) => {
+        const line = entry && typeof entry === 'object' ? entry.text : entry;
+        const tone = entry && typeof entry === 'object' ? entry.tone : '';
+        const fb = !!(entry && typeof entry === 'object' && entry.fb);
+        const y = 724 - (idx * 14);
+        if (tone === 'color' || tone === 'bw') {
+          const badgeText = tone === 'color' ? 'Color' : 'B/W';
+          const badgeWidth = tone === 'color' ? 30 : 22;
+          const badgeFill = tone === 'color' ? '0.776 0.157 0.157 rg' : '0.067 0.094 0.153 rg';
+          commands.push(
+            'q',
+            badgeFill,
+            `74 ${y - 2} ${badgeWidth} 11 re f`,
+            'Q',
+            'BT',
+            '1 1 1 rg',
+            '/F2 6.5 Tf',
+            `${tone === 'color' ? 78 : 77} ${y + 1} Td`,
+            `(${pdfEscape(badgeText)}) Tj`,
+            'ET'
+          );
+        }
+        if (fb) {
+          const fbX = tone ? 110 : 74;
+          commands.push(
+            'q',
+            '0.278 0.333 0.412 rg',
+            `${fbX} ${y - 2} 22 11 re f`,
+            'Q',
+            'BT',
+            '1 1 1 rg',
+            '/F2 6.5 Tf',
+            `${fbX + 3} ${y + 1} Td`,
+            `(${pdfEscape('F/B')}) Tj`,
+            'ET'
+          );
+        }
+        commands.push('BT', '0 0 0 rg', '/F1 10 Tf', `50 ${y} Td`, `(${pdfEscape(line)}) Tj`, 'ET');
       });
-      commands.push('ET');
       if (pageIndex === pages.length - 1) {
         const lastTextY = 724 - (Math.max(0, pageLines.length - 1) * 14);
         const signatureLineY = lastTextY - 54;
@@ -4635,7 +4724,9 @@ function renderOrdersList(orders) {
           const lineDiscountHtml = Number(it.unitDiscountAmount || 0) > 0
             ? `<small class="text-success d-block">Unit discount: - GH\u20B5 ${formatMoney(it.unitDiscountAmount)}</small>`
             : '';
-          const labelHtml = `<div>${escapeHtml(cleanLabel)}${isBooklet ? ' <span class="badge bg-info text-dark ms-2">Booklet</span>' : (isFb ? ' <span class="badge bg-secondary ms-2">F/B</span>' : '')}${lineDiscountHtml}</div>`;
+          const toneBadge = priceRuleToneBadgeHtml(orderItemPrintTone(it));
+          const fbBadge = printModeBadgeHtml(isFb && !isBooklet ? 'fb' : '');
+          const labelHtml = `<div class="d-flex align-items-center gap-2 flex-wrap">${toneBadge}${fbBadge}<span>${escapeHtml(cleanLabel)}</span>${isBooklet ? ' <span class="badge bg-info text-dark">Booklet</span>' : ''}${lineDiscountHtml}</div>`;
 
           html += `<tr>
             <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;">${labelHtml}</td>

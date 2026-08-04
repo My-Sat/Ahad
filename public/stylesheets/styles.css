@@ -77,6 +77,41 @@ body.app-bg .text-white{ color: var(--text) !important; }
 body.app-bg .text-muted{ color: var(--muted) !important; }
 .text-muted-light{ color: var(--muted) !important; }
 
+/* Compact print-tone markers shared by services, Jobs, orders, payments, and receipts. */
+.print-tone-badge{
+  color: #fff !important;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .025em;
+  padding: .32em .62em;
+  vertical-align: .08em;
+}
+.print-tone-badge-color{
+  background: #c62828 !important;
+  border: 1px solid #991b1b;
+}
+.print-tone-badge-bw{
+  background: #111827 !important;
+  border: 1px solid #000;
+}
+.print-mode-badge{
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  color: #fff !important;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .025em;
+  padding: .32em .62em;
+  vertical-align: .08em;
+  border-radius: 999px !important;
+  line-height: 1.2;
+}
+.print-mode-badge-fb{
+  background-color: #475569 !important;
+  border: 1px solid #334155 !important;
+}
+
 /* ---------------------------
    Header / Navbar
    --------------------------- */

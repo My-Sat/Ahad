@@ -168,20 +168,20 @@ block content
                 - const ruleHintText = `${ruleSelectionText} ${p.selectionLabel || ''} ${p.customLabel || ''}`.trim()
                 - const isBwRule = /(?:\bb\/w\b|black\s*and\s*white|monochrome|\bmono\b|\bbw\b)/i.test(ruleHintText)
                 - const isColorRule = !isBwRule && /(?:\bcolour\b|\bcolor\b|\bc\/l\b|\bcol\b)/i.test(ruleHintText)
-                tr(data-price-id=p._id, class=isColorRule ? 'table-danger' : '')
+                tr(data-price-id=p._id)
                   td
                     if isColorRule
-                      span.badge.text-bg-danger.me-2 Color
+                      span.badge.rounded-pill.print-tone-badge.print-tone-badge-color.me-2 Color
                     else if isBwRule
-                      span.badge.text-bg-secondary.me-2 B/W
+                      span.badge.rounded-pill.print-tone-badge.print-tone-badge-bw.me-2 B/W
                     if p.selectionLabel
-                      span(class=isColorRule ? 'text-danger fw-semibold' : '')= p.selectionLabel
+                      span= p.selectionLabel
                     else if p.selections && p.selections.length
                       - var len = p.selections.length
                       each s, i in p.selections
                         - var unitName = s.unit && s.unit.name ? s.unit.name : (s.unit ? String(s.unit) : '');
                         - var subName = s.subUnit && s.subUnit.name ? s.subUnit.name : (s.subUnit ? String(s.subUnit) : '');
-                        span.me-1(class=isColorRule ? 'text-danger fw-semibold' : '') #{unitName}: #{subName}
+                        span.me-1 #{unitName}: #{subName}
                         if i != len - 1
                           |  +
                     else
