@@ -7,6 +7,12 @@ const AccountantAccount = require('../models/accountant_account');
 const Customer = require('../models/customer');
 const CustomerAccountTxn = require('../models/customer_account_txn');
 const Printer = require('../models/printer');
+
+const CASHIER_PAYMENT_PERMISSIONS = [
+  '/orders/pay',
+  '/orders/:orderId/pay',
+  '/orders/pay-bulk'
+];
 const PrinterUsage = require('../models/printer_usage');
 const { MaterialUsage } = require('../models/material_usage');
 const Store = require('../models/store');
@@ -136,8 +142,11 @@ exports.apiCashierCollections = async (req, res) => {
     const { start, end, from, to } = getRangeFromQuery(req);
 
     const cashiers = await User.find({
-      role: { $in: ['cashier', 'admin'] }
-    }).select('_id name username role').lean();
+      $or: [
+        { role: { $in: ['cashier', 'admin'] } },
+        { permissions: { $in: CASHIER_PAYMENT_PERMISSIONS } }
+      ]
+    }).select('_id name username role permissions').lean();
 
     const cashierIds = cashiers.map(c => c._id).filter(Boolean);
 

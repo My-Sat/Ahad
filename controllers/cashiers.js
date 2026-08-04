@@ -5,6 +5,21 @@ const CashierCollection = require('../models/cashier_collection');
 const AccountantAccount = require('../models/accountant_account');
 const mongoose = require('mongoose');
 
+const CASHIER_PAYMENT_PERMISSIONS = [
+  '/orders/pay',
+  '/orders/:orderId/pay',
+  '/orders/pay-bulk'
+];
+
+function cashierCapableUserFilter() {
+  return {
+    $or: [
+      { role: { $in: ['cashier', 'admin'] } },
+      { permissions: { $in: CASHIER_PAYMENT_PERMISSIONS } }
+    ]
+  };
+}
+
 // helper: start/end of day for given YYYY-MM-DD (UTC)
 function dayRangeForIso(dateIso) {
   const d = dateIso ? new Date(dateIso + 'T00:00:00Z') : new Date();
@@ -197,10 +212,10 @@ exports.getCashiers = async (req, res) => {
     const { start, end } = dayRangeForIso(dateIso);
     const rangeEnd = dateIso ? end : new Date();
 
-    // load cashiers (role 'cashier' or 'clerk')
-    const cashiers = await User.find({
-      role: { $in: ['cashier', 'admin'] }
-    }).select('_id name username role').lean();
+    // Include users granted payment permissions even when their primary role is Clerk/Secretary.
+    const cashiers = await User.find(cashierCapableUserFilter())
+      .select('_id name username role permissions')
+      .lean();
 
     // load balances
     const balances = await CashierBalance.find({ cashier: { $in: cashiers.map(c => c._id) } }).lean();
@@ -361,23 +376,26 @@ exports.daily_totals = async (req, res) => {
     ]);
 
     const userIds = paymentRows.map(row => row._id).filter(Boolean);
+    // The payment record is authoritative. Do not discard a payment taker because
+    // Cashier access was cross-assigned or their primary role later changed.
     const users = userIds.length
-      ? await User.find({
-        _id: { $in: userIds },
-        role: { $in: ['cashier', 'admin'] }
-      }).select('_id name username role').lean()
+      ? await User.find({ _id: { $in: userIds } })
+        .select('_id name username role permissions')
+        .lean()
       : [];
     const userMap = new Map(users.map(user => [String(user._id), user]));
 
     const rows = paymentRows.reduce((out, paymentRow) => {
       const user = userMap.get(String(paymentRow._id));
-      if (!user) return out;
       const total = round2(paymentRow.total);
       if (total <= 0) return out;
+      const primaryRole = String((user && user.role) || '').toLowerCase();
+      const reportingRole = primaryRole === 'admin' ? 'admin' : 'cashier';
       out.push({
-        userId: String(user._id),
-        name: user.name || user.username || paymentRow.recordedByName || String(user._id),
-        role: String(user.role || '').toLowerCase(),
+        userId: String((user && user._id) || paymentRow._id),
+        name: (user && (user.name || user.username)) || paymentRow.recordedByName || String(paymentRow._id),
+        role: reportingRole,
+        primaryRole: primaryRole || 'former user',
         total,
         paymentsCount: Math.max(0, Number(paymentRow.paymentsCount || 0)),
         lastPaymentAt: paymentRow.lastPaymentAt || null

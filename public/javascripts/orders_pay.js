@@ -2360,7 +2360,13 @@ function renderDailyCashiers(payload) {
 
   tbody.innerHTML = rows.map(row => {
     const role = String(row.role || '').toLowerCase();
-    const roleLabel = role === 'admin' ? 'Admin' : 'Cashier';
+    const primaryRole = String(row.primaryRole || '').toLowerCase();
+    const primaryRoleLabel = primaryRole && primaryRole !== 'cashier' && primaryRole !== 'former user'
+      ? primaryRole.charAt(0).toUpperCase() + primaryRole.slice(1)
+      : '';
+    const roleLabel = role === 'admin'
+      ? 'Admin'
+      : (primaryRoleLabel ? `Cashier (${primaryRoleLabel})` : 'Cashier');
     const roleClass = role === 'admin' ? 'bg-primary' : 'bg-info text-dark';
     const lastPayment = row.lastPaymentAt
       ? new Date(row.lastPaymentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
