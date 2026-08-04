@@ -111,6 +111,10 @@ body.app-bg .text-muted{ color: var(--muted) !important; }
   background-color: #475569 !important;
   border: 1px solid #334155 !important;
 }
+.print-mode-badge-booklet{
+  background-color: #0f766e !important;
+  border: 1px solid #115e59 !important;
+}
 
 /* ---------------------------
    Header / Navbar

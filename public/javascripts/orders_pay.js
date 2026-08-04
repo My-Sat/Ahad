@@ -1003,8 +1003,12 @@ function discountAppliedLabel(order) {
   }
 
   function printModeBadgeHtml(mode) {
-    if (String(mode || '').toLowerCase() === 'fb') {
+    const normalized = String(mode || '').toLowerCase();
+    if (normalized === 'fb') {
       return '<span class="badge rounded-pill print-mode-badge print-mode-badge-fb flex-shrink-0" style="display:inline-flex!important;align-items:center;justify-content:center;background-color:#475569!important;color:#fff!important;border:1px solid #334155!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;" title="Front and back printing">F/B</span>';
+    }
+    if (normalized === 'booklet') {
+      return '<span class="badge rounded-pill print-mode-badge print-mode-badge-booklet flex-shrink-0" style="display:inline-flex!important;align-items:center;justify-content:center;background-color:#0f766e!important;color:#fff!important;border:1px solid #115e59!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;" title="Booklet printing">Booklet</span>';
     }
     return '';
   }
@@ -1265,7 +1269,7 @@ function discountAppliedLabel(order) {
               <div style="flex:1;min-width:0;">
                 <div class="d-flex align-items-center gap-2">
                   ${printToneBadgeHtml(row.tone)}
-                  ${printModeBadgeHtml(row.fb ? 'fb' : '')}
+                  ${printModeBadgeHtml(row.booklet ? 'booklet' : (row.fb ? 'fb' : ''))}
                   <span style="display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:520px;">${escapeHtml(row.selectionLabel)}</span>
                 </div>
               </div>
@@ -1605,6 +1609,7 @@ function discountAppliedLabel(order) {
         lineDiscountAmount: 0,
         tone: 'other',
         fb: false,
+        booklet: false,
         subtotal: Number((it && it.subtotal) || 0)
       };
     }
@@ -1646,7 +1651,7 @@ function discountAppliedLabel(order) {
 
     return {
       serviceName: (it && it.serviceName) || 'Service',
-      selectionLabel: isBooklet ? `${selLabel} (Booklet)` : selLabel,
+      selectionLabel: selLabel,
       qtyLabel: usesFactorPricing ? 'Sheets' : 'QTY',
       qty: displayQty,
       pages: displayPages,
@@ -1655,6 +1660,7 @@ function discountAppliedLabel(order) {
       lineDiscountAmount: Number((it && it.lineDiscountAmount) || 0),
       tone: orderItemPrintTone(it),
       fb: !!(isFb && !isBooklet),
+      booklet: !!isBooklet,
       subtotal
     };
   }
@@ -1736,7 +1742,7 @@ function discountAppliedLabel(order) {
           <tr>
             <td class="text-center">${itemNo}</td>
             <td>
-              <div class="receipt-muted receipt-selection">${printToneBadgeHtml(row.tone)}${printModeBadgeHtml(row.fb ? 'fb' : '')}<span>${escapeHtml(row.selectionLabel)}</span></div>
+              <div class="receipt-muted receipt-selection">${printToneBadgeHtml(row.tone)}${printModeBadgeHtml(row.booklet ? 'booklet' : (row.fb ? 'fb' : ''))}<span>${escapeHtml(row.selectionLabel)}</span></div>
               ${Number(row.unitDiscountAmount || 0) > 0 ? `<div class="receipt-muted">Unit discount: - ${formatCedi(row.unitDiscountAmount)}</div>` : ''}
             </td>
             <td>${escapeHtml(qtyText)}</td>
@@ -1869,6 +1875,7 @@ function discountAppliedLabel(order) {
         .print-tone-badge-bw { background: #111827 !important; border: 1px solid #000; }
         .print-mode-badge { display: inline-block; flex: 0 0 auto; color: #fff !important; border-radius: 999px; padding: 1px 4px; font-size: 6.8px; font-weight: 700; line-height: 1.15; }
         .print-mode-badge-fb { background: #475569 !important; border: 1px solid #334155; }
+        .print-mode-badge-booklet { background: #0f766e !important; border: 1px solid #115e59; }
         .receipt-items-table thead { display: none; }
         .receipt-items-table,
         .receipt-items-table tbody,

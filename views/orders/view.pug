@@ -132,11 +132,11 @@ block content
                             span.badge.rounded-pill.print-tone-badge.print-tone-badge-color Color
                           else if row.printTone === 'bw'
                             span.badge.rounded-pill.print-tone-badge.print-tone-badge-bw B/W
-                          if it.fb && !it.booklet
-                            span.badge.rounded-pill.print-mode-badge.print-mode-badge-fb(class=(row.printTone === 'color' || row.printTone === 'bw') ? 'ms-2' : '', style='display:inline-flex!important;align-items:center;justify-content:center;background-color:#475569!important;color:#fff!important;border:1px solid #334155!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;') F/B
-                          span.text-white(class=(row.printTone === 'color' || row.printTone === 'bw' || (it.fb && !it.booklet)) ? 'ms-2' : '') #{row.label}
                           if it.booklet
-                            span.badge.bg-info.text-dark.ms-2 Booklet
+                            span.badge.rounded-pill.print-mode-badge.print-mode-badge-booklet(class=(row.printTone === 'color' || row.printTone === 'bw') ? 'ms-2' : '', style='display:inline-flex!important;align-items:center;justify-content:center;background-color:#0f766e!important;color:#fff!important;border:1px solid #115e59!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;') Booklet
+                          else if it.fb
+                            span.badge.rounded-pill.print-mode-badge.print-mode-badge-fb(class=(row.printTone === 'color' || row.printTone === 'bw') ? 'ms-2' : '', style='display:inline-flex!important;align-items:center;justify-content:center;background-color:#475569!important;color:#fff!important;border:1px solid #334155!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;') F/B
+                          span.text-white(class=(row.printTone === 'color' || row.printTone === 'bw' || it.booklet || it.fb) ? 'ms-2' : '') #{row.label}
                         if it.spoiled
                           span.text-danger.ms-2 Spoiled: #{it.spoiled}
                       .text-end(style='min-width:200px;')

@@ -330,17 +330,33 @@ let outsourcedOrderDetailsByKey = Object.create(null);
   }
 
   function printModeBadgeHtml(mode) {
-    if (String(mode || '').toLowerCase() === 'fb') {
+    const normalized = String(mode || '').toLowerCase();
+    if (normalized === 'fb') {
       return '<span class="badge rounded-pill print-mode-badge print-mode-badge-fb flex-shrink-0" style="display:inline-flex!important;align-items:center;justify-content:center;background-color:#475569!important;color:#fff!important;border:1px solid #334155!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;" title="Front and back printing">F/B</span>';
     }
+    if (normalized === 'booklet') {
+      return '<span class="badge rounded-pill print-mode-badge print-mode-badge-booklet flex-shrink-0" style="display:inline-flex!important;align-items:center;justify-content:center;background-color:#0f766e!important;color:#fff!important;border:1px solid #115e59!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;" title="Booklet printing">Booklet</span>';
+    }
     return '';
+  }
+
+  function itemUsesBooklet(item) {
+    if (!item) return false;
+    const labelText = `${item.priceRuleLabel || ''} ${item.selectionLabel || ''}`;
+    return item.booklet === true || /\(\s*booklet\s*\)/i.test(labelText);
   }
 
   function itemUsesExplicitFb(item) {
     if (!item) return false;
     const labelText = `${item.priceRuleLabel || ''} ${item.selectionLabel || ''}`;
-    const isBooklet = item.booklet === true || /\bbooklet\b/i.test(labelText);
+    const isBooklet = itemUsesBooklet(item);
     return !isBooklet && (item.fb === true || /(?:\(|\b)f\/b(?:\)|\b)/i.test(labelText));
+  }
+
+  function itemPrintMode(item) {
+    if (itemUsesBooklet(item)) return 'booklet';
+    if (itemUsesExplicitFb(item)) return 'fb';
+    return '';
   }
 
   function orderItemPrintTone(item) {
@@ -2326,15 +2342,14 @@ function addLargeFormatToCart({
         displayLabel = `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;">${escapeHtml(it.bookName)}</div>`;
       } else {
         const toneBadge = priceRuleToneBadgeHtml(it.tone || serviceToneFromText(it.selectionLabel || ''));
-        const fbBadge = printModeBadgeHtml(itemUsesExplicitFb(it) ? 'fb' : '');
+        const modeBadge = printModeBadgeHtml(itemPrintMode(it));
         const outsourcedMeta = (Number(it.outsourcedTotal || 0) > 0)
           ? `<br/><small class="text-info">Out-Sourced: ${escapeHtml(it.outsourcedArtistName || 'Artist')} | ${it.isLargeFormat ? 'SQ FT' : 'QTY'} ${escapeHtml(String(it.outsourcedQty || 0))} | GH₵ ${escapeHtml(formatMoney(it.outsourcedAmount || 0))} = GH₵ ${escapeHtml(formatMoney(it.outsourcedTotal || 0))}</small>`
           : '';
-        const bookletMeta = it.booklet ? '<br/><small class="text-info">Booklet</small>' : '';
         const lineDiscountMeta = Number(it.unitDiscountAmount || 0) > 0
           ? `<br/><small class="text-success">Unit discount: - GH\u20B5 ${escapeHtml(formatMoney(it.unitDiscountAmount))} | Rate: GH\u20B5 ${escapeHtml(formatMoney(it.discountedUnitPrice))}</small>`
           : '';
-        displayLabel = `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;"><span class="d-inline-flex align-items-center gap-2">${toneBadge}${fbBadge}<span>${escapeHtml(cartDisplaySelectionLabel(it) || '')}</span></span>${bookletMeta}${lineDiscountMeta}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
+        displayLabel = `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;"><span class="d-inline-flex align-items-center gap-2">${toneBadge}${modeBadge}<span>${escapeHtml(cartDisplaySelectionLabel(it) || '')}</span></span>${lineDiscountMeta}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
       }
 
       let qtyCell = '';
@@ -2453,6 +2468,9 @@ function addLargeFormatToCart({
         sheets: '',
         unitPrice: Number(it.unitPrice || 0),
         subtotal: Number(it.subtotal || 0),
+        tone: 'other',
+        fb: false,
+        booklet: false,
         note: components
       };
     }
@@ -2468,6 +2486,7 @@ function addLargeFormatToCart({
         subtotal: Number((it && it.subtotal) || 0),
         tone: 'other',
         fb: false,
+        booklet: false,
         note: ''
       };
     }
@@ -2477,7 +2496,6 @@ function addLargeFormatToCart({
     const effectiveQty = Number((it && it.pages) || 0) || 0;
     const sheets = usesFactorPricing ? Math.max(0, Math.floor(effectiveQty * f)) : '';
     const noteParts = [];
-    if (it && it.booklet) noteParts.push('Booklet');
     if (it && Number(it.unitDiscountAmount || 0) > 0) noteParts.push(`Unit discount: - GH\u20B5 ${formatMoney(it.unitDiscountAmount)}`);
     if (it && it.spoiled && Number(it.spoiled) > 0) noteParts.push(`Spoiled: ${Number(it.spoiled)}`);
 
@@ -2491,6 +2509,7 @@ function addLargeFormatToCart({
       subtotal: Number((it && it.subtotal) || 0),
       tone: orderItemPrintTone(it),
       fb: itemUsesExplicitFb(it),
+      booklet: itemUsesBooklet(it),
       note: noteParts.join(' | ')
     };
   }
@@ -2566,12 +2585,12 @@ function addLargeFormatToCart({
       const itemRows = group.items.map(line => {
         rowNo += 1;
         const toneBadge = priceRuleToneBadgeHtml(line.tone);
-        const fbBadge = printModeBadgeHtml(line.fb ? 'fb' : '');
+        const modeBadge = printModeBadgeHtml(line.booklet ? 'booklet' : (line.fb ? 'fb' : ''));
         return `
           <tr>
             <td>${rowNo}</td>
             <td>
-              <div class="invoice-selection">${toneBadge}${fbBadge}<span>${escapeHtml(line.description || '')}</span></div>
+              <div class="invoice-selection">${toneBadge}${modeBadge}<span>${escapeHtml(line.description || '')}</span></div>
               ${line.note ? `<div class="muted">${escapeHtml(line.note)}</div>` : ''}
             </td>
             <td>${escapeHtml(line.pages || '')}</td>
@@ -2628,6 +2647,7 @@ function addLargeFormatToCart({
     .print-tone-badge-bw { background: #111827 !important; border: 1px solid #000; }
     .print-mode-badge { display: inline-block; flex: 0 0 auto; color: #fff !important; border-radius: 999px; padding: 2px 6px; font-size: 8px; font-weight: 700; line-height: 1.2; }
     .print-mode-badge-fb { background: #475569 !important; border: 1px solid #334155; }
+    .print-mode-badge-booklet { background: #0f766e !important; border: 1px solid #115e59; }
     .totals { margin-left: auto; width: 310px; margin-top: 16px; }
     .totals div { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; }
     .totals .grand { font-weight: 700; font-size: 15px; border-bottom: 2px solid #111; }
@@ -2910,19 +2930,23 @@ function addLargeFormatToCart({
         const selection = String(line.description || '').trim() || 'Selection';
         const tone = line.tone === 'color' || line.tone === 'bw' ? line.tone : '';
         const fb = !!line.fb;
-        const badgeColumns = (tone ? 6 : 0) + (fb ? 5 : 0);
+        const booklet = !!line.booklet;
+        const mode = booklet ? 'booklet' : (fb ? 'fb' : '');
+        const modeColumns = mode === 'booklet' ? 9 : (mode === 'fb' ? 5 : 0);
+        const badgeColumns = (tone ? 6 : 0) + modeColumns;
         const wrappedSelection = wrapPdfLine(selection, 38 - badgeColumns);
         const first = wrappedSelection.shift() || '';
-        const firstSelection = (tone || fb)
+        const firstSelection = (tone || mode)
           ? `${' '.repeat(badgeColumns)}${pad(first, 38 - badgeColumns)}`
           : pad(first, 38);
         lines.push({
           text: `${String(rowNo).padEnd(3)} ${firstSelection} ${pad(line.pages || '-', 4)} ${pad(line.qty || '-', 4)} ${pad(line.sheets || '-', 5)} ${money(line.unitPrice).padStart(10)} ${money(line.subtotal).padStart(12)}`,
           tone,
-          fb
+          fb,
+          booklet
         });
         wrappedSelection.forEach(extra => {
-          lines.push(`    ${tone ? ' '.repeat(badgeColumns) : ''}${pad(extra, 38 - badgeColumns)}`);
+          lines.push(`    ${(tone || mode) ? ' '.repeat(badgeColumns) : ''}${pad(extra, 38 - badgeColumns)}`);
         });
         if (line.note) {
           wrapPdfLine(line.note.replace(/GH\u20B5/g, 'GHS'), 84).forEach(noteLine => {
@@ -2951,13 +2975,14 @@ function addLargeFormatToCart({
       const sourceLine = entry && typeof entry === 'object' ? entry.text : entry;
       const entryTone = entry && typeof entry === 'object' ? entry.tone : '';
       const entryFb = !!(entry && typeof entry === 'object' && entry.fb);
+      const entryBooklet = !!(entry && typeof entry === 'object' && entry.booklet);
       const cleanLine = sanitizePdfText(sourceLine);
       // Table rows are pre-padded for Courier; wrapping every line would collapse
       // the spacing and make headers drift away from their columns.
       if (cleanLine.length <= 92) {
-        wrapped.push({ text: cleanLine, tone: entryTone, fb: entryFb });
+        wrapped.push({ text: cleanLine, tone: entryTone, fb: entryFb, booklet: entryBooklet });
       } else {
-        wrapPdfLine(cleanLine, 92).forEach((w, index) => wrapped.push({ text: w, tone: index === 0 ? entryTone : '', fb: index === 0 && entryFb }));
+        wrapPdfLine(cleanLine, 92).forEach((w, index) => wrapped.push({ text: w, tone: index === 0 ? entryTone : '', fb: index === 0 && entryFb, booklet: index === 0 && entryBooklet }));
       }
     });
 
@@ -3067,6 +3092,8 @@ function addLargeFormatToCart({
         const line = entry && typeof entry === 'object' ? entry.text : entry;
         const tone = entry && typeof entry === 'object' ? entry.tone : '';
         const fb = !!(entry && typeof entry === 'object' && entry.fb);
+        const booklet = !!(entry && typeof entry === 'object' && entry.booklet);
+        const mode = booklet ? 'booklet' : (fb ? 'fb' : '');
         const y = 724 - (idx * 14);
         if (tone === 'color' || tone === 'bw') {
           const badgeText = tone === 'color' ? 'Color' : 'B/W';
@@ -3085,18 +3112,21 @@ function addLargeFormatToCart({
             'ET'
           );
         }
-        if (fb) {
-          const fbX = tone ? 110 : 74;
+        if (mode) {
+          const modeX = tone ? 110 : 74;
+          const modeText = mode === 'booklet' ? 'Booklet' : 'F/B';
+          const modeWidth = mode === 'booklet' ? 38 : 22;
+          const modeFill = mode === 'booklet' ? '0.059 0.463 0.431 rg' : '0.278 0.333 0.412 rg';
           commands.push(
             'q',
-            '0.278 0.333 0.412 rg',
-            `${fbX} ${y - 2} 22 11 re f`,
+            modeFill,
+            `${modeX} ${y - 2} ${modeWidth} 11 re f`,
             'Q',
             'BT',
             '1 1 1 rg',
             '/F2 6.5 Tf',
-            `${fbX + 3} ${y + 1} Td`,
-            `(${pdfEscape('F/B')}) Tj`,
+            `${modeX + 3} ${y + 1} Td`,
+            `(${pdfEscape(modeText)}) Tj`,
             'ET'
           );
         }
@@ -4725,8 +4755,8 @@ function renderOrdersList(orders) {
             ? `<small class="text-success d-block">Unit discount: - GH\u20B5 ${formatMoney(it.unitDiscountAmount)}</small>`
             : '';
           const toneBadge = priceRuleToneBadgeHtml(orderItemPrintTone(it));
-          const fbBadge = printModeBadgeHtml(isFb && !isBooklet ? 'fb' : '');
-          const labelHtml = `<div class="d-flex align-items-center gap-2 flex-wrap">${toneBadge}${fbBadge}<span>${escapeHtml(cleanLabel)}</span>${isBooklet ? ' <span class="badge bg-info text-dark">Booklet</span>' : ''}${lineDiscountHtml}</div>`;
+          const modeBadge = printModeBadgeHtml(isBooklet ? 'booklet' : (isFb ? 'fb' : ''));
+          const labelHtml = `<div class="d-flex align-items-center gap-2 flex-wrap">${toneBadge}${modeBadge}<span>${escapeHtml(cleanLabel)}</span>${lineDiscountHtml}</div>`;
 
           html += `<tr>
             <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;">${labelHtml}</td>
