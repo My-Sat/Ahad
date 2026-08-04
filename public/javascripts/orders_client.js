@@ -3667,7 +3667,7 @@ function addLargeFormatToCart({
       }
     }
 
-        // ---------- MATERIAL STOCK CHECKS (Apply-time) ----------
+        // ---------- MATERIAL STOCK ADVISORY (Apply-time) ----------
     // Only for normal service price rules (not book preview synthetic rules)
     // because only normal rules have selections coming from /admin/services/:id/prices
     if (!priceObj.__bookItem && !outsourcedMode) {
@@ -3721,11 +3721,13 @@ function addLargeFormatToCart({
           });
 
           if (blocks.length) {
-            showAlertModal(blocks.join('\n'), 'Stock unavailable');
-            return; // ✅ block adding to cart
+            showAlertModal(
+              `${blocks.join('\n')}\n\nThis item will still be added to the cart so an invoice can be saved, printed, or shared. Placing the actual order remains blocked until sufficient stock is available.`,
+              'Stock unavailable - invoice allowed'
+            );
           }
 
-          if (warns.length) {
+          else if (warns.length) {
             showAlertModal(warns.join('\n'), 'Low stock');
             // ✅ allow add to cart after warning
           }
