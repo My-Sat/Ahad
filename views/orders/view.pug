@@ -96,6 +96,7 @@ block content
             -     var subtotal = Number(it.subtotal || 0)
             -     var serviceTitle = String(it.serviceName || 'Service').trim() || 'Service'
             -     var printTone = 'other'
+            -     var printMode = ''
             -     if (!isLargeFormat) {
             -       var storedTone = String(it.printerType || it.tone || '').toLowerCase()
             -       if (storedTone === 'colour' || storedTone === 'color') printTone = 'color'
@@ -105,13 +106,17 @@ block content
             -         if (/(b\/w|black\s*and\s*white|monochrome|\bmono\b|\bbw\b)/i.test(toneText)) printTone = 'bw'
             -         else if (/(colour|color|c\/l|\bcol\b)/i.test(toneText)) printTone = 'color'
             -       }
+            -       var storedPrintMode = String(it.printMode || '').toLowerCase()
+            -       if (it.booklet || storedPrintMode === 'booklet') printMode = 'booklet'
+            -       else if (it.fb || storedPrintMode === 'fb') printMode = 'fb'
+            -       else if (storedPrintMode === 'single' || it.serviceRequiresPrinter || it.printer) printMode = 'single'
             -     }
             -     var serviceKey = serviceTitle.toLowerCase()
             -     if (!orderItemGroupMap[serviceKey]) {
             -       orderItemGroupMap[serviceKey] = { title: serviceTitle, items: [], subtotal: 0 }
             -       orderItemGroups.push(orderItemGroupMap[serviceKey])
             -     }
-            -     orderItemGroupMap[serviceKey].items.push({ item: it, label: subs, qtyLabel: qtyLabel, sheets: sheets, rawPages: rawPages, factor: factor, usesFactorPricing: usesFactorPricing, subtotal: subtotal, isLargeFormat: isLargeFormat, largeSize: largeSize, largeSqft: largeSqft, printTone: printTone })
+            -     orderItemGroupMap[serviceKey].items.push({ item: it, label: subs, qtyLabel: qtyLabel, sheets: sheets, rawPages: rawPages, factor: factor, usesFactorPricing: usesFactorPricing, subtotal: subtotal, isLargeFormat: isLargeFormat, largeSize: largeSize, largeSqft: largeSqft, printTone: printTone, printMode: printMode })
             -     orderItemGroupMap[serviceKey].subtotal += subtotal
             -   }
             -   for (var gi = 0; gi < orderItemGroups.length; gi++) {
@@ -132,11 +137,13 @@ block content
                             span.badge.rounded-pill.print-tone-badge.print-tone-badge-color Color
                           else if row.printTone === 'bw'
                             span.badge.rounded-pill.print-tone-badge.print-tone-badge-bw B/W
-                          if it.booklet
+                          if row.printMode === 'booklet'
                             span.badge.rounded-pill.print-mode-badge.print-mode-badge-booklet(class=(row.printTone === 'color' || row.printTone === 'bw') ? 'ms-2' : '', style='display:inline-flex!important;align-items:center;justify-content:center;background-color:#0f766e!important;color:#fff!important;border:1px solid #115e59!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;') Booklet
-                          else if it.fb
+                          else if row.printMode === 'fb'
                             span.badge.rounded-pill.print-mode-badge.print-mode-badge-fb(class=(row.printTone === 'color' || row.printTone === 'bw') ? 'ms-2' : '', style='display:inline-flex!important;align-items:center;justify-content:center;background-color:#475569!important;color:#fff!important;border:1px solid #334155!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;') F/B
-                          span.text-white(class=(row.printTone === 'color' || row.printTone === 'bw' || it.booklet || it.fb) ? 'ms-2' : '') #{row.label}
+                          else if row.printMode === 'single'
+                            span.badge.rounded-pill.print-mode-badge.print-mode-badge-single(class=(row.printTone === 'color' || row.printTone === 'bw') ? 'ms-2' : '', style='display:inline-flex!important;align-items:center;justify-content:center;background-color:#2563eb!important;color:#fff!important;border:1px solid #1d4ed8!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;') Single Face
+                          span.text-white(class=(row.printTone === 'color' || row.printTone === 'bw' || row.printMode) ? 'ms-2' : '') #{row.label}
                         if it.spoiled
                           span.text-danger.ms-2 Spoiled: #{it.spoiled}
                       .text-end(style='min-width:200px;')

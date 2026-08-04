@@ -331,6 +331,9 @@ let outsourcedOrderDetailsByKey = Object.create(null);
 
   function printModeBadgeHtml(mode) {
     const normalized = String(mode || '').toLowerCase();
+    if (normalized === 'single') {
+      return '<span class="badge rounded-pill print-mode-badge print-mode-badge-single flex-shrink-0" style="display:inline-flex!important;align-items:center;justify-content:center;background-color:#2563eb!important;color:#fff!important;border:1px solid #1d4ed8!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;" title="Single-face printing">Single Face</span>';
+    }
     if (normalized === 'fb') {
       return '<span class="badge rounded-pill print-mode-badge print-mode-badge-fb flex-shrink-0" style="display:inline-flex!important;align-items:center;justify-content:center;background-color:#475569!important;color:#fff!important;border:1px solid #334155!important;border-radius:999px!important;padding:.32em .62em!important;font-weight:700!important;line-height:1.2!important;" title="Front and back printing">F/B</span>';
     }
@@ -356,6 +359,12 @@ let outsourcedOrderDetailsByKey = Object.create(null);
   function itemPrintMode(item) {
     if (itemUsesBooklet(item)) return 'booklet';
     if (itemUsesExplicitFb(item)) return 'fb';
+    if (!item || item.isLargeFormat || String(item.pricingMode || '').toLowerCase() === 'large_format') return '';
+
+    const storedMode = String(item.printMode || '').toLowerCase();
+    if (storedMode === 'single') return 'single';
+    if (item.serviceRequiresPrinter === false) return '';
+    if (item.serviceRequiresPrinter === true || item.usesFactorPricing === true || item.printerId || item.printer) return 'single';
     return '';
   }
 
@@ -1225,6 +1234,16 @@ async function loadServicesForCategory(catId) {
   function cartDisplaySelectionLabel(item) {
     const override = cleanInvoiceLabelOverride(item && item.invoiceLabelOverride);
     return override || String((item && item.selectionLabel) || '').trim();
+  }
+
+  function cartVisibleSelectionLabel(item) {
+    const label = cartDisplaySelectionLabel(item);
+    if (!itemUsesBooklet(item)) return label;
+
+    // Older cart/invoice records may retain the mode as label text. The badge
+    // now owns that presentation, while the underlying stored label stays intact.
+    const withoutSuffix = label.replace(/\s*[\[(]\s*booklet\s*[\])]\s*$/i, '').trim();
+    return /^booklet$/i.test(withoutSuffix) ? '' : withoutSuffix;
   }
 
   // Alerts modal (lazy) - dark-surface friendly
@@ -2349,7 +2368,9 @@ function addLargeFormatToCart({
         const lineDiscountMeta = Number(it.unitDiscountAmount || 0) > 0
           ? `<br/><small class="text-success">Unit discount: - GH\u20B5 ${escapeHtml(formatMoney(it.unitDiscountAmount))} | Rate: GH\u20B5 ${escapeHtml(formatMoney(it.discountedUnitPrice))}</small>`
           : '';
-        displayLabel = `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;"><span class="d-inline-flex align-items-center gap-2">${toneBadge}${modeBadge}<span>${escapeHtml(cartDisplaySelectionLabel(it) || '')}</span></span>${lineDiscountMeta}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
+        const visibleSelectionLabel = cartVisibleSelectionLabel(it);
+        const selectionHtml = visibleSelectionLabel ? `<span>${escapeHtml(visibleSelectionLabel)}</span>` : '';
+        displayLabel = `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;"><span class="d-inline-flex align-items-center gap-2">${toneBadge}${modeBadge}${selectionHtml}</span>${lineDiscountMeta}${(it.spoiled && it.spoiled>0) ? '<br/><small class="text-danger">Spoiled: '+String(it.spoiled)+'</small>' : ''}${outsourcedMeta}</div>`;
       }
 
       let qtyCell = '';
@@ -2471,6 +2492,7 @@ function addLargeFormatToCart({
         tone: 'other',
         fb: false,
         booklet: false,
+        printMode: '',
         note: components
       };
     }
@@ -2487,6 +2509,7 @@ function addLargeFormatToCart({
         tone: 'other',
         fb: false,
         booklet: false,
+        printMode: '',
         note: ''
       };
     }
@@ -2510,6 +2533,7 @@ function addLargeFormatToCart({
       tone: orderItemPrintTone(it),
       fb: itemUsesExplicitFb(it),
       booklet: itemUsesBooklet(it),
+      printMode: itemPrintMode(it),
       note: noteParts.join(' | ')
     };
   }
@@ -2585,7 +2609,7 @@ function addLargeFormatToCart({
       const itemRows = group.items.map(line => {
         rowNo += 1;
         const toneBadge = priceRuleToneBadgeHtml(line.tone);
-        const modeBadge = printModeBadgeHtml(line.booklet ? 'booklet' : (line.fb ? 'fb' : ''));
+        const modeBadge = printModeBadgeHtml(line.printMode || (line.booklet ? 'booklet' : (line.fb ? 'fb' : '')));
         return `
           <tr>
             <td>${rowNo}</td>
@@ -2646,6 +2670,7 @@ function addLargeFormatToCart({
     .print-tone-badge-color { background: #c62828 !important; border: 1px solid #991b1b; }
     .print-tone-badge-bw { background: #111827 !important; border: 1px solid #000; }
     .print-mode-badge { display: inline-block; flex: 0 0 auto; color: #fff !important; border-radius: 999px; padding: 2px 6px; font-size: 8px; font-weight: 700; line-height: 1.2; }
+    .print-mode-badge-single { background: #2563eb !important; border: 1px solid #1d4ed8; }
     .print-mode-badge-fb { background: #475569 !important; border: 1px solid #334155; }
     .print-mode-badge-booklet { background: #0f766e !important; border: 1px solid #115e59; }
     .totals { margin-left: auto; width: 310px; margin-top: 16px; }
@@ -2931,8 +2956,11 @@ function addLargeFormatToCart({
         const tone = line.tone === 'color' || line.tone === 'bw' ? line.tone : '';
         const fb = !!line.fb;
         const booklet = !!line.booklet;
-        const mode = booklet ? 'booklet' : (fb ? 'fb' : '');
-        const modeColumns = mode === 'booklet' ? 9 : (mode === 'fb' ? 5 : 0);
+        const storedMode = String(line.printMode || '').toLowerCase();
+        const mode = storedMode === 'single' || storedMode === 'fb' || storedMode === 'booklet'
+          ? storedMode
+          : (booklet ? 'booklet' : (fb ? 'fb' : ''));
+        const modeColumns = mode === 'single' ? 12 : (mode === 'booklet' ? 9 : (mode === 'fb' ? 5 : 0));
         const badgeColumns = (tone ? 6 : 0) + modeColumns;
         const wrappedSelection = wrapPdfLine(selection, 38 - badgeColumns);
         const first = wrappedSelection.shift() || '';
@@ -2943,7 +2971,8 @@ function addLargeFormatToCart({
           text: `${String(rowNo).padEnd(3)} ${firstSelection} ${pad(line.pages || '-', 4)} ${pad(line.qty || '-', 4)} ${pad(line.sheets || '-', 5)} ${money(line.unitPrice).padStart(10)} ${money(line.subtotal).padStart(12)}`,
           tone,
           fb,
-          booklet
+          booklet,
+          printMode: mode
         });
         wrappedSelection.forEach(extra => {
           lines.push(`    ${(tone || mode) ? ' '.repeat(badgeColumns) : ''}${pad(extra, 38 - badgeColumns)}`);
@@ -2976,13 +3005,14 @@ function addLargeFormatToCart({
       const entryTone = entry && typeof entry === 'object' ? entry.tone : '';
       const entryFb = !!(entry && typeof entry === 'object' && entry.fb);
       const entryBooklet = !!(entry && typeof entry === 'object' && entry.booklet);
+      const entryPrintMode = entry && typeof entry === 'object' ? String(entry.printMode || '') : '';
       const cleanLine = sanitizePdfText(sourceLine);
       // Table rows are pre-padded for Courier; wrapping every line would collapse
       // the spacing and make headers drift away from their columns.
       if (cleanLine.length <= 92) {
-        wrapped.push({ text: cleanLine, tone: entryTone, fb: entryFb, booklet: entryBooklet });
+        wrapped.push({ text: cleanLine, tone: entryTone, fb: entryFb, booklet: entryBooklet, printMode: entryPrintMode });
       } else {
-        wrapPdfLine(cleanLine, 92).forEach((w, index) => wrapped.push({ text: w, tone: index === 0 ? entryTone : '', fb: index === 0 && entryFb, booklet: index === 0 && entryBooklet }));
+        wrapPdfLine(cleanLine, 92).forEach((w, index) => wrapped.push({ text: w, tone: index === 0 ? entryTone : '', fb: index === 0 && entryFb, booklet: index === 0 && entryBooklet, printMode: index === 0 ? entryPrintMode : '' }));
       }
     });
 
@@ -3093,7 +3123,10 @@ function addLargeFormatToCart({
         const tone = entry && typeof entry === 'object' ? entry.tone : '';
         const fb = !!(entry && typeof entry === 'object' && entry.fb);
         const booklet = !!(entry && typeof entry === 'object' && entry.booklet);
-        const mode = booklet ? 'booklet' : (fb ? 'fb' : '');
+        const storedMode = entry && typeof entry === 'object' ? String(entry.printMode || '').toLowerCase() : '';
+        const mode = storedMode === 'single' || storedMode === 'fb' || storedMode === 'booklet'
+          ? storedMode
+          : (booklet ? 'booklet' : (fb ? 'fb' : ''));
         const y = 724 - (idx * 14);
         if (tone === 'color' || tone === 'bw') {
           const badgeText = tone === 'color' ? 'Color' : 'B/W';
@@ -3114,9 +3147,11 @@ function addLargeFormatToCart({
         }
         if (mode) {
           const modeX = tone ? 110 : 74;
-          const modeText = mode === 'booklet' ? 'Booklet' : 'F/B';
-          const modeWidth = mode === 'booklet' ? 38 : 22;
-          const modeFill = mode === 'booklet' ? '0.059 0.463 0.431 rg' : '0.278 0.333 0.412 rg';
+          const modeText = mode === 'single' ? 'Single Face' : (mode === 'booklet' ? 'Booklet' : 'F/B');
+          const modeWidth = mode === 'single' ? 52 : (mode === 'booklet' ? 38 : 22);
+          const modeFill = mode === 'single'
+            ? '0.145 0.388 0.922 rg'
+            : (mode === 'booklet' ? '0.059 0.463 0.431 rg' : '0.278 0.333 0.412 rg');
           commands.push(
             'q',
             modeFill,
@@ -4755,7 +4790,10 @@ function renderOrdersList(orders) {
             ? `<small class="text-success d-block">Unit discount: - GH\u20B5 ${formatMoney(it.unitDiscountAmount)}</small>`
             : '';
           const toneBadge = priceRuleToneBadgeHtml(orderItemPrintTone(it));
-          const modeBadge = printModeBadgeHtml(isBooklet ? 'booklet' : (isFb ? 'fb' : ''));
+          const modeBadge = printModeBadgeHtml(itemPrintMode(Object.assign({}, it, {
+            booklet: isBooklet,
+            fb: isFb && !isBooklet
+          })));
           const labelHtml = `<div class="d-flex align-items-center gap-2 flex-wrap">${toneBadge}${modeBadge}<span>${escapeHtml(cleanLabel)}</span>${lineDiscountHtml}</div>`;
 
           html += `<tr>

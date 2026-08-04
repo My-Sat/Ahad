@@ -45,6 +45,8 @@ const OrderItemSchema = new mongoose.Schema({
   // optional flags stored per-item (backwards compat)
   fb: { type: Boolean, default: false },
   booklet: { type: Boolean, default: false },
+  // Explicit display snapshot; null means the service does not use print faces.
+  printMode: { type: String, enum: ['single', 'fb', 'booklet', null], default: null },
   spoiled: { type: Number, default: 0 },
   printerType: { type: String, enum: ['monochrome', 'colour', null], default: null },
   printFactor: { type: Number, default: 1 },

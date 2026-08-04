@@ -107,6 +107,10 @@ body.app-bg .text-muted{ color: var(--muted) !important; }
   border-radius: 999px !important;
   line-height: 1.2;
 }
+.print-mode-badge-single{
+  background-color: #2563eb !important;
+  border: 1px solid #1d4ed8 !important;
+}
 .print-mode-badge-fb{
   background-color: #475569 !important;
   border: 1px solid #334155 !important;

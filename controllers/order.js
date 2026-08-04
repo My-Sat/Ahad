@@ -853,18 +853,25 @@ try {
 
   if (serviceIds.length) {
     const services = await Service.find({ _id: { $in: serviceIds } })
-      .select('_id name')
+      .select('_id name requiresPrinter pricingMode')
       .lean();
 
     const smap = {};
     services.forEach(s => {
-      smap[String(s._id)] = s.name;
+      smap[String(s._id)] = {
+        name: s.name,
+        requiresPrinter: !!s.requiresPrinter || String(s.pricingMode || '').toLowerCase() === 'large_format'
+      };
     });
 
-    orderDoc.items = (orderDoc.items || []).map(it => ({
-      ...it,
-      serviceName: smap[String(it.service)] || 'Unknown Service'
-    }));
+    orderDoc.items = (orderDoc.items || []).map(it => {
+      const serviceInfo = smap[String(it.service)] || {};
+      return {
+        ...it,
+        serviceName: serviceInfo.name || 'Unknown Service',
+        serviceRequiresPrinter: !!serviceInfo.requiresPrinter
+      };
+    });
   }
 } catch (e) {
   console.error('Failed to populate service names for order view', e);
@@ -1556,6 +1563,7 @@ return {
           subtotal,
           spoiled: 0,
           fb: false,
+          printMode: null,
           // Large-format output is colour unless a future service explicitly says otherwise.
           printerType: resolvePrinterUsageType({
             ruleText: selectionLabel,
@@ -1701,6 +1709,7 @@ return {
         spoiled: isOutSourcedLine ? 0 : (Number(it.spoiled) || 0),
         fb: usedFB,  // booklet also runs as F/B for price selection
         booklet: usedBooklet,
+        printMode: usedBooklet ? 'booklet' : (usedFB ? 'fb' : (svcRequiresPrinter ? 'single' : null)),
         printerType, // NEW: 'monochrome' | 'colour' | null
         printFactor, // NEW: multiplier for printer counts (default 1)
         outsourcedArtist,
@@ -2296,30 +2305,46 @@ exports.apiGetOrderById = async (req, res) => {
       if (serviceIds.length) {
         const Service = require('../models/service');
         const services = await Service.find({ _id: { $in: serviceIds } })
-          .select('_id name')
+          .select('_id name requiresPrinter pricingMode')
           .lean();
 
         const smap = {};
-        services.forEach(s => { smap[String(s._id)] = s.name; });
+        services.forEach(s => {
+          smap[String(s._id)] = {
+            name: s.name,
+            requiresPrinter: !!s.requiresPrinter || String(s.pricingMode || '').toLowerCase() === 'large_format'
+          };
+        });
 
         order.items = (order.items || []).map(it => {
           if (it && it.service) {
             const sid = String(it.service);
+            const serviceInfo = smap[sid] || {};
             return Object.assign({}, it, {
-              serviceName: smap[sid] || it.serviceName || 'Service'
+              serviceName: serviceInfo.name || it.serviceName || 'Service',
+              serviceRequiresPrinter: !!serviceInfo.requiresPrinter
             });
           }
-          return Object.assign({}, it, { serviceName: it?.serviceName || 'Service' });
+          return Object.assign({}, it, {
+            serviceName: it?.serviceName || 'Service',
+            serviceRequiresPrinter: false
+          });
         });
       } else {
         order.items = (order.items || []).map(it =>
-          Object.assign({}, it, { serviceName: it?.serviceName || 'Service' })
+          Object.assign({}, it, {
+            serviceName: it?.serviceName || 'Service',
+            serviceRequiresPrinter: false
+          })
         );
       }
     } catch (sErr) {
       console.error('Failed to populate service names for order items', sErr);
       order.items = (order.items || []).map(it =>
-        Object.assign({}, it, { serviceName: it?.serviceName || 'Service' })
+        Object.assign({}, it, {
+          serviceName: it?.serviceName || 'Service',
+          serviceRequiresPrinter: false
+        })
       );
     }
 
