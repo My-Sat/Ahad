@@ -31,6 +31,7 @@ const { resolvePrinterUsageType } = require('../utilities/printer_usage');
 const {
   actorFromReq,
   postOrderRevenue,
+  postOrderAdjustment,
   postOrderPayment,
   postMaterialUsageCost,
   postOutsourcedCost,
@@ -2536,18 +2537,14 @@ exports.apiGetOrderById = async (req, res) => {
 
 // API: apply manual discount to existing order (admin only)
 exports.apiApplyManualDiscount = async (req, res) => {
+  let session = null;
+
   try {
     const { orderId } = req.params;
     if (!orderId) return res.status(400).json({ error: 'No orderId provided' });
 
     const isAdmin = req.user && req.user.role && String(req.user.role).toLowerCase() === 'admin';
     if (!isAdmin) return res.status(403).json({ error: 'Admin access required' });
-
-    const order = await Order.findOne({ orderId });
-    if (!order) return res.status(404).json({ error: 'Order not found' });
-
-    const hasAdjustment = Math.abs(Number(order.discountAmount || 0)) > 0;
-    if (hasAdjustment) return res.status(400).json({ error: 'Order already has an adjustment applied' });
 
     const kindRaw = String(req.body?.kind || 'discount').toLowerCase();
     const kind = (kindRaw === 'premium') ? 'premium' : 'discount';
@@ -2564,81 +2561,132 @@ exports.apiApplyManualDiscount = async (req, res) => {
       return res.status(400).json({ error: 'Percentage adjustment cannot exceed 100%' });
     }
 
-    const baseTotal =
-      (order.totalBeforeDiscount !== undefined && order.totalBeforeDiscount !== null)
-        ? Number(order.totalBeforeDiscount)
-        : Number(order.total || 0);
+    session = await mongoose.startSession();
+    let result = null;
 
-    if (!isFinite(baseTotal) || baseTotal <= 0) {
-      return res.status(400).json({ error: 'Invalid order total' });
-    }
+    await session.withTransaction(async () => {
+      const order = await Order.findOne({ orderId }).session(session);
+      if (!order) {
+        const e = new Error('Order not found');
+        e.statusCode = 404;
+        throw e;
+      }
 
-    const unsignedAmount = computeDiscountAmount(baseTotal, { mode, value });
-    if (!isFinite(unsignedAmount) || unsignedAmount <= 0) {
-      return res.status(400).json({ error: 'Adjustment amount must be greater than zero' });
-    }
-    const discountAmount = Number((kind === 'premium' ? -unsignedAmount : unsignedAmount).toFixed(2));
+      const hasAdjustment = Math.abs(Number(order.discountAmount || 0)) > 0;
+      if (hasAdjustment) {
+        const e = new Error('Order already has an adjustment applied');
+        e.statusCode = 400;
+        throw e;
+      }
 
-    const paidSoFar = (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    const adjustedTotalBeforeTax = Number(Math.max(0, baseTotal - discountAmount).toFixed(2));
-    let taxAmount = 0;
-    let taxBreakdown = null;
-    if (order.taxBreakdown && typeof order.taxBreakdown === 'object') {
-      const existingTax = order.taxBreakdown;
-      const taxMode = String(existingTax.mode || '').trim();
-      const taxValue = Number(existingTax.value || 0);
-      if ((taxMode === 'amount' || taxMode === 'percent') && isFinite(taxValue) && taxValue > 0 && !(taxMode === 'percent' && taxValue > 100)) {
-        taxAmount = Number(computeTaxAmount(adjustedTotalBeforeTax, { mode: taxMode, value: taxValue }).toFixed(2));
-        if (taxAmount > 0) {
-          taxBreakdown = Object.assign({}, existingTax, {
-            taxableAmount: adjustedTotalBeforeTax,
-            computed: taxAmount
-          });
+      const previousTotal = round2(order.total);
+      const baseTotal =
+        (order.totalBeforeDiscount !== undefined && order.totalBeforeDiscount !== null)
+          ? Number(order.totalBeforeDiscount)
+          : previousTotal;
+
+      if (!isFinite(baseTotal) || baseTotal <= 0) {
+        const e = new Error('Invalid order total');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      const unsignedAmount = computeDiscountAmount(baseTotal, { mode, value });
+      if (!isFinite(unsignedAmount) || unsignedAmount <= 0) {
+        const e = new Error('Adjustment amount must be greater than zero');
+        e.statusCode = 400;
+        throw e;
+      }
+      const discountAmount = round2(kind === 'premium' ? -unsignedAmount : unsignedAmount);
+
+      const paidSoFar = (order.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const adjustedTotalBeforeTax = round2(Math.max(0, baseTotal - discountAmount));
+      let taxAmount = 0;
+      let taxBreakdown = null;
+      if (order.taxBreakdown && typeof order.taxBreakdown === 'object') {
+        const existingTax = order.taxBreakdown;
+        const taxMode = String(existingTax.mode || '').trim();
+        const taxValue = Number(existingTax.value || 0);
+        if ((taxMode === 'amount' || taxMode === 'percent') && isFinite(taxValue) && taxValue > 0 && !(taxMode === 'percent' && taxValue > 100)) {
+          taxAmount = round2(computeTaxAmount(adjustedTotalBeforeTax, { mode: taxMode, value: taxValue }));
+          if (taxAmount > 0) {
+            taxBreakdown = Object.assign({}, existingTax, {
+              taxableAmount: adjustedTotalBeforeTax,
+              computed: taxAmount
+            });
+          }
         }
       }
-    }
-    const newTotal = Number((adjustedTotalBeforeTax + Number(taxAmount || 0)).toFixed(2));
+      const newTotal = round2(adjustedTotalBeforeTax + taxAmount);
 
-    if (kind === 'discount' && newTotal < paidSoFar) {
-      return res.status(400).json({ error: 'Discount exceeds remaining balance' });
-    }
+      if (kind === 'discount' && newTotal < paidSoFar) {
+        const e = new Error('Discount exceeds remaining balance');
+        e.statusCode = 400;
+        throw e;
+      }
 
-    order.totalBeforeDiscount = Number(baseTotal.toFixed(2));
-    order.discountAmount = Number(discountAmount.toFixed(2));
-    order.discountBreakdown = {
-      scope: 'manual',
-      kind,
-      mode,
-      value,
-      computed: Number(unsignedAmount.toFixed(2)),
-      label: kind === 'premium' ? 'Manual premium' : 'Manual discount'
-    };
-    order.taxAmount = Number(taxAmount || 0);
-    order.taxBreakdown = taxBreakdown;
-    order.total = newTotal;
+      order.totalBeforeDiscount = round2(baseTotal);
+      order.discountAmount = discountAmount;
+      order.discountBreakdown = {
+        scope: 'manual',
+        kind,
+        mode,
+        value,
+        computed: round2(unsignedAmount),
+        label: kind === 'premium' ? 'Manual premium' : 'Manual discount'
+      };
+      order.taxAmount = taxAmount;
+      order.taxBreakdown = taxBreakdown;
+      order.total = newTotal;
 
-    const outstandingAfter = Number((newTotal - paidSoFar).toFixed(2));
-    if (outstandingAfter <= 0) {
-      order.status = 'paid';
-      if (!order.paidAt) order.paidAt = new Date();
-    }
+      const outstandingAfter = round2(newTotal - paidSoFar);
+      if (outstandingAfter <= 0) {
+        order.status = 'paid';
+        if (!order.paidAt) order.paidAt = new Date();
+      } else if (order.status === 'paid') {
+        order.status = 'pending';
+        order.paidAt = null;
+      }
 
-    await order.save();
+      await order.save({ session });
 
-    return res.json({
-      ok: true,
-      orderId: order.orderId,
-      total: order.total,
-      totalBeforeDiscount: order.totalBeforeDiscount,
-      discountAmount: order.discountAmount,
-      discountBreakdown: order.discountBreakdown,
-      taxAmount: order.taxAmount,
-      taxBreakdown: order.taxBreakdown,
-      outstanding: outstandingAfter
+      // The order-placement debit used the old total. Offset the exact total change
+      // so the customer ledger continues to equal the order's remaining balance.
+      const totalDelta = round2(newTotal - previousTotal);
+      if (order.customer && Math.abs(totalDelta) > 0) {
+        const isDiscount = totalDelta < 0;
+        await CustomerAccountTxn.create([{
+          customer: order.customer,
+          type: isDiscount ? 'credit' : 'debit',
+          amount: round2(Math.abs(totalDelta)),
+          note: `${isDiscount ? 'Order discount' : 'Order premium'} ${order.orderId}`,
+          recordedBy: req.user?._id || null,
+          recordedByName: req.user?.name || req.user?.username || ''
+        }], { session });
+      }
+
+      await postOrderAdjustment(order, totalDelta, actorFromReq(req), session);
+
+      result = {
+        ok: true,
+        orderId: order.orderId,
+        total: order.total,
+        totalBeforeDiscount: order.totalBeforeDiscount,
+        discountAmount: order.discountAmount,
+        discountBreakdown: order.discountBreakdown,
+        taxAmount: order.taxAmount,
+        taxBreakdown: order.taxBreakdown,
+        outstanding: outstandingAfter
+      };
     });
+
+    return res.json(result);
   } catch (err) {
     console.error('apiApplyManualDiscount error', err);
+    if (err && err.statusCode) return res.status(err.statusCode).json({ error: err.message });
     return res.status(500).json({ error: 'Error applying discount' });
+  } finally {
+    try { if (session) session.endSession(); } catch (e) {}
   }
 };
 

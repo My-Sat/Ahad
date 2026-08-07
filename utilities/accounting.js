@@ -176,6 +176,38 @@ async function postOrderRevenue(order, actor = {}, session = null) {
   });
 }
 
+async function postOrderAdjustment(order, amountDelta, actor = {}, session = null) {
+  if (!order || !order._id || !order.orderId) return null;
+
+  const delta = round2(amountDelta);
+  const amount = round2(Math.abs(delta));
+  if (amount <= 0) return null;
+
+  const isPremium = delta > 0;
+  const dimensions = { orderId: order.orderId, customerId: order.customer || null };
+
+  return postJournalEntry({
+    sourceKey: `order:${order.orderId}:manual_adjustment`,
+    sourceType: 'order_adjustment',
+    sourceId: order._id,
+    sourceRef: order.orderId,
+    date: new Date(),
+    memo: `${isPremium ? 'Premium' : 'Discount'} applied to order ${order.orderId}`,
+    postedBy: actor.postedBy || null,
+    postedByName: actor.postedByName || '',
+    session,
+    lines: isPremium
+      ? [
+          { accountCode: ACCOUNTS.ACCOUNTS_RECEIVABLE, debit: amount, dimensions },
+          { accountCode: ACCOUNTS.SALES_REVENUE, credit: amount, dimensions }
+        ]
+      : [
+          { accountCode: ACCOUNTS.SALES_REVENUE, debit: amount, dimensions },
+          { accountCode: ACCOUNTS.ACCOUNTS_RECEIVABLE, credit: amount, dimensions }
+        ]
+  });
+}
+
 async function postOrderPayment(order, payment, actor = {}, session = null) {
   if (!order || !payment || !order.orderId) return null;
   const paymentId = payment._id ? String(payment._id) : `${order.orderId}:${payment.createdAt || Date.now()}:${payment.amount}`;
@@ -427,6 +459,7 @@ module.exports = {
   ensureDefaultAccounts,
   postJournalEntry,
   postOrderRevenue,
+  postOrderAdjustment,
   postOrderPayment,
   postStockPurchase,
   postMaterialUsageCost,
