@@ -3780,7 +3780,7 @@ if (dailyOrdersSelect) {
       if (!from || !to) return renderOrdersListError('Invalid date range');
       table.querySelector('tbody').innerHTML = `<tr><td class="text-muted" colspan="6">Loading...</td></tr>`;
       try {
-        const url = `/orders/list?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+        const url = `/orders/list?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&scope=pay`;
         const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }});
         if (!res.ok) {
           const j = await res.json().catch(()=>null);

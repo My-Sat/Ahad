@@ -180,6 +180,7 @@ router.post('/accounting/manual-expenses', ensureAdmin, accountingController.api
 router.post('/accounting/prepaid-expenses/:id/release', ensureAdmin, accountingController.apiReleasePrepaidExpense);
 router.post('/accounting/accrued-expenses/:id/pay', ensureAdmin, accountingController.apiPayAccruedExpense);
 router.post('/accounting/fixed-assets', ensureAdmin, accountingController.apiCreateFixedAsset);
+router.post('/accounting/fixed-assets/:id/dispose', ensureAdmin, accountingController.apiDisposeFixedAsset);
 router.post('/accounting/fixed-assets/:id/depreciate', ensureAdmin, accountingController.apiDepreciateFixedAsset);
 
 // Suppliers

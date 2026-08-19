@@ -2,7 +2,18 @@
 const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/order');
-const { ensureHasPermission } = require('../middlewares/auth');
+const { ensureHasPermission, ensureHasAnyPermission } = require('../middlewares/auth');
+
+const ensureGeneralOrderListAccess = ensureHasPermission('/orders/list');
+const ensurePaymentOrderListAccess = ensureHasAnyPermission(['/orders/list', '/orders/pay']);
+
+function ensureOrderListAccess(req, res, next) {
+  const scope = String(req.query && req.query.scope || '').trim().toLowerCase();
+  const guard = scope === 'pay'
+    ? ensurePaymentOrderListAccess
+    : ensureGeneralOrderListAccess;
+  return guard(req, res, next);
+}
 
 // --------------------
 // Clerk routes
@@ -45,7 +56,7 @@ router.delete(
 
 router.get(
   '/list',
-  ensureHasPermission('/orders/list'),
+  ensureOrderListAccess,
   orderController.apiListOrders
 );
 

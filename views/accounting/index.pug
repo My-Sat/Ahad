@@ -522,7 +522,9 @@ block content
                                   button.btn.btn-primary#saveFixedAssetBtn(type='submit') Save Asset
                                   p.small.mt-2#fixedAssetStatus
                       .col-lg-12.ledger-entries-panel
-                        h6.text-white Fixed Assets
+                        .d-flex.justify-content-between.align-items-center.mb-2
+                          h6.text-white.mb-0 Fixed Assets
+                          p.small.mb-0#fixedAssetListStatus
                         .table-responsive
                           table.table.table-sm.table-hover#fixedAssetsTable
                             thead
@@ -532,6 +534,8 @@ block content
                                 th Method
                                 th.text-end Cost
                                 th.text-end Accum. Dep.
+                                th.text-end Book Value
+                                th Status
                                 th.text-end Action
                             tbody
                               if assets && assets.length
@@ -542,17 +546,103 @@ block content
                                       if a.code
                                         span.badge.bg-info.text-dark.ms-2= a.code
                                     td= a.printer ? a.printer.name : '-'
-                                    td= a.depreciationMethod
-                                    td.text-end GH₵ #{Number(a.purchaseCost || 0).toFixed(2)}
-                                    td.text-end GH₵ #{Number(a.accumulatedDepreciation || 0).toFixed(2)}
-                                    td.text-end
-                                      if a.depreciationMethod === 'straight_line'
+                                    td
+                                      div= a.depreciationMethod
+                                      if a.active === false
+                                        span.badge.bg-secondary Stopped
+                                      else if a.depreciationMethod === 'straight_line'
                                         span.badge.bg-info.text-dark Auto monthly
                                       else
                                         span.badge.bg-secondary Auto per usage
+                                    td.text-end GH₵ #{Number(a.purchaseCost || 0).toFixed(2)}
+                                    td.text-end GH₵ #{Number(a.accumulatedDepreciation || 0).toFixed(2)}
+                                    td.text-end GH₵ #{(a.active === false ? 0 : Math.max(0, Number(a.purchaseCost || 0) - Number(a.accumulatedDepreciation || 0))).toFixed(2)}
+                                    td
+                                      if a.active === false
+                                        span.badge.bg-secondary= a.disposalType === 'discard' ? 'Discarded' : (a.disposalType === 'sale' ? 'Sold' : 'Inactive')
+                                        if a.disposalDate
+                                          div.small.text-muted-light= new Date(a.disposalDate).toLocaleDateString()
+                                        if a.disposalType === 'sale'
+                                          div.small.text-muted-light Proceeds: GH₵ #{Number(a.disposalProceeds || 0).toFixed(2)} #{a.disposalCashBookName ? `- ${a.disposalCashBookName}` : ''}
+                                      else
+                                        span.badge.bg-success Active
+                                    td.text-end
+                                      if a.active === false
+                                        span.text-muted-light.small Disposed
+                                      else
+                                        button.btn.btn-sm.btn-outline-warning.dispose-fixed-asset(type='button', data-asset-id=String(a._id)) Dispose / Auction
                               else
                                 tr
-                                  td.text-muted(colspan='6') No fixed assets yet.
+                                  td.text-muted(colspan='8') No fixed assets yet.
+
+                .modal.fade#fixedAssetDisposalModal(tabindex='-1', aria-labelledby='fixedAssetDisposalTitle', aria-hidden='true')
+                  .modal-dialog.modal-lg.modal-dialog-centered.modal-dialog-scrollable
+                    .modal-content.dark-surface
+                      .modal-header.border-secondary
+                        div
+                          h5.modal-title.text-white#fixedAssetDisposalTitle Dispose Fixed Asset
+                          p.small.text-muted-light.mb-0 Sell/auction the asset or discard it without receiving cash.
+                        button.btn-close.btn-close-white(type='button', data-bs-dismiss='modal', aria-label='Close')
+                      .modal-body.dark-card-body
+                        form#fixedAssetDisposalForm(data-disable-spinner='true')
+                          input#fixedAssetDisposalId(type='hidden')
+                          .rounded-3.p-3.mb-3(style='background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);')
+                            .d-flex.flex-wrap.justify-content-between.gap-3
+                              div
+                                div.small.text-muted-light Asset
+                                strong.text-white#fixedAssetDisposalName -
+                              div.text-sm-end
+                                div.small.text-muted-light Asset code
+                                strong.text-white#fixedAssetDisposalCode -
+                            .row.g-2.mt-2
+                              .col-6.col-md-3
+                                div.small.text-muted-light Cost
+                                strong.text-white#fixedAssetDisposalCost -
+                              .col-6.col-md-3
+                                div.small.text-muted-light Accum. depreciation
+                                strong.text-white#fixedAssetDisposalAccumulated -
+                              .col-6.col-md-3
+                                div.small.text-muted-light Current book value
+                                strong.text-white#fixedAssetDisposalBookValue -
+                              .col-6.col-md-3
+                                div.small.text-muted-light Residual value
+                                strong.text-white#fixedAssetDisposalResidual -
+                          .mb-3
+                            label.form-label.text-muted-light(for='fixedAssetDisposalType') Disposal method
+                            select.form-select.form-select-dark#fixedAssetDisposalType(required)
+                              option(value='sale' selected) Sell / Auction - receive cash
+                              option(value='discard') Discard / Write off - no cash received
+                          #fixedAssetDisposalSaleFields
+                            .row.g-2
+                              .col-md-6
+                                label.form-label.text-muted-light(for='fixedAssetDisposalProceeds') Amount received
+                                input.form-control.form-control-dark#fixedAssetDisposalProceeds(type='number', min='0.01', step='0.01', placeholder='0.00')
+                              .col-md-6
+                                label.form-label.text-muted-light(for='fixedAssetDisposalCashBook') Cash book receiving funds
+                                select.form-select.form-select-dark#fixedAssetDisposalCashBook
+                                  option(value='') Select cash book
+                            .row.g-2.mt-1.d-none#fixedAssetDisposalMomoWrap
+                              .col-6
+                                label.form-label.text-muted-light(for='fixedAssetDisposalMomoNumber') MoMo number
+                                input.form-control.form-control-dark#fixedAssetDisposalMomoNumber(type='text')
+                              .col-6
+                                label.form-label.text-muted-light(for='fixedAssetDisposalMomoTxId') Transaction ID
+                                input.form-control.form-control-dark#fixedAssetDisposalMomoTxId(type='text')
+                            .row.g-2.mt-1.d-none#fixedAssetDisposalBankWrap
+                              .col-6
+                                label.form-label.text-muted-light(for='fixedAssetDisposalChequeNumber') Cheque number
+                                input.form-control.form-control-dark#fixedAssetDisposalChequeNumber(type='text')
+                              .col-6
+                                label.form-label.text-muted-light(for='fixedAssetDisposalDepositDetails') Deposit details
+                                input.form-control.form-control-dark#fixedAssetDisposalDepositDetails(type='text')
+                          .mb-3.mt-2
+                            label.form-label.text-muted-light(for='fixedAssetDisposalNote') Note (optional)
+                            input.form-control.form-control-dark#fixedAssetDisposalNote(type='text', maxlength='500', placeholder='Buyer, reason, or other disposal details')
+                          .alert.py-2.mb-0#fixedAssetDisposalPreview(role='status') Enter the sale amount to preview the result.
+                          p.small.mt-2.mb-0#fixedAssetDisposalStatus
+                      .modal-footer.border-secondary
+                        button.btn.btn-outline-light-custom(type='button', data-bs-dismiss='modal') Cancel
+                        button.btn.btn-primary#disposeFixedAssetBtn(type='submit', form='fixedAssetDisposalForm') Complete Disposal
 
 
               #accountingExpenseAdjustment.tab-pane.fade
@@ -1233,6 +1323,11 @@ block content
                             td Supplier Debit Adjustments
                             td Other income from supplier account debit adjustments.
                             td Increases P&L revenue/other income.
+                          tr
+                            td 4060
+                            td Gain on Fixed Asset Disposal
+                            td Sale proceeds above the asset's remaining book value.
+                            td Increases profit in the disposal period.
               .col-lg-6
                 .card.dark-surface.border-secondary.h-100
                   .card-body
@@ -1287,6 +1382,11 @@ block content
                             td Fixed Asset Depreciation
                             td Straight-line depreciation for non-printer assets such as tables, chairs, computers, or fixtures.
                             td Reduces net profit as an operating expense.
+                          tr
+                            td 6450
+                            td Loss on Fixed Asset Disposal
+                            td The remaining book value not recovered when an asset is sold or discarded.
+                            td Reduces profit in the disposal period.
                           tr
                             td 6900
                             td General Expense
@@ -1353,6 +1453,16 @@ block content
                       td Owner Drawings
                       td Cash and Bank Books
                       td Cash and business equity reduce; no P&L effect.
+                    tr
+                      td Fixed asset sold
+                      td Cash, Accumulated Depreciation, and any Disposal Loss
+                      td Fixed Assets and any Disposal Gain
+                      td Removes the asset, records cash received, and recognizes the gain or loss.
+                    tr
+                      td Fixed asset discarded
+                      td Accumulated Depreciation and Disposal Loss
+                      td Fixed Assets
+                      td Removes the asset without cash and expenses any remaining book value.
                     tr
                       td Opening asset recorded
                       td Asset account

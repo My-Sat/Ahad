@@ -18,6 +18,18 @@ const FixedAssetSchema = new mongoose.Schema({
   cashMeta: { type: mongoose.Schema.Types.Mixed, default: {} },
   note: { type: String, trim: true, default: '' },
   active: { type: Boolean, default: true, index: true },
+  disposalType: { type: String, enum: ['sale', 'discard', null], default: null, index: true },
+  disposalDate: { type: Date, default: null, index: true },
+  disposalProceeds: { type: Number, default: 0, min: 0 },
+  bookValueAtDisposal: { type: Number, default: null, min: 0 },
+  disposalGainLoss: { type: Number, default: 0 },
+  disposalCashBook: { type: mongoose.Schema.Types.ObjectId, ref: 'CashBook', default: null },
+  disposalCashBookName: { type: String, trim: true, default: '' },
+  disposalCashBookKind: { type: String, enum: ['cash', 'bank', 'momo', null], default: null },
+  disposalCashMeta: { type: mongoose.Schema.Types.Mixed, default: {} },
+  disposalNote: { type: String, trim: true, maxlength: 500, default: '' },
+  disposedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  disposedByName: { type: String, trim: true, default: '' },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   createdByName: { type: String, default: '' }
 }, { timestamps: true });
@@ -25,5 +37,6 @@ const FixedAssetSchema = new mongoose.Schema({
 FixedAssetSchema.index({ printer: 1, active: 1 });
 FixedAssetSchema.index({ active: 1, depreciationMethod: 1, usefulLifeMonths: 1, purchaseDate: 1 });
 FixedAssetSchema.index({ createdAt: -1 });
+FixedAssetSchema.index({ active: 1, disposalDate: -1 });
 
 module.exports = mongoose.model('FixedAsset', FixedAssetSchema);

@@ -584,6 +584,38 @@ function serializeEquityTransaction(txn) {
   };
 }
 
+function serializeFixedAsset(asset) {
+  if (!asset) return null;
+  const source = typeof asset.toObject === 'function' ? asset.toObject() : asset;
+  const purchaseCost = round2(source.purchaseCost || 0);
+  const accumulatedDepreciation = round2(Math.min(
+    purchaseCost,
+    Math.max(0, Number(source.accumulatedDepreciation || 0))
+  ));
+  const calculatedBookValue = round2(Math.max(0, purchaseCost - accumulatedDepreciation));
+  const active = source.active !== false;
+  const disposalGainLoss = round2(source.disposalGainLoss || 0);
+
+  return Object.assign({}, source, {
+    purchaseCost,
+    residualValue: round2(source.residualValue || 0),
+    accumulatedDepreciation,
+    bookValue: active ? calculatedBookValue : 0,
+    bookValueBeforeDisposal: active
+      ? calculatedBookValue
+      : round2(source.bookValueAtDisposal ?? calculatedBookValue),
+    active,
+    status: active ? 'active' : 'disposed',
+    disposalProceeds: round2(source.disposalProceeds || 0),
+    bookValueAtDisposal: source.bookValueAtDisposal === null || source.bookValueAtDisposal === undefined
+      ? null
+      : round2(source.bookValueAtDisposal),
+    disposalGainLoss,
+    disposalGain: disposalGainLoss > 0 ? disposalGainLoss : 0,
+    disposalLoss: disposalGainLoss < 0 ? round2(Math.abs(disposalGainLoss)) : 0
+  });
+}
+
 function allowedEquityAccountTypes(type) {
   const t = String(type || '').trim();
   if (t === 'opening_liability') return ['liability'];
@@ -1102,7 +1134,7 @@ exports.apiCreateEquityTransaction = async (req, res) => {
     return res.status(201).json({
       ok: true,
       entry: serializeEquityTransaction(equityTransaction),
-      fixedAsset: responseFixedAsset,
+      fixedAsset: serializeFixedAsset(responseFixedAsset),
       autoDepreciation
     });
   } catch (err) {
@@ -1510,8 +1542,8 @@ exports.apiReleasePrepaidExpense = async (req, res) => {
 exports.apiFixedAssets = async (req, res) => {
   try {
     await runAccountingMaintenance(new Date(), actorFromReq(req));
-    const assets = await FixedAsset.find().populate('printer', 'name').sort({ createdAt: -1 }).limit(100).lean();
-    return res.json({ ok: true, assets });
+    const assets = await FixedAsset.find().populate('printer', 'name').sort({ active: -1, createdAt: -1 }).limit(100).lean();
+    return res.json({ ok: true, assets: assets.map(serializeFixedAsset) });
   } catch (err) {
     console.error('accounting.apiFixedAssets error', err);
     return res.status(500).json({ ok: false, error: 'Failed to load fixed assets' });
@@ -1534,6 +1566,9 @@ exports.apiCreateFixedAsset = async (req, res) => {
 
     if (!name) return res.status(400).json({ ok: false, error: 'Asset name is required' });
     if (!purchaseCost || isNaN(purchaseCost) || purchaseCost <= 0) return res.status(400).json({ ok: false, error: 'Enter a valid purchase cost' });
+    if (!isFinite(residualValue) || residualValue < 0 || residualValue > purchaseCost) {
+      return res.status(400).json({ ok: false, error: 'Residual value must be between zero and the purchase cost' });
+    }
     if (depreciationMethod === 'usage' && (!usefulLifeUnits || usefulLifeUnits <= 0)) {
       return res.status(400).json({ ok: false, error: 'Usage-based assets need useful life units' });
     }
@@ -1623,11 +1658,155 @@ exports.apiCreateFixedAsset = async (req, res) => {
       ? (await FixedAsset.findById(asset._id).populate('printer', 'name').lean()) || asset
       : asset;
 
-    return res.status(201).json({ ok: true, asset: responseAsset, autoDepreciation });
+    return res.status(201).json({ ok: true, asset: serializeFixedAsset(responseAsset), autoDepreciation });
   } catch (err) {
     console.error('accounting.apiCreateFixedAsset error', err);
     if (err && err.statusCode) return res.status(err.statusCode).json({ ok: false, error: err.message });
     return res.status(500).json({ ok: false, error: 'Failed to create fixed asset' });
+  } finally {
+    try { if (session) session.endSession(); } catch (e) {}
+  }
+};
+
+exports.apiDisposeFixedAsset = async (req, res) => {
+  let session = null;
+
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ ok: false, error: 'Invalid fixed asset id' });
+    }
+
+    const disposalType = String(req.body.disposalType || '').trim().toLowerCase();
+    if (!['sale', 'discard'].includes(disposalType)) {
+      return res.status(400).json({ ok: false, error: 'Select a valid fixed asset disposal method' });
+    }
+    const requestedProceeds = Number(req.body.proceeds || 0);
+    const proceeds = disposalType === 'sale' ? round2(requestedProceeds) : 0;
+    const note = String(req.body.note || '').trim();
+
+    if (disposalType === 'sale' && (!isFinite(proceeds) || proceeds <= 0)) {
+      return res.status(400).json({ ok: false, error: 'Enter the amount received from the asset sale' });
+    }
+    if (note.length > 500) {
+      return res.status(400).json({ ok: false, error: 'Disposal note cannot exceed 500 characters' });
+    }
+
+    const actor = actorFromReq(req);
+    await ensureDefaultAccounts();
+    await postDueStraightLineDepreciation(new Date(), actor);
+
+    session = await mongoose.startSession();
+    let disposal = null;
+
+    await session.withTransaction(async () => {
+      const asset = await FixedAsset.findById(id).session(session);
+      if (!asset) {
+        const e = new Error('Fixed asset not found');
+        e.statusCode = 404;
+        throw e;
+      }
+      if (asset.active === false || asset.disposalDate) {
+        const e = new Error('This fixed asset has already been disposed');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      const cashBookContext = disposalType === 'sale'
+        ? await resolvePaymentCashBookContext(req.body, session)
+        : { cashBook: null, meta: {} };
+      if (disposalType === 'sale' && !cashBookContext.cashBook) {
+        const e = new Error('Select the cash book receiving the sale proceeds');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      const purchaseCost = round2(asset.purchaseCost || 0);
+      const accumulatedDepreciation = round2(Math.min(
+        purchaseCost,
+        Math.max(0, Number(asset.accumulatedDepreciation || 0))
+      ));
+      const bookValue = round2(Math.max(0, purchaseCost - accumulatedDepreciation));
+      const gainLoss = round2(proceeds - bookValue);
+      const gain = gainLoss > 0 ? gainLoss : 0;
+      const loss = gainLoss < 0 ? round2(Math.abs(gainLoss)) : 0;
+      const disposalDate = new Date();
+      const dimensions = {
+        fixedAssetId: asset._id,
+        printerId: asset.printer || null,
+        disposalType,
+        cashBookId: cashBookContext.cashBook ? cashBookContext.cashBook._id : null
+      };
+
+      if (cashBookContext.cashBook) {
+        await recordCashBookMovement({
+          cashBook: cashBookContext.cashBook,
+          type: 'inflow',
+          amount: proceeds,
+          sourceType: 'fixed_asset_disposal',
+          sourceId: asset._id,
+          sourceRef: asset.code || asset.name,
+          note: `Fixed asset sale: ${asset.name}`,
+          meta: Object.assign({}, cashBookContext.meta || {}, {
+            fixedAssetId: String(asset._id),
+            fixedAssetCode: asset.code || '',
+            bookValue,
+            gainLoss
+          }),
+          recordedBy: actor.postedBy,
+          recordedByName: actor.postedByName,
+          session
+        });
+      }
+
+      const lines = [];
+      if (proceeds > 0) lines.push({ accountCode: ACCOUNTS.CASH, debit: proceeds, dimensions });
+      if (accumulatedDepreciation > 0) {
+        lines.push({ accountCode: ACCOUNTS.ACCUMULATED_DEPRECIATION, debit: accumulatedDepreciation, dimensions });
+      }
+      if (loss > 0) lines.push({ accountCode: ACCOUNTS.FIXED_ASSET_DISPOSAL_LOSS, debit: loss, dimensions });
+      if (purchaseCost > 0) lines.push({ accountCode: ACCOUNTS.FIXED_ASSETS, credit: purchaseCost, dimensions });
+      if (gain > 0) lines.push({ accountCode: ACCOUNTS.FIXED_ASSET_DISPOSAL_GAIN, credit: gain, dimensions });
+
+      if (lines.length >= 2) {
+        await postJournalEntry({
+          sourceKey: `fixed_asset:${asset._id}:disposal`,
+          sourceType: 'fixed_asset_disposal',
+          sourceId: asset._id,
+          sourceRef: asset.code || asset.name,
+          date: disposalDate,
+          memo: `${disposalType === 'sale' ? 'Sale' : 'Discard'} of fixed asset: ${asset.name}`,
+          postedBy: actor.postedBy,
+          postedByName: actor.postedByName,
+          session,
+          lines
+        });
+      }
+
+      asset.active = false;
+      asset.disposalType = disposalType;
+      asset.disposalDate = disposalDate;
+      asset.disposalProceeds = proceeds;
+      asset.bookValueAtDisposal = bookValue;
+      asset.disposalGainLoss = gainLoss;
+      asset.disposalCashBook = cashBookContext.cashBook ? cashBookContext.cashBook._id : null;
+      asset.disposalCashBookName = cashBookContext.cashBook ? cashBookContext.cashBook.name || '' : '';
+      asset.disposalCashBookKind = cashBookContext.cashBook ? cashBookContext.cashBook.kind || 'cash' : null;
+      asset.disposalCashMeta = cashBookContext.meta || {};
+      asset.disposalNote = note;
+      asset.disposedBy = actor.postedBy;
+      asset.disposedByName = actor.postedByName;
+      await asset.save({ session });
+
+      disposal = { disposalType, proceeds, bookValue, gainLoss, gain, loss };
+    });
+
+    const asset = await FixedAsset.findById(id).populate('printer', 'name').lean();
+    return res.json({ ok: true, asset: serializeFixedAsset(asset), disposal });
+  } catch (err) {
+    console.error('accounting.apiDisposeFixedAsset error', err);
+    if (err && err.statusCode) return res.status(err.statusCode).json({ ok: false, error: err.message });
+    return res.status(500).json({ ok: false, error: 'Failed to dispose fixed asset' });
   } finally {
     try { if (session) session.endSession(); } catch (e) {}
   }

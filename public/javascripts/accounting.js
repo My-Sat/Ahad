@@ -35,6 +35,7 @@
     }
 
     let setupPromise = null;
+    let fixedAssetsState = [];
 
     function cashBookLabel(book) {
       const kind = book?.kind === 'momo' ? 'MoMo' : (book?.kind === 'bank' ? 'Bank' : 'Cash');
@@ -103,6 +104,13 @@
         dataset: item => ({ kind: item.kind || 'cash' })
       });
 
+      setOptions('fixedAssetDisposalCashBook', cashBooks, {
+        placeholder: 'Select cash book',
+        value: item => item._id,
+        label: cashBookLabel,
+        dataset: item => ({ kind: item.kind || 'cash' })
+      });
+
       ['fixedAssetPrinter', 'equityFixedAssetPrinter'].forEach(id => {
         setOptions(id, printers, {
           placeholder: 'Not linked',
@@ -120,10 +128,12 @@
       toggleManualExpenseCashBook();
       updateEquityAccountOptions();
       toggleCashBookDetails('fixedAssetCashBook', 'fixedAssetMomoWrap', 'fixedAssetBankWrap', false);
+      toggleFixedAssetDisposalFields();
       toggleCashBookDetails('accruedPaymentCashBook', 'accruedPaymentMomoWrap', 'accruedPaymentBankWrap', false);
     }
 
-    async function loadSetup() {
+    async function loadSetup(force) {
+      if (force) setupPromise = null;
       if (!setupPromise) {
         setupPromise = fetchJson('/admin/accounting/api/setup').then(data => {
           applySetupData(data);
@@ -257,62 +267,197 @@
     }
 
     function fixedAssetPostingBadge(asset) {
+      if (asset?.active === false) return '<span class="badge bg-secondary">Depreciation stopped</span>';
       return String(asset?.depreciationMethod || '') === 'straight_line'
         ? '<span class="badge bg-info text-dark">Auto monthly</span>'
         : '<span class="badge bg-secondary">Auto per usage</span>';
     }
 
-    function prependFixedAsset(asset, fallbackPrinterName) {
-      if (!asset) return;
+    function fixedAssetBookValue(asset) {
+      if (asset?.bookValue !== undefined && asset?.bookValue !== null) return Number(asset.bookValue || 0);
+      return Math.max(0, Number(asset?.purchaseCost || 0) - Number(asset?.accumulatedDepreciation || 0));
+    }
+
+    function fixedAssetDisposalResult(asset) {
+      if (asset?.active !== false) return '';
+      const gainLoss = Number(asset.disposalGainLoss || 0);
+      if (gainLoss > 0.009) return `<span class="small text-success">Gain: ${fmt(gainLoss)}</span>`;
+      if (gainLoss < -0.009) return `<span class="small text-warning">Loss: ${fmt(Math.abs(gainLoss))}</span>`;
+      return '<span class="small text-muted-light">No gain / loss</span>';
+    }
+
+    function fixedAssetRowHtml(asset, fallbackPrinterName) {
       const printerName = asset.printer && typeof asset.printer === 'object'
         ? asset.printer.name
-        : fallbackPrinterName;
+        : fallbackPrinterName || '-';
       const assetCode = asset.code
         ? `<span class="badge bg-info text-dark ms-2">${escapeHtml(asset.code)}</span>`
         : '';
-      prependTableRow('fixedAssetsTable', `
+      const active = asset.active !== false;
+      const disposalDetails = asset.disposalType === 'sale'
+        ? `<div class="small text-muted-light mt-1">Proceeds: ${fmt(asset.disposalProceeds)}${asset.disposalCashBookName ? ` - ${escapeHtml(asset.disposalCashBookName)}` : ''}</div>`
+        : '';
+      const disposedStatus = asset.disposalType === 'discard'
+        ? 'Discarded'
+        : (asset.disposalType === 'sale' ? 'Sold' : 'Inactive');
+      const statusLabel = active
+        ? '<span class="badge bg-success">Active</span>'
+        : `<span class="badge bg-secondary">${disposedStatus}</span>
+           <div class="small text-muted-light mt-1">${escapeHtml(formatDate(asset.disposalDate))}</div>
+           ${disposalDetails}`;
+      const action = active
+        ? `<button class="btn btn-sm btn-outline-warning dispose-fixed-asset" type="button" data-asset-id="${escapeHtml(asset._id)}">Dispose / Auction</button>`
+        : fixedAssetDisposalResult(asset);
+
+      return `
         <tr>
           <td><span>${escapeHtml(asset.name || '')}</span>${assetCode}</td>
           <td>${escapeHtml(printerName || '-')}</td>
-          <td>${escapeHtml(asset.depreciationMethod || '')}</td>
+          <td>
+            <div>${escapeHtml(asset.depreciationMethod || '')}</div>
+            ${fixedAssetPostingBadge(asset)}
+          </td>
           <td class="text-end">${fmt(asset.purchaseCost)}</td>
           <td class="text-end">${fmt(asset.accumulatedDepreciation)}</td>
-          <td class="text-end">${fixedAssetPostingBadge(asset)}</td>
+          <td class="text-end">${fmt(fixedAssetBookValue(asset))}</td>
+          <td>${statusLabel}</td>
+          <td class="text-end">${action}</td>
         </tr>
-      `);
+      `;
+    }
+
+    function prependFixedAsset(asset, fallbackPrinterName) {
+      if (!asset) return;
+      let normalizedAsset = asset;
+      if ((!asset.printer || typeof asset.printer !== 'object') && fallbackPrinterName && fallbackPrinterName !== '-') {
+        normalizedAsset = Object.assign({}, asset, {
+          printer: { _id: asset.printer || '', name: fallbackPrinterName }
+        });
+      }
+      fixedAssetsState = [normalizedAsset].concat(
+        fixedAssetsState.filter(row => String(row?._id || '') !== String(normalizedAsset?._id || ''))
+      );
+      renderFixedAssets(fixedAssetsState);
     }
 
     function renderFixedAssets(assets) {
       const tbody = document.querySelector('#fixedAssetsTable tbody');
       if (!tbody) return;
       if (!assets || !assets.length) {
-        tbody.innerHTML = '<tr><td class="text-muted" colspan="6">No fixed assets yet.</td></tr>';
+        tbody.innerHTML = '<tr><td class="text-muted" colspan="8">No fixed assets yet.</td></tr>';
         return;
       }
-      tbody.innerHTML = assets.map(asset => {
-        const printerName = asset.printer && typeof asset.printer === 'object'
-          ? asset.printer.name
-          : '-';
-        const assetCode = asset.code
-          ? `<span class="badge bg-info text-dark ms-2">${escapeHtml(asset.code)}</span>`
-          : '';
-        return `
-          <tr>
-            <td><span>${escapeHtml(asset.name || '')}</span>${assetCode}</td>
-            <td>${escapeHtml(printerName || '-')}</td>
-            <td>${escapeHtml(asset.depreciationMethod || '')}</td>
-            <td class="text-end">${fmt(asset.purchaseCost)}</td>
-            <td class="text-end">${fmt(asset.accumulatedDepreciation)}</td>
-            <td class="text-end">${fixedAssetPostingBadge(asset)}</td>
-          </tr>
-        `;
-      }).join('');
+      tbody.innerHTML = assets.map(asset => fixedAssetRowHtml(asset)).join('');
     }
 
     async function loadFixedAssets() {
-      setTableLoading('fixedAssetsTable', 6);
+      setTableLoading('fixedAssetsTable', 8);
       const j = await fetchJson('/admin/accounting/api/fixed-assets');
-      renderFixedAssets(j.assets || []);
+      fixedAssetsState = Array.isArray(j.assets) ? j.assets : [];
+      renderFixedAssets(fixedAssetsState);
+    }
+
+    function fixedAssetForDisposal() {
+      const id = document.getElementById('fixedAssetDisposalId')?.value || '';
+      return fixedAssetsState.find(asset => String(asset?._id || '') === String(id)) || null;
+    }
+
+    function setFixedAssetDisposalStatus(message, isError) {
+      const status = document.getElementById('fixedAssetDisposalStatus');
+      if (!status) return;
+      status.textContent = message || '';
+      status.classList.toggle('text-danger', !!message && !!isError);
+      status.classList.toggle('text-success', !!message && !isError);
+    }
+
+    function updateFixedAssetDisposalPreview() {
+      const asset = fixedAssetForDisposal();
+      const preview = document.getElementById('fixedAssetDisposalPreview');
+      if (!asset || !preview) return;
+
+      const type = document.getElementById('fixedAssetDisposalType')?.value || 'sale';
+      const bookValue = fixedAssetBookValue(asset);
+      const proceeds = type === 'sale'
+        ? Number(document.getElementById('fixedAssetDisposalProceeds')?.value || 0)
+        : 0;
+
+      preview.className = 'alert py-2 mb-0';
+      if (type === 'sale' && (!Number.isFinite(proceeds) || proceeds <= 0)) {
+        preview.classList.add('alert-info');
+        preview.textContent = 'Enter the amount received to preview the gain or loss.';
+        return;
+      }
+
+      const gainLoss = Number((proceeds - bookValue).toFixed(2));
+      if (gainLoss > 0.009) {
+        preview.classList.add('alert-success');
+        preview.textContent = `Expected gain: ${fmt(gainLoss)}. This increases profit.`;
+      } else if (gainLoss < -0.009) {
+        preview.classList.add('alert-warning');
+        preview.textContent = `Expected loss: ${fmt(Math.abs(gainLoss))}. This reduces profit.`;
+      } else {
+        preview.classList.add('alert-info');
+        preview.textContent = 'The disposal is at book value, so there is no gain or loss.';
+      }
+    }
+
+    function toggleFixedAssetDisposalFields() {
+      const type = document.getElementById('fixedAssetDisposalType')?.value || 'sale';
+      const isSale = type === 'sale';
+      const saleFields = document.getElementById('fixedAssetDisposalSaleFields');
+      const proceeds = document.getElementById('fixedAssetDisposalProceeds');
+      const cashBook = document.getElementById('fixedAssetDisposalCashBook');
+      const submitBtn = document.getElementById('disposeFixedAssetBtn');
+
+      if (saleFields) saleFields.classList.toggle('d-none', !isSale);
+      if (proceeds) proceeds.required = isSale;
+      if (cashBook) cashBook.required = isSale;
+      if (submitBtn && submitBtn.dataset.loading !== '1') {
+        submitBtn.textContent = isSale ? 'Complete Sale' : 'Discard Asset';
+      }
+      toggleCashBookDetails(
+        'fixedAssetDisposalCashBook',
+        'fixedAssetDisposalMomoWrap',
+        'fixedAssetDisposalBankWrap',
+        !isSale
+      );
+      updateFixedAssetDisposalPreview();
+    }
+
+    async function openFixedAssetDisposalModal(assetId) {
+      const asset = fixedAssetsState.find(row => String(row?._id || '') === String(assetId || ''));
+      if (!asset || asset.active === false) return;
+
+      try {
+        await loadSetup(true);
+      } catch (err) {
+        const listStatus = document.getElementById('fixedAssetListStatus');
+        if (listStatus) {
+          listStatus.textContent = err.message || 'Failed to load cash books.';
+          listStatus.className = 'small mb-0 text-danger';
+        }
+        return;
+      }
+
+      const form = document.getElementById('fixedAssetDisposalForm');
+      if (form) form.reset();
+      setText('fixedAssetDisposalName', asset.name || '-');
+      setText('fixedAssetDisposalCode', asset.code || '-');
+      setText('fixedAssetDisposalCost', fmt(asset.purchaseCost));
+      setText('fixedAssetDisposalAccumulated', fmt(asset.accumulatedDepreciation));
+      setText('fixedAssetDisposalBookValue', fmt(fixedAssetBookValue(asset)));
+      setText('fixedAssetDisposalResidual', fmt(asset.residualValue));
+      const idInput = document.getElementById('fixedAssetDisposalId');
+      if (idInput) idInput.value = asset._id || '';
+      const type = document.getElementById('fixedAssetDisposalType');
+      if (type) type.value = 'sale';
+      setFixedAssetDisposalStatus('');
+      toggleFixedAssetDisposalFields();
+
+      const modalEl = document.getElementById('fixedAssetDisposalModal');
+      if (modalEl && window.bootstrap?.Modal) {
+        window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+      }
     }
 
     function renderEquityTransactions(entries) {
@@ -839,6 +984,20 @@
     document.getElementById('fixedAssetCashBook')?.addEventListener('change', () => {
       toggleCashBookDetails('fixedAssetCashBook', 'fixedAssetMomoWrap', 'fixedAssetBankWrap', false);
     });
+    document.getElementById('fixedAssetDisposalType')?.addEventListener('change', toggleFixedAssetDisposalFields);
+    document.getElementById('fixedAssetDisposalProceeds')?.addEventListener('input', updateFixedAssetDisposalPreview);
+    document.getElementById('fixedAssetDisposalCashBook')?.addEventListener('change', toggleFixedAssetDisposalFields);
+    document.getElementById('fixedAssetsTable')?.addEventListener('click', ev => {
+      const button = ev.target.closest('.dispose-fixed-asset');
+      if (!button) return;
+      openFixedAssetDisposalModal(button.dataset.assetId).catch(err => {
+        const status = document.getElementById('fixedAssetListStatus');
+        if (status) {
+          status.textContent = err.message || 'Failed to open asset disposal.';
+          status.className = 'small mb-0 text-danger';
+        }
+      });
+    });
     document.getElementById('fixedAssetMethod')?.addEventListener('change', toggleFixedAssetLifeFields);
     document.getElementById('accruedPaymentCashBook')?.addEventListener('change', () => {
       toggleCashBookDetails('accruedPaymentCashBook', 'accruedPaymentMomoWrap', 'accruedPaymentBankWrap', false);
@@ -1085,6 +1244,81 @@
         else alert(err.message);
       } finally {
         restoreButton(btn, originalBtnText);
+      }
+    });
+
+    document.getElementById('fixedAssetDisposalForm')?.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      const asset = fixedAssetForDisposal();
+      const type = document.getElementById('fixedAssetDisposalType')?.value || 'sale';
+      const proceeds = Number(document.getElementById('fixedAssetDisposalProceeds')?.value || 0);
+      const cashBookId = document.getElementById('fixedAssetDisposalCashBook')?.value || '';
+      const button = document.getElementById('disposeFixedAssetBtn');
+
+      if (!asset) {
+        setFixedAssetDisposalStatus('Select an active fixed asset.', true);
+        return;
+      }
+      if (type === 'sale' && (!Number.isFinite(proceeds) || proceeds <= 0)) {
+        setFixedAssetDisposalStatus('Enter the amount received from the sale.', true);
+        return;
+      }
+      if (type === 'sale' && !cashBookId) {
+        setFixedAssetDisposalStatus('Select the cash book receiving the sale proceeds.', true);
+        return;
+      }
+
+      const originalText = button?.textContent || (type === 'sale' ? 'Complete Sale' : 'Discard Asset');
+      if (button) button.dataset.loading = '1';
+      setButtonLoading(button, type === 'sale' ? 'Recording Sale...' : 'Discarding...');
+      setFixedAssetDisposalStatus('');
+
+      try {
+        const body = {
+          disposalType: type,
+          proceeds: type === 'sale' ? proceeds : 0,
+          cashBookId: type === 'sale' ? cashBookId : '',
+          momoNumber: document.getElementById('fixedAssetDisposalMomoNumber')?.value || '',
+          momoTxId: document.getElementById('fixedAssetDisposalMomoTxId')?.value || '',
+          chequeNumber: document.getElementById('fixedAssetDisposalChequeNumber')?.value || '',
+          depositDetails: document.getElementById('fixedAssetDisposalDepositDetails')?.value || '',
+          note: document.getElementById('fixedAssetDisposalNote')?.value || ''
+        };
+        const j = await fetchJson(`/admin/accounting/fixed-assets/${encodeURIComponent(asset._id)}/dispose`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          body: JSON.stringify(body)
+        });
+
+        fixedAssetsState = fixedAssetsState.map(row => String(row?._id || '') === String(j.asset?._id || '') ? j.asset : row);
+        renderFixedAssets(fixedAssetsState);
+
+        const modalEl = document.getElementById('fixedAssetDisposalModal');
+        if (modalEl && window.bootstrap?.Modal) {
+          window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+        }
+
+        const result = j.disposal || {};
+        const gainLoss = Number(result.gainLoss || 0);
+        const outcome = gainLoss > 0.009
+          ? ` Gain: ${fmt(gainLoss)}.`
+          : (gainLoss < -0.009 ? ` Loss: ${fmt(Math.abs(gainLoss))}.` : ' No gain or loss.');
+        const listStatus = document.getElementById('fixedAssetListStatus');
+        if (listStatus) {
+          listStatus.textContent = `${type === 'sale' ? 'Asset sale recorded.' : 'Asset discarded.'}${outcome}`;
+          listStatus.className = 'small mb-0 text-success';
+        }
+
+        markSectionDirty('profitLoss', 'trialBalance', 'balanceSheet', 'journal');
+        loadVisibleDirtySections();
+        document.getElementById('reloadCashBooksBtn')?.click();
+        this.reset();
+      } catch (err) {
+        setFixedAssetDisposalStatus(err.message || 'Failed to dispose fixed asset.', true);
+      } finally {
+        if (button) delete button.dataset.loading;
+        restoreButton(button, originalText);
+        toggleFixedAssetDisposalFields();
       }
     });
 
