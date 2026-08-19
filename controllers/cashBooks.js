@@ -1,7 +1,12 @@
 const CashBook = require('../models/cash_book');
 const CashBookTxn = require('../models/cash_book_txn');
+const CashBookTransfer = require('../models/cash_book_transfer');
 const mongoose = require('mongoose');
-const { normalizeCashBookKind } = require('../utilities/cash_books');
+const crypto = require('crypto');
+const {
+  normalizeCashBookKind,
+  recordCashBookMovement
+} = require('../utilities/cash_books');
 
 function isAdmin(req) {
   return !!(req.user && String(req.user.role || '').toLowerCase() === 'admin');
@@ -24,6 +29,10 @@ function parseBool(value, fallback) {
   if (value === true || value === 'true' || value === 1 || value === '1' || value === 'on') return true;
   if (value === false || value === 'false' || value === 0 || value === '0' || value === 'off') return false;
   return fallback;
+}
+
+function transferReference() {
+  return `TRF-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
 }
 
 exports.page = async (req, res) => {
@@ -178,6 +187,127 @@ exports.apiCreate = async (req, res) => {
       return res.status(400).json({ ok: false, error: 'A cash book with this name already exists' });
     }
     return res.status(500).json({ ok: false, error: 'Failed to create cash book' });
+  }
+};
+
+exports.apiTransfer = async (req, res) => {
+  let session = null;
+
+  try {
+    const fromCashBookId = String(req.body.fromCashBookId || '').trim();
+    const toCashBookId = String(req.body.toCashBookId || '').trim();
+    const amount = Number(Number(req.body.amount || 0).toFixed(2));
+    const note = String(req.body.note || '').trim();
+
+    if (!mongoose.Types.ObjectId.isValid(fromCashBookId) || !mongoose.Types.ObjectId.isValid(toCashBookId)) {
+      return res.status(400).json({ ok: false, error: 'Select valid source and destination cash books' });
+    }
+    if (fromCashBookId === toCashBookId) {
+      return res.status(400).json({ ok: false, error: 'Source and destination cash books must be different' });
+    }
+    if (!isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ ok: false, error: 'Transfer amount must be greater than zero' });
+    }
+    if (note.length > 500) {
+      return res.status(400).json({ ok: false, error: 'Transfer note cannot exceed 500 characters' });
+    }
+
+    session = await mongoose.startSession();
+    let result = null;
+
+    await session.withTransaction(async () => {
+      const books = await CashBook.find({
+        _id: { $in: [fromCashBookId, toCashBookId] },
+        active: true
+      }).session(session);
+
+      const fromCashBook = books.find(book => String(book._id) === fromCashBookId);
+      const toCashBook = books.find(book => String(book._id) === toCashBookId);
+
+      if (!fromCashBook || !toCashBook) {
+        const e = new Error('Source or destination cash book was not found or is inactive');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      const reference = transferReference();
+      const recordedBy = req.user?._id || null;
+      const recordedByName = req.user?.name || req.user?.username || '';
+      const transferDocs = await CashBookTransfer.create([{
+        reference,
+        fromCashBook: fromCashBook._id,
+        fromCashBookName: fromCashBook.name || '',
+        fromCashBookKind: normalizeCashBookKind(fromCashBook.kind),
+        toCashBook: toCashBook._id,
+        toCashBookName: toCashBook.name || '',
+        toCashBookKind: normalizeCashBookKind(toCashBook.kind),
+        amount,
+        note,
+        createdBy: recordedBy,
+        createdByName: recordedByName
+      }], { session });
+      const transfer = transferDocs[0];
+
+      const commonMeta = {
+        transferId: String(transfer._id),
+        transferReference: reference,
+        fromCashBookId: String(fromCashBook._id),
+        fromCashBookName: fromCashBook.name || '',
+        toCashBookId: String(toCashBook._id),
+        toCashBookName: toCashBook.name || ''
+      };
+
+      const sourceMovement = await recordCashBookMovement({
+        cashBook: fromCashBook,
+        type: 'outflow',
+        amount,
+        sourceType: 'cash_book_transfer',
+        sourceId: transfer._id,
+        sourceRef: reference,
+        note: note ? `Transfer to ${toCashBook.name}: ${note}` : `Transfer to ${toCashBook.name}`,
+        meta: Object.assign({}, commonMeta, { transferDirection: 'out' }),
+        recordedBy,
+        recordedByName,
+        session
+      });
+
+      const destinationMovement = await recordCashBookMovement({
+        cashBook: toCashBook,
+        type: 'inflow',
+        amount,
+        sourceType: 'cash_book_transfer',
+        sourceId: transfer._id,
+        sourceRef: reference,
+        note: note ? `Transfer from ${fromCashBook.name}: ${note}` : `Transfer from ${fromCashBook.name}`,
+        meta: Object.assign({}, commonMeta, { transferDirection: 'in' }),
+        recordedBy,
+        recordedByName,
+        session
+      });
+
+      result = {
+        ok: true,
+        transfer: {
+          _id: String(transfer._id),
+          reference,
+          amount,
+          note,
+          createdAt: transfer.createdAt,
+          fromCashBook: serializeBook(sourceMovement.cashBook),
+          toCashBook: serializeBook(destinationMovement.cashBook)
+        }
+      };
+    });
+
+    return res.json(result);
+  } catch (err) {
+    console.error('cashBooks.apiTransfer error', err);
+    if (err && err.statusCode) {
+      return res.status(err.statusCode).json({ ok: false, error: err.message });
+    }
+    return res.status(500).json({ ok: false, error: 'Failed to transfer between cash books' });
+  } finally {
+    try { if (session) await session.endSession(); } catch (e) {}
   }
 };
 

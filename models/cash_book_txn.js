@@ -15,4 +15,6 @@ const CashBookTxnSchema = new mongoose.Schema({
   recordedByName: { type: String, default: '' }
 }, { timestamps: { createdAt: 'createdAt', updatedAt: false } });
 
+CashBookTxnSchema.index({ sourceType: 1, sourceId: 1, createdAt: 1 });
+
 module.exports = mongoose.model('CashBookTxn', CashBookTxnSchema);

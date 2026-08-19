@@ -41,6 +41,35 @@ block content
                         button.btn.btn-outline-light-custom#resetCashBookBtn(type='button') Reset
                       p.small.mt-3.mb-0#cashBookStatus
 
+                .card.dark-surface.border.border-secondary-subtle.mt-3
+                  .card-header.bg-transparent.border-0.p-2
+                    button.btn.btn-sm.btn-outline-light-custom.w-100.d-flex.align-items-center.justify-content-between(type='button', data-bs-toggle='collapse', data-bs-target='#cashBookTransferCollapse', aria-expanded='false', aria-controls='cashBookTransferCollapse')
+                      span.d-flex.align-items-center.gap-2
+                        i.bi.bi-arrow-left-right
+                        span.fw-semibold Transfer Between Cash Books
+                      i.bi.bi-chevron-down
+                  .collapse#cashBookTransferCollapse
+                    .card-body.dark-card-body.pt-1
+                      form#cashBookTransferForm(data-disable-spinner='true')
+                        .mb-3
+                          label.form-label.text-muted-light(for='transferFromCashBook') From cash book
+                          select.form-select.form-select-dark#transferFromCashBook(required)
+                            option(value='') Select source cash book
+                          small.text-muted-light#transferFromBalance Available balance: -
+                        .mb-3
+                          label.form-label.text-muted-light(for='transferToCashBook') To cash book
+                          select.form-select.form-select-dark#transferToCashBook(required)
+                            option(value='') Select destination cash book
+                          small.text-muted-light#transferToBalance Current balance: -
+                        .mb-3
+                          label.form-label.text-muted-light(for='cashBookTransferAmount') Amount
+                          input.form-control.form-control-dark#cashBookTransferAmount(type='number', min='0.01', step='0.01', placeholder='0.00', required)
+                        .mb-3
+                          label.form-label.text-muted-light(for='cashBookTransferNote') Note (optional)
+                          input.form-control.form-control-dark#cashBookTransferNote(type='text', maxlength='500', placeholder='Reason or transfer details')
+                        button.btn.btn-primary#cashBookTransferBtn(type='submit') Transfer Funds
+                        p.small.mt-3.mb-0#cashBookTransferStatus
+
               .col-lg-8
                 .card.dark-surface.border.border-secondary-subtle
                   .card-body.dark-card-body
