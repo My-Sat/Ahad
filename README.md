@@ -6,6 +6,10 @@ Ahad is a full-stack business operations and point-of-sale management applicatio
 
 The system is designed to manage day-to-day business activities including order processing, payments, customers, inventory, service pricing, accounting, reporting and staff permissions from a centralized application.
 
+## Live Application
+
+[https://ahad.onrender.com/](https://ahad.onrender.com/)
+
 ## Key Features
 
 ### Orders & Payments
