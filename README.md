@@ -1,17 +1,191 @@
 # Ahad
 
-Run `npm install`, then `npm start` (or `npm run dev` for automatic restarts).
+## Business Operations & Point-of-Sale Management System
+
+Ahad is a full-stack business operations and point-of-sale management application built with **Node.js, Express.js, MongoDB, Mongoose and Pug**.
+
+The system is designed to manage day-to-day business activities including order processing, payments, customers, inventory, service pricing, accounting, reporting and staff permissions from a centralized application.
+
+## Live Application
+
+[https://ahad.onrender.com/](https://ahad.onrender.com/)
+
+## Key Features
+
+### Orders & Payments
+
+* Create and manage customer orders
+* Dynamic service pricing
+* Multiple payment methods
+* Partial payment support
+* Outstanding balance and debtor tracking
+* Customer account payments
+* Discount handling
+* Payment history
+
+### Services & Pricing
+
+* Service management
+* Service categories
+* Units and sub-units
+* Dynamic pricing rules
+* Compound services
+* Printer-dependent services
+* Front/back printing calculations
+
+### Inventory & Materials
+
+* Material catalogue management
+* Store-based stock management
+* Operational store configuration
+* Stock adjustments
+* Stock transfers
+* Material usage tracking
+* Automatic stock validation during order creation
+* Low-stock monitoring
+
+### Printer Usage
+
+* Printer management
+* Printer usage recording
+* Colour and monochrome usage tracking
+* Usage counters and reporting
+
+### Customer Management
+
+* Customer records
+* Multiple customer types
+* Customer account balances
+* Account transaction history
+* Customer search and lookup
+* Debtor management
+
+### Accounting & Reporting
+
+* Accounting workflows
+* Cash books
+* Cashier records
+* Transaction tracking
+* Business reports
+* Financial activity monitoring
+
+### User Access & Permissions
+
+* User management
+* Role-based access control
+* Permission-based route protection
+* Administrative and staff access levels
+* Secure session-based authentication
+
+### Additional Features
+
+* Supplier management
+* Messaging functionality
+* Service discounts
+* Enquiries
+* Registration management
+* Business reporting tools
+
+## Technology Stack
+
+### Backend
+
+* Node.js
+* Express.js
+* MongoDB
+* Mongoose
+
+### Frontend
+
+* Pug
+* JavaScript
+* Bootstrap
+* HTML
+* CSS
+
+### Authentication & Application Services
+
+* Express Session
+* Connect Mongo
+* bcrypt
+* Axios
+* dotenv
+
+## Project Structure
+
+```text
+Ahad/
+├── controllers/     # Application and business logic
+├── middlewares/     # Authentication and permission middleware
+├── models/          # Mongoose database models
+├── public/          # Client-side JavaScript, CSS and static assets
+├── routes/          # Express application routes
+├── scripts/         # Utility and migration scripts
+├── utilities/       # Shared application utilities
+├── views/           # Pug templates
+├── app.js           # Express application configuration
+├── server.js        # Application server entry point
+└── package.json
+```
+
+## Installation
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/My-Sat/Ahad.git
+```
+
+### 2. Enter the project directory
+
+```bash
+cd Ahad
+```
+
+### 3. Install dependencies
+
+```bash
+npm install
+```
+
+### 4. Configure environment variables
+
+Create a `.env` file in the project root.
+
+Example:
+
+```env
+MONGO_URI=your_mongodb_connection_string
+SESSION_SECRET=your_session_secret
+```
+
+Additional environment variables may be required for optional external integrations.
+
+> The `.env` file is excluded from version control and should never be committed to the repository.
+
+### 5. Start the application
+
+For development:
+
+```bash
+npm run dev
+```
+
+For normal execution:
+
+```bash
+npm start
+```
+
 Open http://localhost:3001. Both `server.js` and `bin/www` default to port 3001
-so Ahad can run alongside Ahad-EMP-Backend on port 3000.
+so Ahad can run alongside Ahad-EMP-Backend on port 3000. To use another port,
+set `PORT` in `.env` or the process environment and restart the app.
 
-To use another port, set `PORT` in `.env` or the process environment.
-Restart the app after changing it. The chosen port must be available.
+## ClassOne Printing Bridge
 
-## ClassOne printing bridge
-
-Set `CLASSONE_BRIDGE_KEY` to a random secret of at least 32 characters in Ahad. Set the **same**
-secret as `AHAD_BRIDGE_KEY` in the ClassOne backend and set its
-`AHAD_BASE_URL=http://localhost:3001` for local testing. Use the Ahad HTTPS
+Set `CLASSONE_BRIDGE_KEY` to a random secret of at least 32 characters in Ahad.
+Set the same secret as `AHAD_BRIDGE_KEY` in the ClassOne backend, with
+`AHAD_BASE_URL=http://localhost:3001` for local testing or the Ahad HTTPS
 service URL for deployment. Never put the key in the frontend or commit it.
 
 The bridge receives verified ClassOne receipts and confirmed print jobs only.
@@ -19,3 +193,44 @@ Receipts enter the selected Ahad cash book as customer advances; revenue is
 recognized when each question paper is confirmed printed. Reprints and marking
 schemes add printer usage but no new revenue. The Ahad POS `/orders` route is
 not used, so ClassOne invoices are not priced a second time.
+
+## Architecture
+
+The application follows a traditional MVC-style structure:
+
+* **Models** define MongoDB data structures using Mongoose.
+* **Controllers** contain business and application logic.
+* **Routes** expose application endpoints.
+* **Middleware** handles authentication and authorization.
+* **Views** provide the server-rendered user interface using Pug.
+* **Client-side JavaScript** handles interactive functionality in the browser.
+
+## What This Project Demonstrates
+
+This project demonstrates practical experience with:
+
+* Designing and implementing business workflows
+* Building Node.js and Express.js applications
+* MongoDB and Mongoose data modelling
+* Authentication and authorization
+* Role-based access control
+* Complex order and pricing calculations
+* Inventory and stock-management logic
+* Payment and customer-account workflows
+* Server-side rendered applications
+* REST-style API development
+* Business reporting
+* Working with multi-module codebases
+* Git and GitHub version control
+
+## Security
+
+Sensitive information such as database credentials and application secrets is stored using environment variables and is excluded from source control.
+
+## Author
+
+**Ibrahim Iddrisu Chenti**
+
+Full-Stack JavaScript Developer
+
+**Core technologies:** Node.js, Express.js, React, MongoDB, Mongoose and REST APIs
