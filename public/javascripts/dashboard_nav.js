@@ -80,8 +80,8 @@ function reExecuteScripts(newRoot, targetRoot) {
       if (other) list.push(other);
     }
     if (
-      id === 'tab-printers' || id === 'tab-stock' || id === 'tab-classone-print-jobs' ||
-      id === 'tab-printers-sm' || id === 'tab-stock-sm' || id === 'tab-classone-print-jobs-sm'
+      id === 'tab-printers' || id === 'tab-stock' ||
+      id === 'tab-printers-sm' || id === 'tab-stock-sm'
     ) {
       const assets = document.getElementById('tab-assets');
       if (assets) list.push(assets);
@@ -97,7 +97,8 @@ function reExecuteScripts(newRoot, targetRoot) {
       const accounting = document.getElementById('tab-accounting');
       if (accounting) list.push(accounting);
     }
-    if (id === 'tab-orders-new' || id === 'tab-orders-new-sm') {
+    if (id === 'tab-orders-new' || id === 'tab-orders-new-sm' ||
+        id === 'tab-classone-print-jobs' || id === 'tab-classone-print-jobs-sm') {
       const operations = document.getElementById('tab-operations');
       if (operations) list.push(operations);
     }
@@ -248,6 +249,7 @@ function setActiveTabByUrl(url) {
     // mapping for exact paths (keeps existing admin/* map)
     const mapping = {
       '/admin/services': 'tab-configs',
+      '/admin/classone-print-jobs': 'tab-operations',
       '/admin/printers': 'tab-assets',
       '/admin/stock': 'tab-assets',
       '/admin/users': 'tab-configs',
@@ -270,6 +272,7 @@ function setActiveTabByUrl(url) {
     if (!id && path.startsWith('/admin')) {
       // try to match partial admin/* paths e.g. /admin/services/123
       if (path.startsWith('/admin/services')) id = 'tab-configs';
+      else if (path.startsWith('/admin/classone-print-jobs')) id = 'tab-operations';
       else if (path.startsWith('/admin/printers')) id = 'tab-assets';
       else if (path.startsWith('/admin/stock')) id = 'tab-assets';
       else if (path.startsWith('/admin/users')) id = 'tab-configs';

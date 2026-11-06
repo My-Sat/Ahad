@@ -60,10 +60,15 @@ html(lang="en")
                         i.bi.bi-person-vcard.me-2(aria-hidden='true')
                         | Registerations
 
-                  li.nav-item
-                    a.nav-link.d-flex.align-items-center(href='/orders/new', data-ajax='true', role='tab', id='tab-operations')
+                  li.nav-item.dropdown
+                    a.nav-link.dropdown-toggle.d-flex.align-items-center(href='#', id='tab-operations', role='button', data-bs-toggle='dropdown', aria-expanded='false')
                       i.bi.bi-clipboard2-check.me-2(aria-hidden='true')
                       | Jobs
+                    ul.dropdown-menu
+                      li
+                        a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new') Job Orders
+                      li
+                        a.dropdown-item(href='/admin/classone-print-jobs', data-ajax='true', id='tab-classone-print-jobs') ClassOne Print Jobs
 
                   li.nav-item
                     a.nav-link.d-flex.align-items-center(href='/orders/pay', data-ajax='true', role='tab', id='tab-payments')
@@ -83,8 +88,6 @@ html(lang="en")
                     ul.dropdown-menu
                       li
                         a.dropdown-item(href='/admin/printers', data-ajax='true', id='tab-printers') Printers
-                      li
-                        a.dropdown-item(href='/admin/classone-print-jobs', data-ajax='true', id='tab-classone-print-jobs') ClassOne Print Jobs
                       li
                         a.dropdown-item(href='/admin/stock', data-ajax='true', id='tab-stock') Stock
 
@@ -216,8 +219,6 @@ html(lang="en")
                     li
                       a.dropdown-item(href='/admin/printers', data-ajax='true', id='tab-printers-sm') Assets - Printers
                     li
-                      a.dropdown-item(href='/admin/classone-print-jobs', data-ajax='true', id='tab-classone-print-jobs-sm') Assets - ClassOne Print Jobs
-                    li
                       a.dropdown-item(href='/admin/stock', data-ajax='true', id='tab-stock-sm') Assets - Stock
                     li
                       a.dropdown-item(href='/admin/users', data-ajax='true', id='tab-users-sm') Configs - Users
@@ -225,6 +226,8 @@ html(lang="en")
                       a.dropdown-item(href='/admin/messaging', data-ajax='true', id='tab-messaging-sm') Configs - Messaging
                     li
                       a.dropdown-item(href='/orders/new', data-ajax='true', id='tab-orders-new-sm') Jobs — Operations
+                    li
+                      a.dropdown-item(href='/admin/classone-print-jobs', data-ajax='true', id='tab-classone-print-jobs-sm') Jobs — ClassOne Print Jobs
                     li
                       a.dropdown-item(href='/orders/pay', data-ajax='true', id='tab-orders-pay-sm') Jobs — Pay
                     li
