@@ -80,8 +80,8 @@ function reExecuteScripts(newRoot, targetRoot) {
       if (other) list.push(other);
     }
     if (
-      id === 'tab-printers' || id === 'tab-stock' ||
-      id === 'tab-printers-sm' || id === 'tab-stock-sm'
+      id === 'tab-printers' || id === 'tab-stock' || id === 'tab-classone-print-jobs' ||
+      id === 'tab-printers-sm' || id === 'tab-stock-sm' || id === 'tab-classone-print-jobs-sm'
     ) {
       const assets = document.getElementById('tab-assets');
       if (assets) list.push(assets);

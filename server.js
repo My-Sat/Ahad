@@ -4,7 +4,8 @@
  * Module dependencies.
  */
 
-var app = require('./app');
+require('dotenv').config();
+var connectDatabase = require('./config/database').connectDatabase;
 var debug = require('debug')('ahad:server');
 var http = require('http');
 
@@ -12,22 +13,31 @@ var http = require('http');
  * Get port from environment and store in Express.
  */
 
-var port = normalizePort(process.env.PORT || '3000');
-app.set('port', port);
+var port = normalizePort(process.env.PORT || '3001');
 
 /**
  * Create HTTP server.
  */
 
-var server = http.createServer(app);
+var server;
 
 /**
  * Listen on provided port, on all network interfaces.
  */
 
-server.listen(port);
-server.on('error', onError);
-server.on('listening', onListening);
+connectDatabase()
+  .then(function () {
+    var app = require('./app');
+    app.set('port', port);
+    server = http.createServer(app);
+    server.on('error', onError);
+    server.on('listening', onListening);
+    server.listen(port);
+  })
+  .catch(function (error) {
+    console.error('Startup error:', error.message);
+    process.exitCode = 1;
+  });
 
 /**
  * Normalize a port into a number, string, or false.

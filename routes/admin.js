@@ -10,6 +10,7 @@ const materialsController = require('../controllers/materials');
 const catalogueCategoriesController = require('../controllers/catalogueCategories');
 router.get('/', (req, res) => res.redirect('/login'));
 const printersController = require('../controllers/printers');
+const classonePrintJobsController = require('../controllers/classonePrintJobs');
 const usersController = require('../controllers/users');
 const { ensureAdmin } = require('../middlewares/auth');
 const serviceCategoryController = require('../controllers/serviceCategory');
@@ -126,6 +127,7 @@ router.get('/stores/:storeId/stocks/:stockId/activity', ensureAdmin, materialsCo
 
 // Printers
 router.get('/printers', ensureAdmin, printersController.list);
+router.get('/classone-print-jobs', ensureAdmin, classonePrintJobsController.page);
 router.get('/printers/:id/stats', ensureAdmin, printersController.stats);
 router.post('/printers', ensureAdmin, printersController.create);
 router.put('/printers/:id', ensureAdmin, printersController.update);

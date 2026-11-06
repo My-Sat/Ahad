@@ -19,6 +19,7 @@ const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const authRoutes = require('./routes/auth'); // new file below
 const { loadUser } = require('./middlewares/auth');
+const classOneBridgeRoutes = require('./routes/classone_bridge');
 
 var app = express();
 
@@ -35,24 +36,13 @@ app.use(express.urlencoded({ extended: false }));
 
 // cookies
 app.use(cookieParser());
+app.use('/integrations/classone', classOneBridgeRoutes);
 
 // method override for HTML forms e.g. ?_method=DELETE
 app.use(methodOverride('_method'));
 
-// connect to mongo (change URI as needed)
-// prefer to set MONGO_URI in env or .env file
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/pos_db';
-
 // Optional: disable strictQuery warnings (depends on your mongoose version)
 mongoose.set('strictQuery', false);
-
-mongoose.connect(MONGO_URI)
-  .then(()=> console.log('Mongo connected'))
-  .catch(err => {
-    console.error('Mongo connection error', err);
-    // you might want to exit the process if DB is required:
-    // process.exit(1);
-  });
 
 
   // static assets (single declaration)
@@ -65,7 +55,6 @@ app.set('trust proxy', 1);
 
 // SESSION config
 const SESSION_SECRET = process.env.SESSION_SECRET || 'replace_this_with_strong_secret';
-const mongoUrl = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/pos_db';
 const SESSION_IDLE_MINUTES = Math.max(1, parseInt(process.env.SESSION_IDLE_MINUTES, 10) || 30);
 const SESSION_IDLE_MS = SESSION_IDLE_MINUTES * 60 * 1000;
 
@@ -75,7 +64,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   store: MongoStore.create({
-    mongoUrl,
+    client: mongoose.connection.getClient(),
     ttl: Math.max(1, Math.floor(SESSION_IDLE_MS / 1000))
   }),
   rolling: true,

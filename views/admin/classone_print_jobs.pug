@@ -1,0 +1,97 @@
+extends ../layout
+
+block content
+  .d-none(data-main-width='wide')
+  .d-flex.flex-wrap.align-items-start.justify-content-between.gap-3.mb-4
+    div
+      h3.mb-1.text-white ClassOne Print Jobs
+      p.mb-0.text-muted-light Confirmed prints received from ClassOne. Invoices and payments remain managed there.
+    a.btn.btn-outline-light.btn-sm(href='/admin/printers', data-ajax='true') View Printers
+
+  .card.dark-surface
+    .card-body.dark-card-body
+      form.row.g-3.align-items-end.mb-4(method='get', action='/admin/classone-print-jobs')
+        .col-12.col-md-6.col-xl-3
+          label.form-label.text-muted-light(for='classoneJobsSchool') School
+          select.form-select.form-select-sm.form-control-dark#classoneJobsSchool(name='schoolId')
+            option(value='') All schools
+            each school in schools
+              option(value=school._id selected=selected.schoolId === String(school._id))= school.name
+        .col-12.col-md-6.col-xl-3
+          label.form-label.text-muted-light(for='classoneJobsInvoice') Invoice
+          input.form-control.form-control-sm.form-control-dark#classoneJobsInvoice(type='search', name='invoice', value=selected.invoice, maxlength='80', placeholder='Search invoice number')
+        .col-6.col-md-3.col-xl-2
+          label.form-label.text-muted-light(for='classoneJobsFrom') From
+          input.form-control.form-control-sm.form-control-dark#classoneJobsFrom(type='date', name='from', value=selected.from)
+        .col-6.col-md-3.col-xl-2
+          label.form-label.text-muted-light(for='classoneJobsTo') To
+          input.form-control.form-control-sm.form-control-dark#classoneJobsTo(type='date', name='to', value=selected.to)
+        .col-12.col-md-6
+          label.form-label.text-muted-light(for='classoneJobsPrinter') Printer
+          select.form-select.form-select-sm.form-control-dark#classoneJobsPrinter(name='printerId')
+            option(value='') All printers
+            each printer in printers
+              option(value=printer._id selected=selected.printerId === String(printer._id))= printer.name
+        .col-12.col-md-6
+          label.form-label.text-muted-light(for='classoneJobsType') Document
+          select.form-select.form-select-sm.form-control-dark#classoneJobsType(name='documentType')
+            option(value='') All documents
+            option(value='question-paper' selected=selected.documentType === 'question-paper') Question paper
+            option(value='marking-scheme' selected=selected.documentType === 'marking-scheme') Marking scheme
+        .col-12
+          .d-flex.gap-2
+            button.btn.btn-primary.btn-sm(type='submit') Apply filters
+            a.btn.btn-outline-light.btn-sm(href='/admin/classone-print-jobs') Clear
+
+      .d-flex.flex-wrap.gap-4.border-top.border-bottom.py-3.mb-3
+        span.text-muted-light Jobs: 
+          strong.text-white= summary.jobs
+        span.text-muted-light Copies: 
+          strong.text-white= summary.copies
+        span.text-muted-light Printed faces: 
+          strong.text-white= summary.impressions
+        span.text-muted-light Revenue recognized: 
+          strong.text-white GH₵ #{totalRevenueLabel}
+
+      .table-responsive
+        table.table.table-sm.table-hover.align-middle.mb-0
+          thead
+            tr
+              th.text-white Date
+              th.text-white School / Invoice
+              th.text-white Document
+              th.text-white Printer
+              th.text-end.text-white Pages × copies
+              th.text-end.text-white Spoiled
+              th.text-end.text-white Printed faces
+              th.text-end.text-white Revenue (GH₵)
+          tbody
+            if jobs.length
+              each job in jobs
+                tr
+                  td.text-nowrap= job.printedAtLabel
+                  td
+                    strong.text-white= job.schoolName
+                    br
+                    small.text-muted-light= job.invoiceNumber
+                  td
+                    span= job.documentLabel
+                    br
+                    small.text-muted-light #{job.type === 'colour' ? 'Colour' : 'Monochrome'} / #{job.printMode === 'duplex' ? 'Duplex' : 'Single-sided'}
+                  td= job.printerName
+                  td.text-end.text-nowrap #{job.pages} × #{job.copies}
+                  td.text-end= job.spoiledFaces
+                  td.text-end.fw-semibold= job.impressions
+                  td.text-end= job.revenueLabel
+            else
+              tr
+                td.text-muted-light.text-center.py-4(colspan='8') No ClassOne print jobs match these filters.
+
+      if pages > 1
+        .d-flex.flex-wrap.align-items-center.justify-content-between.gap-2.border-top.pt-3.mt-3
+          span.small.text-muted-light Page #{page} of #{pages}
+          .d-flex.gap-2
+            if previousUrl
+              a.btn.btn-outline-light.btn-sm(href=previousUrl) Previous
+            if nextUrl
+              a.btn.btn-outline-light.btn-sm(href=nextUrl) Next
